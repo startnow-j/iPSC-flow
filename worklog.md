@@ -34,3 +34,24 @@ Stage Summary:
 - 自动保存规则已写入 GIT_WORKFLOW.md
 - 待用户在本地配置 GitHub 认证后执行首次 push（见 GIT_WORKFLOW.md）
 - 之后的每次对话/功能开发/每日结束时，AI 会自动执行 git commit + push
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: 建立文档管理规范，统一管理项目 MD 文件
+
+Work Log:
+- 扫描项目中全部 10 个 MD 文件，逐一审查版本和状态
+- 创建 docs/ 三级目录结构：requirements/、architecture/、plans/
+- 迁移 3 个当前有效文档到 docs/（PRD v2.0、架构设计、开发计划融合版）
+- 归档 6 个过期/被替代文档到 archive/（PRD v1.0、旧版开发计划、早期素材等）
+- 创建 PROJECT_DOCS.md 文档管理规范（目录结构、分类规则、清理规则、worklog规则）
+- 更新 .gitignore：排除 archive/ 和 upload/
+- Git commit + push 完成
+
+Stage Summary:
+- 项目文档从混乱的 upload/ 扁平目录整理为结构化的 docs/ 体系
+- archive/ 本地保留但不进 Git，避免仓库膨胀
+- PROJECT_DOCS.md 成为 AI 每次对话开始时必须读取的规范文件
+- 有效文档：PRD v2.0 + 双模式架构设计 + 融合版开发计划
+- 已推送：https://github.com/startnow-j/iPSC-flow.git
