@@ -62,3 +62,9 @@ server.log
 
 # Download cache
 /download/
+
+# Archive (outdated/superseded docs, keep locally but don't push)
+/archive/
+
+# Upload temp (user-uploaded files, not project source)
+/upload/
