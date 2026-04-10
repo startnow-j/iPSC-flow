@@ -28,6 +28,7 @@ import {
   Stamp,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { hasRole } from '@/lib/roles'
 import { toast } from 'sonner'
 
 // ============================================
@@ -120,8 +121,9 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
   const [rejectComment, setRejectComment] = useState('')
 
   const statusConfig = COA_STATUS_CONFIG[coa.status] || COA_STATUS_CONFIG.DRAFT
-  const isSupervisorOrQA = user?.role === 'SUPERVISOR' || user?.role === 'QA'
-  const isSupervisor = user?.role === 'SUPERVISOR'
+  const userRoles = user?.roles || [user?.role || 'OPERATOR']
+  const isSupervisorOrQA = hasRole(userRoles, 'SUPERVISOR') || hasRole(userRoles, 'QA')
+  const isSupervisor = hasRole(userRoles, 'SUPERVISOR')
 
   const handleAction = async () => {
     if (!confirmAction) return

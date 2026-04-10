@@ -4,6 +4,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { Bell, Search, LogOut, Sun, Moon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { useTheme } from 'next-themes'
+import { getRoleDisplay } from '@/lib/roles'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
@@ -68,12 +69,7 @@ export function AppHeader() {
   }
 
   const userInitial = user?.name?.charAt(0) || '用'
-  const roleName = {
-    ADMIN: '管理员',
-    SUPERVISOR: '生产主管',
-    OPERATOR: '操作员',
-    QA: 'QA',
-  }[user?.role || 'OPERATOR'] || user?.role || '用户'
+  const roleName = user?.roles ? getRoleDisplay(user.roles) : '用户'
 
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/80 backdrop-blur-sm px-4 md:px-6">

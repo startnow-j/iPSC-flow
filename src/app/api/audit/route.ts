@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { hasAnyRole } from '@/lib/roles'
 import { getAuditLogs } from '@/lib/services/audit-log'
 
 // GET /api/audit — List audit logs with filters and pagination
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Only ADMIN and SUPERVISOR can access
-    if (payload.role !== 'ADMIN' && payload.role !== 'SUPERVISOR') {
+    if (!hasAnyRole(getRolesFromPayload(payload), ['ADMIN', 'SUPERVISOR'])) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 

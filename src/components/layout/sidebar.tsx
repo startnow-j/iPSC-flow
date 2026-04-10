@@ -16,6 +16,7 @@ import {
   FileText,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { getRoleDisplay, hasAnyRole } from '@/lib/roles'
 
 import {
   Sidebar,
@@ -101,16 +102,12 @@ export function AppSidebar() {
   }
 
   const userInitial = user?.name?.charAt(0) || '用'
-  const roleName = {
-    ADMIN: '管理员',
-    SUPERVISOR: '生产主管',
-    OPERATOR: '操作员',
-    QA: 'QA',
-  }[user?.role || 'OPERATOR'] || user?.role || '用户'
+  const roleName = user?.roles ? getRoleDisplay(user.roles) : '用户'
 
-  // Filter admin nav items based on user role
+  // Filter admin nav items based on user roles (any match)
+  const userRoles = user?.roles || [user?.role || 'OPERATOR']
   const filteredAdminNavItems = adminNavItems.filter(
-    (item) => user?.role && item.roles.includes(user.role),
+    (item) => item.roles.some((r) => userRoles.includes(r)),
   )
 
   // Helper to check if a nav item is active

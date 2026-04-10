@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { getAvailableActions } from '@/lib/services/state-machine'
 
 // ============================================
@@ -34,7 +34,7 @@ export async function GET(
     // 获取当前用户可执行的操作
     const availableActions = getAvailableActions(
       batch.status as string,
-      payload.role || 'OPERATOR'
+      getRolesFromPayload(payload)
     )
 
     return NextResponse.json({ batch, availableActions })

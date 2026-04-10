@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken, hashPassword } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } from '@/lib/auth'
+import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole } from '@/lib/roles'
 import { db } from '@/lib/db'
 
 // GET /api/users/[id] — Get single user (admin only)
@@ -14,7 +15,7 @@ export async function GET(
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 
@@ -57,13 +58,13 @@ export async function PATCH(
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 
     const { id } = await params
     const body = await request.json()
-    const { name, email, password, role, department, active } = body
+    const { name, email, password, role, roles, department, active } = body
 
     // Check user exists
     const existingUser = await db.user.findUnique({ where: { id } })
@@ -93,11 +94,31 @@ export async function PATCH(
     }
 
     if (role) {
-      const validRoles = ['ADMIN', 'SUPERVISOR', 'OPERATOR', 'QA']
-      if (!validRoles.includes(role)) {
+      if (!VALID_ROLES.includes(role)) {
         return NextResponse.json({ error: '无效的角色' }, { status: 400 })
       }
       updateData.role = role
+    }
+
+    // Handle multi-role update
+    if (roles !== undefined) {
+      let parsedRoles: string[] = []
+      if (Array.isArray(roles)) {
+        parsedRoles = roles.filter((r: string) => VALID_ROLES.includes(r))
+      } else if (typeof roles === 'string') {
+        try {
+          const parsed = JSON.parse(roles)
+          if (Array.isArray(parsed)) {
+            parsedRoles = parsed.filter((r: string) => VALID_ROLES.includes(r))
+          }
+        } catch {
+          // not valid JSON string, ignore
+        }
+      }
+      if (parsedRoles.length > 0) {
+        updateData.roles = serializeRoles(parsedRoles)
+        updateData.role = determinePrimaryRole(parsedRoles)
+      }
     }
 
     if (password) {
@@ -144,7 +165,7 @@ export async function DELETE(
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 

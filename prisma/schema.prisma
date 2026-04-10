@@ -65,7 +65,8 @@ model User {
   name        String
   email       String   @unique
   password    String   // bcrypt hash
-  role        Role     @default(OPERATOR)
+  role        Role     @default(OPERATOR)           // 主角色（默认/首选角色）
+  roles       String   @default("[]")              // 所有角色 JSON数组 如 ["ADMIN","OPERATOR"]
   department  String?
   active      Boolean  @default(true)
   createdAt   DateTime @default(now())

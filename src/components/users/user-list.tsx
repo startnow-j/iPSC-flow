@@ -30,6 +30,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { hasAnyRole } from '@/lib/roles'
+import { ROLE_LABELS, ROLE_COLORS } from '@/lib/roles'
 import {
   MoreHorizontal,
   Pencil,
@@ -44,6 +46,7 @@ interface UserItem {
   name: string
   email: string
   role: string
+  roles: string[]
   department: string | null
   active: boolean
   createdAt: string
@@ -53,20 +56,6 @@ interface UserItem {
 interface UserListProps {
   onEdit: (user: UserItem) => void
   onRefresh: () => void
-}
-
-const ROLE_LABELS: Record<string, string> = {
-  ADMIN: '管理员',
-  SUPERVISOR: '生产主管',
-  OPERATOR: '操作员',
-  QA: 'QA',
-}
-
-const ROLE_COLORS: Record<string, string> = {
-  ADMIN: 'bg-red-100 text-red-800 dark:bg-red-900/40 dark:text-red-300',
-  SUPERVISOR: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
-  OPERATOR: 'bg-sky-100 text-sky-800 dark:bg-sky-900/40 dark:text-sky-300',
-  QA: 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300',
 }
 
 export function UserList({ onEdit, onRefresh }: UserListProps) {
@@ -206,12 +195,17 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
                   {user.email}
                 </TableCell>
                 <TableCell>
-                  <Badge
-                    variant="secondary"
-                    className={`text-[10px] ${ROLE_COLORS[user.role] || ''}`}
-                  >
-                    {ROLE_LABELS[user.role] || user.role}
-                  </Badge>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {(user.roles || [user.role]).map((r) => (
+                      <Badge
+                        key={r}
+                        variant="secondary"
+                        className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                      >
+                        {ROLE_LABELS[r] || r}
+                      </Badge>
+                    ))}
+                  </div>
                 </TableCell>
                 <TableCell className="hidden sm:table-cell text-sm">
                   {user.department || '-'}

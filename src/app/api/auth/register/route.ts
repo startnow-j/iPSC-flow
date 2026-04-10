@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { hashPassword, getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { isAdmin } from '@/lib/roles'
 
 export async function POST(request: NextRequest) {
   try {
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json(
         { error: '权限不足，仅管理员可创建用户' },
         { status: 403 }

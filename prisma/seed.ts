@@ -9,7 +9,7 @@ async function main() {
   // Hash the default password
   const hashedPassword = await bcrypt.hash('123456', 10)
 
-  // 1. Create default users
+  // 1. Create default users (with multi-role support)
   console.log('  Creating default users...')
 
   const usersData = [
@@ -18,6 +18,7 @@ async function main() {
       email: 'admin@ipsc.com',
       password: hashedPassword,
       role: 'ADMIN' as const,
+      roles: '["ADMIN"]',
       department: '信息部',
     },
     {
@@ -25,6 +26,7 @@ async function main() {
       email: 'supervisor@ipsc.com',
       password: hashedPassword,
       role: 'SUPERVISOR' as const,
+      roles: '["SUPERVISOR","OPERATOR"]',  // 主管兼操作员
       department: '生产部',
     },
     {
@@ -32,6 +34,7 @@ async function main() {
       email: 'operator@ipsc.com',
       password: hashedPassword,
       role: 'OPERATOR' as const,
+      roles: '["OPERATOR","QA"]',  // 操作员兼QA
       department: '生产部',
     },
     {
@@ -39,6 +42,7 @@ async function main() {
       email: 'qa@ipsc.com',
       password: hashedPassword,
       role: 'QA' as const,
+      roles: '["QA"]',
       department: '质量部',
     },
   ]
@@ -46,10 +50,15 @@ async function main() {
   for (const userData of usersData) {
     await db.user.upsert({
       where: { email: userData.email },
-      update: { name: userData.name, role: userData.role, department: userData.department },
+      update: {
+        name: userData.name,
+        role: userData.role,
+        roles: userData.roles,
+        department: userData.department,
+      },
       create: userData,
     })
-    console.log(`    ✓ ${userData.name} (${userData.email})`)
+    console.log(`    ✓ ${userData.name} (${userData.email}) → roles: ${userData.roles}`)
   }
 
   // 2. Create default product
@@ -75,7 +84,11 @@ async function main() {
 
   console.log('\n✅ Seed completed successfully!')
   console.log('\n📊 Summary:')
-  console.log('  Users: 4 (admin, supervisor, operator, qa)')
+  console.log('  Users: 4')
+  console.log('    - admin@ipsc.com     → 管理员')
+  console.log('    - supervisor@ipsc.com → 主管 + 操作员（多角色示例）')
+  console.log('    - operator@ipsc.com   → 操作员 + QA（多角色示例）')
+  console.log('    - qa@ipsc.com        → QA')
   console.log('  Products: 1 (IPSC-WT-001)')
   console.log('  Default password: 123456')
 }

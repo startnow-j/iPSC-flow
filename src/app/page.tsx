@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
+import { getRoleDisplay } from '@/lib/roles'
 import { StatCard } from '@/components/dashboard/stat-card'
 import { RecentBatches } from '@/components/dashboard/recent-batches'
 import { MyTasks } from '@/components/dashboard/my-tasks'
@@ -47,12 +48,7 @@ export default function HomePage() {
     fetchStatusCounts()
   }, [fetchStatusCounts])
 
-  const roleName = {
-    ADMIN: '管理员',
-    SUPERVISOR: '生产主管',
-    OPERATOR: '操作员',
-    QA: 'QA',
-  }[user?.role || 'OPERATOR'] || user?.role || '用户'
+  const roleName = user?.roles ? getRoleDisplay(user.roles) : '用户'
 
   const greeting = () => {
     const hour = new Date().getHours()

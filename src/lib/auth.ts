@@ -14,7 +14,8 @@ const TOKEN_EXPIRY = '7d'
 export interface JWTPayload {
   userId: string
   email: string
-  role: string
+  role: string       // 主角色（向后兼容）
+  roles: string[]   // 所有角色
   name: string
 }
 
@@ -58,6 +59,16 @@ export async function verifyToken(
   } catch {
     return null
   }
+}
+
+/**
+ * Extract roles array from JWT payload or role string (backward compatibility)
+ */
+export function getRolesFromPayload(payload: JWTPayload): string[] {
+  if (payload.roles && Array.isArray(payload.roles) && payload.roles.length > 0) {
+    return payload.roles
+  }
+  return [payload.role || 'OPERATOR']
 }
 
 /**

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { verifyPassword, createToken, COOKIE_NAME } from '@/lib/auth'
+import { parseRoles } from '@/lib/roles'
 
 export async function POST(request: NextRequest) {
   try {
@@ -42,11 +43,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Parse user roles
+    const roles = parseRoles(user.roles, user.role)
+
     // Create JWT token
     const token = await createToken({
       userId: user.id,
       email: user.email,
       role: user.role,
+      roles: roles,
       name: user.name,
     })
 
@@ -58,6 +63,7 @@ export async function POST(request: NextRequest) {
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: roles,
         department: user.department,
       },
     })

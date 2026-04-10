@@ -624,3 +624,67 @@ Stage Summary:
 - 审计日志：全局审计日志查看器（筛选 + 分页）+ 批次时间线增强（18种事件颜色 + 输入模式 + 数据差异）
 - UI Polish：暗色模式（ThemeProvider + 切换按钮）、登录页品牌化、响应式布局、加载骨架屏、空状态
 - 代码零新增 ESLint error/warning
+
+---
+Task ID: 5
+Agent: backend-api-updater
+Task: Update all backend API permission checks for multi-role support
+
+Work Log:
+- Updated /api/users GET/POST for multi-role
+- Updated /api/users/[id] GET/PATCH/DELETE for multi-role
+- Updated /api/auth/register for multi-role
+- Updated /api/audit for multi-role
+- Updated /api/batches/[id] for multi-role
+- Updated state-machine getAvailableActions for multi-role
+
+Stage Summary:
+- All backend permission checks now use roles array instead of single role
+- User CRUD APIs handle roles JSON array parameter
+- State machine accepts roles array and checks any match
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: 多角色系统改造 — 一个用户可分配多个角色
+
+Work Log:
+- 分析现有角色系统：所有权限检查使用 user.role 单一字符串比较
+- 设计多角色方案：保留 role（主角色）+ 新增 roles（JSON 数组字段）
+- 修改 Prisma Schema：User 表新增 roles String @default("[]")
+- 运行 db:push 同步数据库结构
+- 创建 src/lib/roles.ts 工具函数库：parseRoles/serializeRoles/hasRole/hasAnyRole/isAdmin/getRoleDisplay/determinePrimaryRole/VALID_ROLES/ROLE_LABELS/ROLE_COLORS
+- 修改 src/lib/auth.ts：JWTPayload 新增 roles: string[] 字段，新增 getRolesFromPayload() 辅助函数
+- 修改 /api/auth/login：返回多角色数据（roles 数组），JWT payload 包含 roles
+- 修改 /api/auth/me：查询并返回 roles 字段，使用 parseRoles 解析
+- 修改 src/stores/auth-store.ts：UserInfo 接口新增 roles: string[]
+- 修改所有后端 API 权限检查（由子代理完成）：
+  - /api/users GET/POST/PATCH/DELETE：使用 isAdmin(getRolesFromPayload(payload))
+  - /api/auth/register：使用 isAdmin()
+  - /api/audit：使用 hasAnyRole()
+  - /api/batches/[id]：传递 roles 数组给 getAvailableActions
+  - state-machine.ts：getAvailableActions 接受 roles 数组，any-match 语义
+- 修改所有前端权限检查：
+  - sidebar.tsx：使用 getRoleDisplay() 显示多角色，roles.some() 过滤导航
+  - header.tsx：使用 getRoleDisplay() 显示多角色
+  - page.tsx（Dashboard）：使用 getRoleDisplay()
+  - my-tasks.tsx：使用 hasRole() 进行多角色任务过滤和快捷操作聚合
+  - coa-detail.tsx：使用 hasRole() 判断审核权限
+  - audit/page.tsx：使用 hasAnyRole() 权限检查
+  - users/page.tsx：使用 isAdmin() 权限检查
+- 改造用户管理界面：
+  - user-list.tsx：多角色 Badge 展示，roles.map() 渲染
+  - create-user-dialog.tsx：Checkbox 多角色选择（替换 Select 单选），至少选1个角色
+- 更新种子数据：
+  - supervisor@ipsc.com → ["SUPERVISOR","OPERATOR"]（主管兼操作员）
+  - operator@ipsc.com → ["OPERATOR","QA"]（操作员兼QA）
+- ESLint 检查通过（仅预存 generate-plan.js 错误）
+- Dev server 正常运行，/api/auth/me 返回 200，正确查询 roles 字段
+
+Stage Summary:
+- 数据库：User.roles 字段（JSON 数组），User.role 保留为主角色
+- 新增文件：src/lib/roles.ts（角色工具函数库）
+- 修改文件：18 个文件（auth.ts、4个 API route、7个前端组件、auth store、seed 等）
+- 权限模型：any-match 语义（拥有任一所需角色即有权限）
+- UI 变化：用户列表多角色 Badge、创建/编辑用户 Checkbox 多选
+- 种子数据示例：2 个用户拥有多角色（主管+操作员、操作员+QA）

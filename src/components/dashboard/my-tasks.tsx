@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { authFetch } from '@/lib/auth-fetch'
 import { useEffect, useState, useCallback } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
+import { getRoleDisplay, hasRole } from '@/lib/roles'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -40,32 +41,31 @@ export function MyTasks() {
       const params = new URLSearchParams()
       params.set('pageSize', '10')
 
-      // Build query based on role
-      if (user.role === 'OPERATOR') {
+      const userRoles = user.roles || [user.role]
+
+      // Build query based on roles (use first matching role's typical filter)
+      if (hasRole(userRoles, 'OPERATOR')) {
         params.set('assignee', user.id)
         params.set('status', 'IN_PRODUCTION')
-      } else if (user.role === 'SUPERVISOR') {
+      } else if (hasRole(userRoles, 'SUPERVISOR')) {
         params.set('status', 'COA_SUBMITTED')
-      } else if (user.role === 'QA') {
+      } else if (hasRole(userRoles, 'QA')) {
         params.set('status', 'QC_PENDING')
-      } else if (user.role === 'ADMIN') {
-        // Admin sees everything, don't filter by status
       }
+      // ADMIN sees everything
 
       const res = await authFetch(`/api/batches?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         const myTasks: MyTask[] = (data.batches || []).map(
           (b: { id: string; batchNo: string; productName: string; status: string }) => {
-            let action = ''
-            if (user.role === 'OPERATOR' && b.status === 'IN_PRODUCTION') {
+            let action = '查看详情'
+            if (hasRole(userRoles, 'OPERATOR') && b.status === 'IN_PRODUCTION') {
               action = '继续生产操作'
-            } else if (user.role === 'SUPERVISOR' && b.status === 'COA_SUBMITTED') {
+            } else if (hasRole(userRoles, 'SUPERVISOR') && b.status === 'COA_SUBMITTED') {
               action = '审核CoA'
-            } else if (user.role === 'QA' && b.status === 'QC_PENDING') {
+            } else if (hasRole(userRoles, 'QA') && b.status === 'QC_PENDING') {
               action = '开始质检'
-            } else {
-              action = '查看详情'
             }
             return {
               id: b.id,
@@ -91,39 +91,34 @@ export function MyTasks() {
 
   const roleQuickActions = () => {
     if (!user) return []
-    switch (user.role) {
-      case 'ADMIN':
-        return [
-          { label: '新建批次', icon: Plus, href: '/batches' },
-          { label: '用户管理', icon: Users, href: '/users' },
-          { label: '审计日志', icon: ListChecks, href: '/audit' },
-        ]
-      case 'SUPERVISOR':
-        return [
-          { label: '新建批次', icon: Plus, href: '/batches' },
-          { label: '所有批次', icon: FlaskConical, href: '/batches/all' },
-        ]
-      case 'OPERATOR':
-        return [
-          { label: '新建批次', icon: Plus, href: '/batches' },
-          { label: '我的批次', icon: FlaskConical, href: '/batches' },
-        ]
-      case 'QA':
-        return [
-          { label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' },
-          { label: '所有批次', icon: FlaskConical, href: '/batches/all' },
-        ]
-      default:
-        return []
+    const userRoles = user.roles || [user.role]
+    const actions: { label: string; icon: typeof Plus; href: string }[] = []
+
+    // Collect actions from ALL roles the user has
+    const seen = new Set<string>()
+
+    if (hasRole(userRoles, 'ADMIN')) {
+      if (!seen.has('users')) { actions.push({ label: '用户管理', icon: Users, href: '/users' }); seen.add('users') }
+      if (!seen.has('audit')) { actions.push({ label: '审计日志', icon: ListChecks, href: '/audit' }); seen.add('audit') }
     }
+    if (hasRole(userRoles, 'SUPERVISOR')) {
+      if (!seen.has('batches-all')) { actions.push({ label: '所有批次', icon: FlaskConical, href: '/batches/all' }); seen.add('batches-all') }
+    }
+    if (hasRole(userRoles, 'OPERATOR')) {
+      if (!seen.has('batches')) { actions.push({ label: '我的批次', icon: FlaskConical, href: '/batches' }); seen.add('batches') }
+    }
+    if (hasRole(userRoles, 'QA')) {
+      if (!seen.has('qc-pending')) { actions.push({ label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' }); seen.add('qc-pending') }
+    }
+    // Common action: add batch (available to OPERATOR, SUPERVISOR, ADMIN)
+    if (hasRole(userRoles, 'OPERATOR') || hasRole(userRoles, 'SUPERVISOR') || hasRole(userRoles, 'ADMIN')) {
+      if (!seen.has('new-batch')) { actions.unshift({ label: '新建批次', icon: Plus, href: '/batches' }); seen.add('new-batch') }
+    }
+
+    return actions
   }
 
-  const roleName = {
-    ADMIN: '管理员',
-    SUPERVISOR: '生产主管',
-    OPERATOR: '操作员',
-    QA: 'QA',
-  }[user?.role || 'OPERATOR'] || '用户'
+  const roleName = user?.roles ? getRoleDisplay(user.roles) : '用户'
 
   return (
     <div className="space-y-4">

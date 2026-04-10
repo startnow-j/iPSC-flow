@@ -150,15 +150,15 @@ export function canTransition(currentStatus: string, targetStatus: string): bool
 /**
  * 获取指定角色在当前状态下可执行的所有操作
  * @param currentStatus - 当前批次状态
- * @param userRole - 用户角色
+ * @param userRoles - 用户角色列表
  * @returns 可用操作列表（不含 SYSTEM 自动操作）
  */
-export function getAvailableActions(currentStatus: string, userRole: string): AvailableAction[] {
+export function getAvailableActions(currentStatus: string, userRoles: string[]): AvailableAction[] {
   const rules = BATCH_TRANSITIONS[currentStatus]
   if (!rules) return []
 
   return rules
-    .filter((r) => r.roles.includes(userRole as Role) && r.roles[0] !== 'SYSTEM')
+    .filter((r) => r.roles.some(r => userRoles.includes(r as Role)) && r.roles[0] !== 'SYSTEM')
     .map((r) => ({
       targetStatus: r.to,
       action: r.action,

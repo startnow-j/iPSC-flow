@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
+import { hasAnyRole } from '@/lib/roles'
 import { toast } from 'sonner'
 import {
   Table,
@@ -154,7 +155,8 @@ export default function AuditPage() {
   }
 
   // Access control: only ADMIN and SUPERVISOR
-  if (!user || (user.role !== 'ADMIN' && user.role !== 'SUPERVISOR')) {
+  const userRoles = user?.roles || [user?.role || 'OPERATOR']
+  if (!user || !hasAnyRole(userRoles, ['ADMIN', 'SUPERVISOR'])) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <ShieldAlert className="h-12 w-12 text-muted-foreground mb-4" />

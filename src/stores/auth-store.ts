@@ -4,7 +4,8 @@ export interface UserInfo {
   id: string
   name: string
   email: string
-  role: string
+  role: string       // 主角色
+  roles: string[]   // 所有角色
   department: string | null
 }
 

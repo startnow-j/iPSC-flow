@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { parseRoles } from '@/lib/roles'
 
 export async function GET(request: NextRequest) {
   try {
@@ -31,6 +32,7 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         role: true,
+        roles: true,
         department: true,
         active: true,
       },
@@ -43,12 +45,16 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // Parse user roles
+    const roles = parseRoles(user.roles, user.role)
+
     return NextResponse.json({
       user: {
         id: user.id,
         name: user.name,
         email: user.email,
         role: user.role,
+        roles: roles,
         department: user.department,
       },
     })

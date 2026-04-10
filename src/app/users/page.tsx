@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
+import { isAdmin } from '@/lib/roles'
 import { UserList } from '@/components/users/user-list'
 import { CreateUserDialog } from '@/components/users/create-user-dialog'
 import { Button } from '@/components/ui/button'
@@ -39,7 +40,8 @@ export default function UsersPage() {
   }
 
   // Access control: only ADMIN
-  if (!user || user.role !== 'ADMIN') {
+  const userRoles = user?.roles || [user?.role || 'OPERATOR']
+  if (!user || !isAdmin(userRoles)) {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <ShieldAlert className="h-12 w-12 text-muted-foreground mb-4" />

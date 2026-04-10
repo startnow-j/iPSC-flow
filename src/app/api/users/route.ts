@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken, hashPassword } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } from '@/lib/auth'
+import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole } from '@/lib/roles'
 import { db } from '@/lib/db'
 
 // GET /api/users — List all users (admin only)
@@ -11,7 +12,7 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 
@@ -45,12 +46,12 @@ export async function POST(request: NextRequest) {
     }
 
     const payload = await verifyToken(token)
-    if (!payload || payload.role !== 'ADMIN') {
+    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
       return NextResponse.json({ error: '无权限' }, { status: 403 })
     }
 
     const body = await request.json()
-    const { name, email, password, role, department } = body
+    const { name, email, password, role, roles, department } = body
 
     // Validation
     if (!name || !email || !password) {
@@ -83,10 +84,32 @@ export async function POST(request: NextRequest) {
     }
 
     // Valid role
-    const validRoles = ['ADMIN', 'SUPERVISOR', 'OPERATOR', 'QA']
-    if (role && !validRoles.includes(role)) {
+    if (role && !VALID_ROLES.includes(role)) {
       return NextResponse.json({ error: '无效的角色' }, { status: 400 })
     }
+
+    // Handle multi-role support
+    let finalRoles: string[] = []
+    if (roles) {
+      if (Array.isArray(roles)) {
+        finalRoles = roles.filter((r: string) => VALID_ROLES.includes(r))
+      } else if (typeof roles === 'string') {
+        try {
+          const parsed = JSON.parse(roles)
+          if (Array.isArray(parsed)) {
+            finalRoles = parsed.filter((r: string) => VALID_ROLES.includes(r))
+          }
+        } catch {
+          // not valid JSON string, ignore
+        }
+      }
+    }
+    if (finalRoles.length === 0) {
+      finalRoles = [role || 'OPERATOR']
+    } else if (role && !finalRoles.includes(role)) {
+      finalRoles.unshift(role)
+    }
+    const primaryRole = determinePrimaryRole(finalRoles)
 
     const hashedPassword = await hashPassword(password)
 
@@ -95,7 +118,8 @@ export async function POST(request: NextRequest) {
         name,
         email,
         password: hashedPassword,
-        role: (role || 'OPERATOR') as 'ADMIN' | 'SUPERVISOR' | 'OPERATOR' | 'QA',
+        role: primaryRole,
+        roles: serializeRoles(finalRoles),
         department: department || null,
       },
       select: {
