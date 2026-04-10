@@ -16,3 +16,21 @@ Stage Summary:
 - 文档结构：封面 + 目录 + 11章正文（执行摘要、现状分析、架构设计、七项架构准备、MVP范围、分阶段计划、AI辅助开发策略、风险管理、质量保证、预期效果、附录）
 - 核心决策：Next.js 16全栈 + SQLite + Prisma，4阶段18周，1-2人AI辅助开发团队
 - 里程碑：M1基础架构(第2周) → M2批次管理(第4周) → M3质检CoA(第6周) → M4 MVP交付(第8周) → M5 AI对话可用(第12周) → M6全功能(第16周) → M7正式上线(第18周)
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: 配置 Git 云端自动保存规则
+
+Work Log:
+- 添加 GitHub remote: https://github.com/startnow-j/iPSC-flow.git
+- 更新 .gitignore：排除 db/*.db、generate-*.js、/download/
+- 创建 GIT_WORKFLOW.md 规范文档，定义自动保存触发条件和 commit 规范
+- 提交了 2 个 commit（gitignore 更新 + workflow 文档）
+- 当前环境缺少 SSH 客户端，无法直接 push，已记录完整操作步骤
+
+Stage Summary:
+- 云端仓库已配置：origin → https://github.com/startnow-j/iPSC-flow.git
+- 自动保存规则已写入 GIT_WORKFLOW.md
+- 待用户在本地配置 GitHub 认证后执行首次 push（见 GIT_WORKFLOW.md）
+- 之后的每次对话/功能开发/每日结束时，AI 会自动执行 git commit + push
