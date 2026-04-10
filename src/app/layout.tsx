@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { AuthGuard } from "@/components/auth-guard";
+import { LayoutWrapper } from "@/components/layout/layout-wrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -14,24 +16,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Z.ai Code Scaffold - AI-Powered Development",
-  description: "Modern Next.js scaffold optimized for AI-powered development with Z.ai. Built with TypeScript, Tailwind CSS, and shadcn/ui.",
-  keywords: ["Z.ai", "Next.js", "TypeScript", "Tailwind CSS", "shadcn/ui", "AI development", "React"],
-  authors: [{ name: "Z.ai Team" }],
+  title: "iPSC生产管理系统",
+  description: "iPSC细胞生产管理系统 — 全流程批次管理、质量控制与放行追踪",
+  keywords: ["iPSC", "干细胞", "生产管理", "LIMS", "质量控制"],
+  authors: [{ name: "iPSC-Flow Team" }],
   icons: {
-    icon: "https://z-cdn.chatglm.cn/z-ai/static/logo.svg",
-  },
-  openGraph: {
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
-    url: "https://chat.z.ai",
-    siteName: "Z.ai",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Z.ai Code Scaffold",
-    description: "AI-powered development with modern React stack",
+    icon: "/logo.svg",
   },
 };
 
@@ -41,11 +31,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="zh-CN" suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
-        {children}
+        <AuthGuard>
+          <LayoutWrapper>{children}</LayoutWrapper>
+        </AuthGuard>
         <Toaster />
       </body>
     </html>

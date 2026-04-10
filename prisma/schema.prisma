@@ -1,8 +1,9 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+// ============================================
+// iPSC 生产管理系统 — MVP Prisma Schema
+// 版本: v1.0
+// 基于: PRD v2.0 (MVP版)
+// 数据库: SQLite (String = TEXT, 无需VarChar注解)
+// ============================================
 
 generator client {
   provider = "prisma-client-js"
@@ -13,20 +14,363 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// ============================================
+// 枚举定义
+// ============================================
+
+/// 用户角色
+enum Role {
+  ADMIN      // 管理员
+  SUPERVISOR // 生产主管
+  OPERATOR   // 生产操作员
+  QA         // QA
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+/// 批次状态（11种，状态机驱动）
+enum BatchStatus {
+  NEW              // 新建
+  IN_PRODUCTION    // 生产中
+  QC_PENDING       // 待质检
+  QC_IN_PROGRESS   // 质检中
+  QC_PASS          // 质检合格
+  QC_FAIL          // 质检不合格
+  COA_PENDING      // 待生成CoA
+  COA_SUBMITTED    // CoA已提交审核
+  COA_APPROVED     // CoA已批准
+  RELEASED         // 已放行
+  SCRAPPED         // 已报废
+}
+
+/// 生产任务状态
+enum TaskStatus {
+  PENDING      // 待开始
+  IN_PROGRESS  // 进行中
+  COMPLETED    // 已完成
+  SKIPPED      // 已跳过
+}
+
+/// CoA状态
+enum CoaStatus {
+  DRAFT      // 草稿（质检通过自动生成）
+  SUBMITTED  // 已提交审核
+  APPROVED   // 已批准
+  REJECTED   // 已退回
+}
+
+// ============================================
+// 用户
+// ============================================
+model User {
+  id          String   @id @default(cuid())
+  name        String
+  email       String   @unique
+  password    String   // bcrypt hash
+  role        Role     @default(OPERATOR)
+  department  String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  createdBatches    Batch[]  @relation("CreatedBatches")
+  productionTasks   ProductionTask[]
+  qcRecords         QcRecord[]
+  auditLogs         AuditLog[]
+  conversations     Conversation[]
+
+  @@map("user")
+}
+
+// ============================================
+// 产品定义（MVP: 预置，不支持前端配置）
+// ============================================
+model Product {
+  id               String   @id @default(cuid())
+  productCode      String   @unique               // 如 IPSC-WT-001
+  productName      String                          // 如 iPSC细胞株(野生型)
+  category         String                          // MVP固定为 CELL_PRODUCT
+  cellType         String                          // IPSC
+  specification    String                          // 1×10^6 cells/支
+  storageCondition String?
+  shelfLife        String?                         // 如 5年
+  unit             String                          // 支
+  description      String?
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now())
+
+  batches          Batch[]
+
+  @@map("product")
+}
+
+// ============================================
+// 批次（MVP: 仅细胞产品）
+// ============================================
+model Batch {
+  id              String      @id @default(cuid())
+
+  // 基础信息
+  batchNo         String      @unique               // IPSC-260410-003-P5
+  productCode     String
+  productName     String
+  productId       String
+  specification   String
+  unit            String
+
+  // 状态
+  status          BatchStatus @default(NEW)
+
+  // 数量
+  plannedQuantity Int?
+  actualQuantity  Int?
+
+  // 种子信息
+  seedBatchNo     String?                           // 如 IPSC-WSB-2603-002
+  seedPassage     String?                           // 如 P3
+  currentPassage  String?                           // 当前代次，随传代自动更新
+
+  // 存储
+  storageLocation String?
+
+  // 时间
+  plannedStartDate DateTime?
+  plannedEndDate   DateTime?
+  actualStartDate  DateTime?
+  actualEndDate    DateTime?
+
+  // 创建
+  createdBy       String
+  createdByName   String
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+
+  // 关联
+  product         Product     @relation(fields: [productId], references: [id])
+  creator         User        @relation("CreatedBatches", fields: [createdBy], references: [id])
+  tasks           ProductionTask[]
+  qcRecords       QcRecord[]
+  coa             Coa?
+  auditLogs       AuditLog[]
+  conversations   Conversation[]
+
+  @@map("batch")
+}
+
+// ============================================
+// 生产任务（MVP: 固定步骤，不做动态流程配置）
+// 步骤: SEED_PREP(1) → EXPANSION(2) → HARVEST(3)
+// ============================================
+model ProductionTask {
+  id              String     @id @default(cuid())
+  batchId         String
+  batchNo         String
+
+  // 任务定义
+  taskCode        String                             // SEED_PREP, EXPANSION, HARVEST
+  taskName        String                             // 种子复苏, 扩增培养, 收获冻存
+  sequenceNo      Int                                // 执行顺序: 1, 2, 3
+  stepGroup       String?                            // 分组标识，EXPANSION 下有多条传代记录
+
+  // 状态
+  status          TaskStatus @default(PENDING)
+
+  // 执行人
+  assigneeId      String?
+  assigneeName    String?
+
+  // 时间
+  plannedStart    DateTime?
+  plannedEnd      DateTime?
+  actualStart     DateTime?
+  actualEnd       DateTime?
+
+  // 表单数据（JSON string: 该步骤录入的所有字段值）
+  formData        String?                            // JSON
+
+  // 附件（JSON string: [{url, name, type, uploadedAt}]）
+  attachments     String?                            // JSON
+
+  // 备注
+  notes           String?
+
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  batch           Batch      @relation(fields: [batchId], references: [id])
+  assignee        User?      @relation(fields: [assigneeId], references: [id])
+  auditLogs       AuditLog[]
+
+  @@map("production_task")
+}
+
+// ============================================
+// 质检记录
+// ============================================
+model QcRecord {
+  id              String   @id @default(cuid())
+  batchId         String
+  batchNo         String
+  taskId          String?                               // 关联的生产任务ID
+
+  // 质检信息
+  qcType          String   @default("ROUTINE")               // ROUTINE
+  templateId      String?                                    // 质检模板编码
+
+  // 抽样信息
+  sampleQuantity  Int?
+  sampleTime      DateTime?
+
+  // 检测结果（JSON string）
+  // [{itemCode, itemName, method, standard, resultValue, resultUnit, judgment, attachments}]
+  testResults     String                                    // JSON
+
+  // 综合判定
+  overallJudgment String                                    // PASS / FAIL
+  failReason      String?
+
+  // 执行
+  operatorId      String?
+  operatorName    String?
+  operatedAt      DateTime?
+
+  // 审核
+  reviewerId      String?
+  reviewerName    String?
+  reviewComment   String?
+  reviewedAt      DateTime?
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  batch           Batch    @relation(fields: [batchId], references: [id])
+  operator        User?    @relation(fields: [operatorId], references: [id])
+  conversationMessages ConversationMessage[]
+
+  @@map("qc_record")
+}
+
+// ============================================
+// CoA（分析证书）
+// ============================================
+model Coa {
+  id              String     @id @default(cuid())
+  batchId         String     @unique
+  batchNo         String
+  coaNo           String     @unique               // COA-IPSC-260410-003-P5
+
+  // 模板
+  templateId      String?
+
+  // CoA内容（JSON string: 产品信息+质检结果汇总+附件）
+  content         String                                 // JSON
+
+  // 状态
+  status          CoaStatus  @default(DRAFT)
+
+  // 创建
+  createdBy       String?
+  createdByName   String?
+  createdAt       DateTime   @default(now())
+
+  // 提交
+  submittedBy     String?
+  submittedAt     DateTime?
+
+  // 审核
+  reviewedBy      String?
+  reviewedByName  String?
+  reviewComment   String?
+  reviewedAt      DateTime?
+
+  // 批准
+  approvedBy      String?
+  approvedByName  String?
+  approvedAt      DateTime?
+
+  batch           Batch      @relation(fields: [batchId], references: [id])
+
+  @@map("coa")
+}
+
+// ============================================
+// 审计日志
+// ============================================
+model AuditLog {
+  id              String   @id @default(cuid())
+  eventType       String                               // BATCH_CREATED, TASK_COMPLETED...
+  intentCode      String?                              // 对应的操作意图编码
+
+  // 操作对象
+  targetType      String                               // BATCH, TASK, QC, COA, USER
+  targetId        String
+  targetBatchNo   String?
+
+  // 操作信息
+  operatorId      String?
+  operatorName    String?
+  inputMode       String   @default("FORM_SUBMIT")     // FORM_SUBMIT / AI_CONVERSATION
+
+  // 数据变更（JSON strings）
+  dataBefore      String?                              // JSON: 操作前快照
+  dataAfter       String?                              // JSON: 操作后数据
+
+  // AI模式特有上下文（JSON string）
+  aiContext       String?                              // JSON
+
+  createdAt       DateTime @default(now())
+
+  batch           Batch?          @relation(fields: [targetBatchNo], references: [batchNo])
+  task            ProductionTask? @relation(fields: [targetId], references: [id])
+  user            User?           @relation(fields: [operatorId], references: [id])
+
+  @@map("audit_log")
+}
+
+// ============================================
+// 对话会话（AI对话模式，Phase 2 使用，MVP先建表）
+// ============================================
+model Conversation {
+  id          String   @id @default(cuid())
+  sessionId   String                               // 前端关联标识
+  batchId     String?                              // 可为空（查询类对话无批次）
+  batchNo     String?
+  userId      String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id])
+  batch       Batch?   @relation(fields: [batchId], references: [id])
+  messages    ConversationMessage[]
+
+  @@map("conversation")
+}
+
+// ============================================
+// 对话消息（AI对话模式，Phase 2 使用，MVP先建表）
+// ============================================
+model ConversationMessage {
+  id                  String    @id @default(cuid())
+  conversationId      String
+  role                String                             // USER / AI / SYSTEM
+  content             String?
+  contentType         String    @default("TEXT")           // TEXT / IMAGE / FILE / CARD
+
+  // 附件（JSON string: [{url, name, type}]）
+  attachments         String?                            // JSON
+
+  // AI消息元数据（JSON string: {intentCode, params, confidence}）
+  aiMetadata          String?                            // JSON
+
+  // 确认卡片协议数据（JSON string: 可直接传给前端渲染器）
+  cardData            String?                            // JSON
+
+  // 关联操作
+  relatedIntentCode   String?
+  relatedActionId     String?                            // 确认后产生的auditLog ID
+
+  createdAt           DateTime  @default(now())
+
+  conversation        Conversation     @relation(fields: [conversationId], references: [id])
+  qcRecord            QcRecord?        @relation(fields: [relatedActionId], references: [id])
+
+  @@map("conversation_message")
 }
