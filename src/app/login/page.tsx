@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, Suspense } from 'react'
+import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Card,
   CardContent,
@@ -15,9 +15,12 @@ import { Label } from '@/components/ui/label'
 import { useAuthStore } from '@/stores/auth-store'
 import { Loader2, Microscope, Dna } from 'lucide-react'
 import { toast } from 'sonner'
+import { Skeleton } from '@/components/ui/skeleton'
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectUrl = searchParams.get('redirect') || '/'
   const { setUser } = useAuthStore()
 
   const [email, setEmail] = useState('')
@@ -57,8 +60,8 @@ export default function LoginPage() {
         description: `欢迎回来，${data.user.name}`,
       })
 
-      // Use replace to avoid back-button returning to login
-      router.replace('/')
+      // Navigate to the redirect URL from middleware, or home
+      router.replace(redirectUrl)
     } catch {
       setError('网络错误，请稍后重试')
     } finally {
@@ -66,6 +69,88 @@ export default function LoginPage() {
     }
   }
 
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      {/* Error Message */}
+      {error && (
+        <div className="rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/50 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Email */}
+      <div className="space-y-2">
+        <Label htmlFor="email">邮箱地址</Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="请输入邮箱"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={loading}
+          className="h-11"
+          autoComplete="email"
+        />
+      </div>
+
+      {/* Password */}
+      <div className="space-y-2">
+        <Label htmlFor="password">密码</Label>
+        <Input
+          id="password"
+          type="password"
+          placeholder="请输入密码"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          disabled={loading}
+          className="h-11"
+          autoComplete="current-password"
+        />
+      </div>
+
+      {/* Submit */}
+      <Button
+        type="submit"
+        className="w-full h-11 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium shadow-md shadow-teal-500/20 dark:shadow-teal-900/40"
+        disabled={loading}
+      >
+        {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+        登录
+      </Button>
+
+      {/* Demo accounts hint */}
+      <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center mb-2">演示账号</p>
+        <div className="grid grid-cols-2 gap-2">
+          {[
+            { label: '管理员', email: 'admin@ipsc.com' },
+            { label: '生产主管', email: 'supervisor@ipsc.com' },
+            { label: '操作员', email: 'operator@ipsc.com' },
+            { label: 'QA', email: 'qa@ipsc.com' },
+          ].map((account) => (
+            <button
+              key={account.email}
+              type="button"
+              onClick={() => {
+                setEmail(account.email)
+                setPassword('123456')
+              }}
+              className="text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left truncate"
+              title={`${account.email} / 123456`}
+            >
+              {account.label}
+            </button>
+          ))}
+        </div>
+        <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
+          默认密码：123456
+        </p>
+      </div>
+    </form>
+  )
+}
+
+export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-950 dark:via-gray-900 dark:to-teal-950 p-4 relative overflow-hidden">
       {/* Animated background decorative elements */}
@@ -110,83 +195,18 @@ export default function LoginPage() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Error Message */}
-              {error && (
-                <div className="rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/50 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
-                  {error}
+            <Suspense
+              fallback={
+                <div className="space-y-4">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-11 w-full" />
+                  <Skeleton className="h-11 w-full" />
+                  <Skeleton className="h-11 w-full" />
                 </div>
-              )}
-
-              {/* Email */}
-              <div className="space-y-2">
-                <Label htmlFor="email">邮箱地址</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="请输入邮箱"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  disabled={loading}
-                  className="h-11"
-                  autoComplete="email"
-                />
-              </div>
-
-              {/* Password */}
-              <div className="space-y-2">
-                <Label htmlFor="password">密码</Label>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="请输入密码"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  className="h-11"
-                  autoComplete="current-password"
-                />
-              </div>
-
-              {/* Submit */}
-              <Button
-                type="submit"
-                className="w-full h-11 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium shadow-md shadow-teal-500/20 dark:shadow-teal-900/40"
-                disabled={loading}
-              >
-                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                登录
-              </Button>
-            </form>
-
-            {/* Demo accounts hint */}
-            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
-              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mb-2">演示账号</p>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  { label: '管理员', email: 'admin@ipsc.com' },
-                  { label: '生产主管', email: 'supervisor@ipsc.com' },
-                  { label: '操作员', email: 'operator@ipsc.com' },
-                  { label: 'QA', email: 'qa@ipsc.com' },
-                ].map((account) => (
-                  <button
-                    key={account.email}
-                    type="button"
-                    onClick={() => {
-                      setEmail(account.email)
-                      setPassword('123456')
-                    }}
-                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left truncate"
-                    title={`${account.email} / 123456`}
-                  >
-                    {account.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
-                默认密码：123456
-              </p>
-            </div>
+              }
+            >
+              <LoginForm />
+            </Suspense>
           </CardContent>
         </Card>
 

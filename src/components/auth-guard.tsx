@@ -5,6 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { authFetch } from '@/lib/auth-fetch'
 import { Skeleton } from '@/components/ui/skeleton'
+import LoginPage from '@/app/login/page'
 
 // Routes that don't require authentication
 const PUBLIC_ROUTES = ['/login']
@@ -27,11 +28,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
   // Check auth status on mount (only for protected routes)
   useEffect(() => {
     if (isPublicRoute) return
-    if (hasCheckedRef.current) return // Don't re-check on every render
+    if (hasCheckedRef.current) return
     hasCheckedRef.current = true
 
     // If we already have user data from login, skip the API call
-    // (prevents the flash-back issue when cookie hasn't propagated yet)
     if (isAuthenticated && user) {
       setLoading(false)
       return
@@ -44,12 +44,12 @@ export function AuthGuard({ children }: AuthGuardProps) {
           const data = await res.json()
           setUser(data.user)
         } else {
-          // Not authenticated, redirect to login
+          // Not authenticated — clear state
           setUser(null)
-          router.push('/login')
+          setLoading(false)
         }
       } catch {
-        // Network error — don't redirect, just show error state
+        // Network error — just show login
         setLoading(false)
       }
     }
@@ -80,9 +80,10 @@ export function AuthGuard({ children }: AuthGuardProps) {
     )
   }
 
-  // Not authenticated (and not loading)
+  // Not authenticated — render Login page inline instead of returning null
+  // This ensures the preview panel always shows content (no blank screen)
   if (!isAuthenticated) {
-    return null
+    return <LoginPage />
   }
 
   // Authenticated — render children
