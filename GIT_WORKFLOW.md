@@ -132,6 +132,8 @@ main (生产) ← release/v1.0 ← develop ← feature/xxx
 | `generate-*.js` | 文档生成临时脚本 |
 | `*.log` / `dev.log` | 日志文件 |
 | `/download/` | 下载缓存 |
+| `/upload/` | 用户上传临时文件 |
+| `archive/` | **已纳入 Git**（过期文档归档，因沙箱环境不稳定需要云端备份） |
 
 **新增需要排除的内容时，先更新 `.gitignore` 再提交。**
 

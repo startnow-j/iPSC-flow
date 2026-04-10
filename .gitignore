@@ -63,8 +63,8 @@ server.log
 # Download cache
 /download/
 
-# Archive (outdated/superseded docs, keep locally but don't push)
-/archive/
+# Archive (outdated/superseded docs, kept in Git for sandbox stability)
+# Previously excluded, now included per user request
 
 # Upload temp (user-uploaded files, not project source)
 /upload/
