@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth-store'
-import { Loader2, Microscope } from 'lucide-react'
+import { Loader2, Microscope, Dna } from 'lucide-react'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -68,11 +68,21 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 p-4">
-      {/* Background decorative elements */}
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-teal-50 via-white to-emerald-50 dark:from-gray-950 dark:via-gray-900 dark:to-teal-950 p-4 relative overflow-hidden">
+      {/* Animated background decorative elements */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-teal-100/50 blur-3xl" />
-        <div className="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-emerald-100/50 blur-3xl" />
+        <div className="absolute -top-40 -right-40 w-96 h-96 rounded-full bg-teal-200/30 dark:bg-teal-800/20 blur-3xl animate-pulse" />
+        <div className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full bg-emerald-200/30 dark:bg-emerald-800/20 blur-3xl animate-pulse [animation-delay:1s]" />
+        <div className="absolute top-1/3 left-1/4 w-64 h-64 rounded-full bg-teal-100/20 dark:bg-teal-900/10 blur-3xl animate-pulse [animation-delay:2s]" />
+
+        {/* Subtle grid pattern */}
+        <div
+          className="absolute inset-0 opacity-[0.02] dark:opacity-[0.05]"
+          style={{
+            backgroundImage: `radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)`,
+            backgroundSize: '40px 40px',
+          }}
+        />
       </div>
 
       <div className="relative w-full max-w-md">
@@ -81,14 +91,19 @@ export default function LoginPage() {
           <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-600 shadow-lg shadow-teal-500/25 mb-4">
             <Microscope className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">iPSC 生产管理系统</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <div className="flex items-center justify-center gap-2 mb-1">
+            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
+              iPSC-Flow
+            </h1>
+            <Dna className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+          </div>
+          <p className="text-sm text-gray-500 dark:text-gray-400">
             Induced Pluripotent Stem Cell Production Management
           </p>
         </div>
 
         {/* Login Card */}
-        <Card className="border-0 shadow-xl shadow-gray-200/50">
+        <Card className="border-0 shadow-xl shadow-gray-200/50 dark:shadow-gray-900/50 dark:bg-gray-800/80 backdrop-blur-sm">
           <CardHeader className="pb-4">
             <CardTitle className="text-xl text-center">用户登录</CardTitle>
             <CardDescription className="text-center">
@@ -99,7 +114,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="space-y-4">
               {/* Error Message */}
               {error && (
-                <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-600">
+                <div className="rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/50 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
                   {error}
                 </div>
               )}
@@ -137,7 +152,7 @@ export default function LoginPage() {
               {/* Submit */}
               <Button
                 type="submit"
-                className="w-full h-11 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium shadow-md shadow-teal-500/20"
+                className="w-full h-11 bg-gradient-to-r from-teal-600 to-emerald-600 hover:from-teal-700 hover:to-emerald-700 text-white font-medium shadow-md shadow-teal-500/20 dark:shadow-teal-900/40"
                 disabled={loading}
               >
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -146,8 +161,8 @@ export default function LoginPage() {
             </form>
 
             {/* Demo accounts hint */}
-            <div className="mt-6 pt-4 border-t border-gray-100">
-              <p className="text-xs text-gray-400 text-center mb-2">演示账号</p>
+            <div className="mt-6 pt-4 border-t border-gray-100 dark:border-gray-700">
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mb-2">演示账号</p>
               <div className="grid grid-cols-2 gap-2">
                 {[
                   { label: '管理员', email: 'admin@ipsc.com' },
@@ -162,14 +177,14 @@ export default function LoginPage() {
                       setEmail(account.email)
                       setPassword('123456')
                     }}
-                    className="text-xs text-gray-500 hover:text-teal-600 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 text-left truncate"
+                    className="text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left truncate"
                     title={`${account.email} / 123456`}
                   >
                     {account.label}
                   </button>
                 ))}
               </div>
-              <p className="text-xs text-gray-400 text-center mt-2">
+              <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-2">
                 默认密码：123456
               </p>
             </div>
@@ -177,8 +192,8 @@ export default function LoginPage() {
         </Card>
 
         {/* Footer */}
-        <p className="text-center text-xs text-gray-400 mt-6">
-          © 2025 iPSC Production Management System · GMP Compliant
+        <p className="text-center text-xs text-gray-400 dark:text-gray-500 mt-6">
+          © 2026 iPSC-Flow · GMP Compliant Production Management
         </p>
       </div>
     </div>

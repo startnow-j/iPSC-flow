@@ -12,6 +12,8 @@ import {
   LogOut,
   Settings,
   User,
+  Users,
+  FileText,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 
@@ -53,12 +55,27 @@ const mainNavItems = [
     title: '我的批次',
     href: '/batches',
     icon: FlaskConical,
-    badge: '8',
   },
   {
     title: '所有批次',
     href: '/batches/all',
     icon: List,
+  },
+]
+
+// Admin-only navigation items
+const adminNavItems = [
+  {
+    title: '用户管理',
+    href: '/users',
+    icon: Users,
+    roles: ['ADMIN'],
+  },
+  {
+    title: '审计日志',
+    href: '/audit',
+    icon: FileText,
+    roles: ['ADMIN', 'SUPERVISOR'],
   },
 ]
 
@@ -90,6 +107,11 @@ export function AppSidebar() {
     OPERATOR: '操作员',
     QA: 'QA',
   }[user?.role || 'OPERATOR'] || user?.role || '用户'
+
+  // Filter admin nav items based on user role
+  const filteredAdminNavItems = adminNavItems.filter(
+    (item) => user?.role && item.roles.includes(user.role),
+  )
 
   // Helper to check if a nav item is active
   const isActive = (href: string) => {
@@ -164,6 +186,31 @@ export function AppSidebar() {
             </Button>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {/* Admin-only Navigation */}
+        {filteredAdminNavItems.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel>系统管理</SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredAdminNavItems.map((item) => (
+                  <SidebarMenuItem key={item.href}>
+                    <SidebarMenuButton
+                      asChild
+                      isActive={isActive(item.href)}
+                      tooltip={item.title}
+                    >
+                      <Link href={item.href}>
+                        <item.icon className="size-4" />
+                        <span>{item.title}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Secondary Navigation */}
         <SidebarGroup>

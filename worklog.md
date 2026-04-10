@@ -547,3 +547,80 @@ Stage Summary:
 - CoA 流程：草稿 → 提交审核 → 批准/退回 → 批准后放行
 - 完整端到端流程：NEW → IN_PRODUCTION → QC_PENDING → QC_IN_PROGRESS → QC_PASS → COA_PENDING(自动CoA) → COA_SUBMITTED → COA_APPROVED → RELEASED
 - 代码零新增 ESLint error/warning
+
+---
+Task ID: 5-1 + 5-2 + 5-3 + 5-4
+Agent: Dashboard, User Management & UI Polish Developer
+Task: Dashboard Enhancement, User Management, Audit Log Viewer, UI Polish
+
+Work Log:
+- 读取了 worklog.md 和项目结构，了解现有技术栈（Next.js 16 + shadcn/ui + Tailwind CSS 4 + Zustand + next-themes）
+- 分析了现有认证体系（JWT + HttpOnly Cookie）、侧边栏导航、Auth Store 等已有组件
+- 确认 sonner 已安装但未在 layout 中使用，next-themes 已安装但未配置 ThemeProvider
+
+**Task 5-4a: 主题与暗色模式基础设施**
+- 创建 src/components/theme-provider.tsx：基于 next-themes 的 ThemeProvider 封装
+- 修改 src/app/layout.tsx：集成 ThemeProvider（attribute="class", defaultTheme="system"），替换 Toaster 为 sonner 版本（richColors + closeButton）
+- 修改 src/components/layout/header.tsx：添加暗色模式切换按钮（Sun/Moon 图标动画切换），更新页面标题映射增加 users/audit
+
+**Task 5-1: Dashboard 增强**
+- 创建 src/components/dashboard/stat-card.tsx：统计卡片组件，支持左侧彩色边框、图标、大号数字、点击导航
+- 创建 src/components/dashboard/recent-batches.tsx：近期批次动态组件，实时获取最新5条批次数据，空状态提示
+- 创建 src/components/dashboard/my-tasks.tsx：我的待办组件，根据角色（OPERATOR/SUPERVISOR/QA/ADMIN）动态显示不同待办任务和快捷操作
+- 重写 src/app/page.tsx：真实数据驱动的 Dashboard，包含欢迎横幅、4张统计卡片（生产中/待质检/待审核CoA/已放行，从 API 获取实时计数）、近期批次动态、我的待办+快捷操作
+- 统计卡片响应式布局：2列手机、4列桌面
+
+**Task 5-2: 用户管理**
+- 创建 src/app/api/users/route.ts：GET 列出所有用户（ADMIN only）+ POST 创建用户（邮箱格式验证、密码>=6位、bcryptjs加密、角色校验、邮箱唯一性检查）
+- 创建 src/app/api/users/[id]/route.ts：GET 获取单个用户 + PATCH 更新用户（支持修改所有字段）+ DELETE 软删除（active=false，防止自禁用）
+- 创建 src/components/users/user-list.tsx：用户列表表格组件，含角色彩色徽标、启用/禁用状态、操作下拉菜单（编辑/禁用/启用）、确认对话框
+- 创建 src/components/users/create-user-dialog.tsx：创建/编辑用户对话框，表单验证（姓名必填、邮箱格式、密码>=6位），支持编辑模式（密码留空不修改）
+- 创建 src/app/users/page.tsx：用户管理页面，ADMIN 角色权限控制（非 ADMIN 显示"无权限"），集成用户列表和创建/编辑对话框
+
+**Task 5-3: 审计日志**
+- 创建 src/app/api/audit/route.ts：GET 审计日志列表（ADMIN/SUPERVISOR only），支持事件类型/批次号/操作员/对象类型筛选和分页
+- 创建 src/app/audit/page.tsx：全局审计日志页面，含筛选器（事件类型下拉+批次号搜索）、数据表格（时间/事件/操作员/类型/批次号/输入模式）、交替行色、分页控件、角色权限控制
+- 增强 src/app/batches/[id]/page.tsx 中的 TimelineCard：
+  - 添加 18 种事件类型的彩色圆点（BATCH_CREATED=teal, BATCH_STATUS_CHANGED=amber, TASK_COMPLETED=emerald 等）
+  - 添加输入模式徽标（FORM_SUBMIT/AI_CONVERSATION）颜色区分
+  - 添加通用数据差异比较函数 formatDiffData()，自动对比 dataBefore/dataAfter 显示变更字段（删除线旧值→加粗新值）
+  - 改进空状态文案："暂无操作记录" + "批次操作将自动记录在此"
+
+**Task 5-nav: 侧边栏更新**
+- 修改 src/components/layout/sidebar.tsx：
+  - 新增 "系统管理" 导航组，含 "用户管理"（ADMIN only）和 "审计日志"（ADMIN + SUPERVISOR）
+  - 根据用户角色动态过滤导航项
+
+**Task 5-4b: 登录页面美化**
+- 重写 src/app/login/page.tsx：
+  - 添加 "iPSC-Flow" 品牌标识（Logo + Dna 图标）
+  - 多层渐变背景装饰元素（3个脉冲动画模糊圆形 + 点阵网格纹理）
+  - 暗色模式适配（dark: 前缀渐变背景和卡片样式）
+  - 页脚更新为 "© 2026 iPSC-Flow · GMP Compliant"
+
+**Task 5-4c: 其他 UI 改进**
+- 修改 src/components/layout/footer.tsx：添加 mt-auto 确保粘性底部，更新文案
+- 所有新组件支持响应式设计（hidden sm:table-cell / hidden md:table-cell 等）
+- 所有数据获取页面添加了 Skeleton 加载骨架屏
+- 空状态使用 Lucide 图标 + 描述文案
+- API 错误通过 sonner toast 通知展示
+
+- Lint 检查通过：仅剩预存 generate-plan.js 2 个 error，本任务零新增
+- Dev server 正常编译运行，无编译错误
+
+Stage Summary:
+- 新增文件：src/components/theme-provider.tsx、src/components/dashboard/{stat-card,recent-batches,my-tasks}.tsx（4个）
+- 新增文件：src/app/api/users/route.ts、[id]/route.ts（2个）
+- 新增文件：src/app/api/audit/route.ts（1个）
+- 新增文件：src/components/users/{user-list,create-user-dialog}.tsx（2个）
+- 新增文件：src/app/users/page.tsx、src/app/audit/page.tsx（2个）
+- 修改文件：src/app/layout.tsx（ThemeProvider + sonner Toaster）
+- 修改文件：src/components/layout/{header,sidebar,footer}.tsx（暗色模式切换 + 系统管理导航 + 粘性底部）
+- 修改文件：src/app/page.tsx（真实数据驱动 Dashboard）
+- 修改文件：src/app/login/page.tsx（品牌化 + 暗色模式 + 动画背景）
+- 修改文件：src/app/batches/[id]/page.tsx（时间线增强：彩色圆点 + 输入模式徽标 + 数据差异对比）
+- Dashboard：4张实时统计卡片 + 近期批次动态 + 角色感知的待办任务 + 快捷操作
+- 用户管理：完整 CRUD API + 用户列表表格 + 创建/编辑对话框 + 启用/禁用 + 权限控制
+- 审计日志：全局审计日志查看器（筛选 + 分页）+ 批次时间线增强（18种事件颜色 + 输入模式 + 数据差异）
+- UI Polish：暗色模式（ThemeProvider + 切换按钮）、登录页品牌化、响应式布局、加载骨架屏、空状态
+- 代码零新增 ESLint error/warning

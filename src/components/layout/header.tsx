@@ -1,8 +1,9 @@
 'use client'
 
 import { usePathname, useRouter } from 'next/navigation'
-import { Bell, Search, LogOut } from 'lucide-react'
+import { Bell, Search, LogOut, Sun, Moon } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { useTheme } from 'next-themes'
 
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,8 @@ const pageTitles: Record<string, string> = {
   '/batches/all': '所有批次',
   '/batches/new': '新建批次',
   '/todos': '待办事项',
+  '/users': '用户管理',
+  '/audit': '审计日志',
 }
 
 // Breadcrumb items mapping
@@ -54,6 +57,7 @@ export function AppHeader() {
   const pathname = usePathname()
   const router = useRouter()
   const { user, logout } = useAuthStore()
+  const { theme, setTheme } = useTheme()
   const pageTitle = pageTitles[pathname] || '工作台'
   const breadcrumbs = getBreadcrumbs(pathname)
 
@@ -102,7 +106,7 @@ export function AppHeader() {
       <div className="flex-1" />
 
       {/* Right side actions */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {/* Search - hidden on mobile */}
         <div className="hidden md:flex items-center relative">
           <Search className="absolute left-2.5 size-3.5 text-muted-foreground" />
@@ -112,6 +116,18 @@ export function AppHeader() {
             className="h-8 w-48 lg:w-64 pl-8 text-sm bg-muted/50 border-transparent focus:border-border focus:bg-background transition-colors"
           />
         </div>
+
+        {/* Theme Toggle */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="relative size-9"
+          onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+        >
+          <Sun className="size-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
+          <Moon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
+          <span className="sr-only">切换主题</span>
+        </Button>
 
         {/* Notifications */}
         <DropdownMenu>

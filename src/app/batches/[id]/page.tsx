@@ -180,13 +180,72 @@ function formatTime(dateStr: string) {
   })
 }
 
+// Event type color mapping for timeline dots
+const EVENT_DOT_COLORS: Record<string, string> = {
+  BATCH_CREATED: 'bg-teal-500 border-teal-500',
+  BATCH_UPDATED: 'bg-sky-500 border-sky-500',
+  BATCH_STATUS_CHANGED: 'bg-amber-500 border-amber-500',
+  BATCH_SCRAPPED: 'bg-red-500 border-red-500',
+  BATCH_RELEASED: 'bg-emerald-500 border-emerald-500',
+  TASK_CREATED: 'bg-sky-400 border-sky-400',
+  TASK_STARTED: 'bg-blue-500 border-blue-500',
+  TASK_COMPLETED: 'bg-emerald-400 border-emerald-400',
+  TASK_UPDATED: 'bg-sky-300 border-sky-300',
+  QC_RECORD_CREATED: 'bg-amber-400 border-amber-400',
+  QC_RECORD_UPDATED: 'bg-orange-400 border-orange-400',
+  QC_STARTED: 'bg-orange-500 border-orange-500',
+  QC_COMPLETED: 'bg-amber-500 border-amber-500',
+  COA_GENERATED: 'bg-violet-500 border-violet-500',
+  COA_SUBMITTED: 'bg-indigo-500 border-indigo-500',
+  COA_APPROVED: 'bg-emerald-500 border-emerald-500',
+  COA_REJECTED: 'bg-red-400 border-red-400',
+  COA_RESUBMITTED: 'bg-indigo-400 border-indigo-400',
+}
+
+const INPUT_MODE_LABELS: Record<string, string> = {
+  FORM_SUBMIT: '表单',
+  AI_CONVERSATION: 'AI对话',
+}
+
+const INPUT_MODE_COLORS: Record<string, string> = {
+  FORM_SUBMIT: 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300',
+  AI_CONVERSATION: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
+}
+
+function formatDiffData(
+  dataBefore: Record<string, unknown> | undefined,
+  dataAfter: Record<string, unknown> | undefined,
+) {
+  if (!dataBefore && !dataAfter) return null
+
+  const entries: { key: string; before: unknown; after: unknown }[] = []
+  const allKeys = new Set([
+    ...Object.keys(dataBefore || {}),
+    ...Object.keys(dataAfter || {}),
+  ])
+
+  // Skip certain internal keys
+  const skipKeys = new Set(['id', 'createdAt', 'updatedAt'])
+
+  for (const key of allKeys) {
+    if (skipKeys.has(key)) continue
+    const before = dataBefore?.[key]
+    const after = dataAfter?.[key]
+    if (JSON.stringify(before) === JSON.stringify(after)) continue
+    entries.push({ key, before, after })
+  }
+
+  return entries.length > 0 ? entries : null
+}
+
 function TimelineCard({ timeline }: { timeline: TimelineEntry[] }) {
   if (timeline.length === 0) {
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-12">
           <History className="h-10 w-10 text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground">暂无时间线记录</p>
+          <p className="text-sm text-muted-foreground">暂无操作记录</p>
+          <p className="text-xs text-muted-foreground/60 mt-1">批次操作将自动记录在此</p>
         </CardContent>
       </Card>
     )
@@ -199,38 +258,52 @@ function TimelineCard({ timeline }: { timeline: TimelineEntry[] }) {
           {/* Vertical line */}
           <div className="absolute left-[11px] top-2 bottom-2 w-px bg-border" />
 
-          <div className="space-y-6">
-            {timeline.map((entry, index) => (
-              <div key={entry.id} className="relative flex gap-4">
-                {/* Dot */}
-                <div className="relative z-10 mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center">
-                  <div
-                    className={`h-2.5 w-2.5 rounded-full border-2 ${
-                      index === timeline.length - 1
-                        ? 'border-primary bg-primary'
-                        : 'border-muted-foreground/40 bg-background'
-                    }`}
-                  />
-                </div>
+          <div className="space-y-5">
+            {timeline.map((entry, index) => {
+              const dotColor = EVENT_DOT_COLORS[entry.eventType] || ''
+              const isLatest = index === timeline.length - 1
+              const diffData = formatDiffData(entry.dataBefore, entry.dataAfter)
 
-                {/* Content */}
-                <div className="flex-1 min-w-0 pb-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium">{entry.eventLabel}</span>
-                    {entry.operatorName && (
-                      <span className="text-xs text-muted-foreground">
-                        · {entry.operatorName}
-                      </span>
-                    )}
+              return (
+                <div key={entry.id} className="relative flex gap-4">
+                  {/* Dot */}
+                  <div className="relative z-10 mt-1 flex h-[22px] w-[22px] shrink-0 items-center justify-center">
+                    <div
+                      className={`h-2.5 w-2.5 rounded-full border-2 ${
+                        dotColor
+                          ? dotColor
+                          : isLatest
+                            ? 'border-primary bg-primary'
+                            : 'border-muted-foreground/40 bg-background'
+                      }`}
+                    />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {formatTime(entry.createdAt)}
-                  </p>
 
-                  {/* Data changes */}
-                  {entry.dataAfter && (
-                    <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
-                      {entry.dataBefore?.status && entry.dataAfter.status && (
+                  {/* Content */}
+                  <div className="flex-1 min-w-0 pb-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">{entry.eventLabel}</span>
+                      {entry.operatorName && (
+                        <span className="text-xs text-muted-foreground">
+                          · {entry.operatorName}
+                        </span>
+                      )}
+                      {entry.inputMode && (
+                        <Badge
+                          variant="secondary"
+                          className={`text-[10px] ${INPUT_MODE_COLORS[entry.inputMode] || ''}`}
+                        >
+                          {INPUT_MODE_LABELS[entry.inputMode] || entry.inputMode}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {formatTime(entry.createdAt)}
+                    </p>
+
+                    {/* Status change */}
+                    {entry.dataBefore?.status && entry.dataAfter?.status && (
+                      <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs">
                         <p>
                           <span className="text-muted-foreground">状态变更：</span>
                           <Badge
@@ -239,44 +312,69 @@ function TimelineCard({ timeline }: { timeline: TimelineEntry[] }) {
                           >
                             {getStatusLabel(entry.dataBefore.status as string)}
                           </Badge>
-                          <span className="text-muted-foreground">→</span>
+                          <span className="text-muted-foreground mx-1">→</span>
                           <Badge
                             variant="secondary"
-                            className={`text-[10px] ml-1 ${getStatusColor(entry.dataAfter.status as string)}`}
+                            className={`text-[10px] ${getStatusColor(entry.dataAfter.status as string)}`}
                           >
                             {getStatusLabel(entry.dataAfter.status as string)}
                           </Badge>
                         </p>
-                      )}
-                      {entry.dataAfter.statusLabel && !entry.dataBefore?.status && (
-                        <p>
-                          <span className="text-muted-foreground">状态：</span>
-                          {entry.dataAfter.statusLabel}
-                        </p>
-                      )}
-                      {entry.dataAfter.action && (
-                        <p>
-                          <span className="text-muted-foreground">操作：</span>
-                          {entry.dataAfter.action}
-                        </p>
-                      )}
-                      {entry.dataAfter.batchNo && (
-                        <p>
-                          <span className="text-muted-foreground">批次号：</span>
-                          <span className="font-mono">{entry.dataAfter.batchNo as string}</span>
-                        </p>
-                      )}
-                      {entry.dataAfter.reason && (
-                        <p>
-                          <span className="text-muted-foreground">原因：</span>
-                          {entry.dataAfter.reason as string}
-                        </p>
-                      )}
-                    </div>
-                  )}
+                      </div>
+                    )}
+
+                    {/* Generic data diff */}
+                    {diffData && !entry.dataBefore?.status && !entry.dataAfter?.status && (
+                      <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
+                        {diffData.map(({ key, before, after }) => (
+                          <p key={key}>
+                            <span className="text-muted-foreground">{key}：</span>
+                            {before !== undefined && before !== null && (
+                              <span className="line-through text-muted-foreground/60 mr-1">
+                                {String(before)}
+                              </span>
+                            )}
+                            {after !== undefined && after !== null && (
+                              <span className="font-medium">{String(after)}</span>
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action / BatchNo / Reason (legacy format) */}
+                    {entry.dataAfter && !diffData && (
+                      <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
+                        {entry.dataAfter.statusLabel && (
+                          <p>
+                            <span className="text-muted-foreground">状态：</span>
+                            {entry.dataAfter.statusLabel}
+                          </p>
+                        )}
+                        {entry.dataAfter.action && (
+                          <p>
+                            <span className="text-muted-foreground">操作：</span>
+                            {entry.dataAfter.action}
+                          </p>
+                        )}
+                        {entry.dataAfter.batchNo && (
+                          <p>
+                            <span className="text-muted-foreground">批次号：</span>
+                            <span className="font-mono">{entry.dataAfter.batchNo as string}</span>
+                          </p>
+                        )}
+                        {entry.dataAfter.reason && (
+                          <p>
+                            <span className="text-muted-foreground">原因：</span>
+                            {entry.dataAfter.reason as string}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         </div>
       </CardContent>

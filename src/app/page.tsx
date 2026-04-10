@@ -1,19 +1,50 @@
 'use client'
 
+import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
+import { StatCard } from '@/components/dashboard/stat-card'
+import { RecentBatches } from '@/components/dashboard/recent-batches'
+import { MyTasks } from '@/components/dashboard/my-tasks'
 import {
   FlaskConical,
-  Clock,
+  ClipboardCheck,
+  FileCheck,
   CheckCircle2,
-  AlertTriangle,
-  TrendingUp,
-  Users,
+  Clock,
 } from 'lucide-react'
 
+interface StatusCounts {
+  IN_PRODUCTION?: number
+  QC_PENDING?: number
+  COA_SUBMITTED?: number
+  RELEASED?: number
+  [key: string]: number | undefined
+}
+
 export default function HomePage() {
+  const router = useRouter()
   const { user } = useAuthStore()
+  const [statusCounts, setStatusCounts] = useState<StatusCounts>({})
+  const [loading, setLoading] = useState(true)
+
+  const fetchStatusCounts = useCallback(async () => {
+    try {
+      const res = await fetch('/api/batches?pageSize=1')
+      if (res.ok) {
+        const data = await res.json()
+        setStatusCounts(data.statusCounts || {})
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchStatusCounts()
+  }, [fetchStatusCounts])
 
   const roleName = {
     ADMIN: '管理员',
@@ -28,6 +59,45 @@ export default function HomePage() {
     if (hour < 18) return '下午好'
     return '晚上好'
   }
+
+  const statCards = [
+    {
+      title: '生产中批次',
+      value: statusCounts.IN_PRODUCTION || 0,
+      icon: FlaskConical,
+      color: 'text-amber-600 dark:text-amber-400',
+      iconBg: 'bg-amber-100 dark:bg-amber-900/40',
+      borderColor: 'bg-amber-500',
+      href: '/batches/all?status=IN_PRODUCTION',
+    },
+    {
+      title: '待质检',
+      value: statusCounts.QC_PENDING || 0,
+      icon: ClipboardCheck,
+      color: 'text-orange-600 dark:text-orange-400',
+      iconBg: 'bg-orange-100 dark:bg-orange-900/40',
+      borderColor: 'bg-orange-500',
+      href: '/batches/all?status=QC_PENDING',
+    },
+    {
+      title: '待审核CoA',
+      value: statusCounts.COA_SUBMITTED || 0,
+      icon: FileCheck,
+      color: 'text-teal-600 dark:text-teal-400',
+      iconBg: 'bg-teal-100 dark:bg-teal-900/40',
+      borderColor: 'bg-teal-500',
+      href: '/batches/all?status=COA_SUBMITTED',
+    },
+    {
+      title: '已放行',
+      value: statusCounts.RELEASED || 0,
+      icon: CheckCircle2,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      iconBg: 'bg-emerald-100 dark:bg-emerald-900/40',
+      borderColor: 'bg-emerald-500',
+      href: '/batches/all?status=RELEASED',
+    },
+  ]
 
   return (
     <div className="space-y-6">
@@ -57,188 +127,27 @@ export default function HomePage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">生产中</p>
-                <p className="text-2xl font-bold">2</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100">
-                <FlaskConical className="h-5 w-5 text-amber-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">待质检</p>
-                <p className="text-2xl font-bold">1</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-100">
-                <Clock className="h-5 w-5 text-sky-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">已放行</p>
-                <p className="text-2xl font-bold">5</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-emerald-100">
-                <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">异常提醒</p>
-                <p className="text-2xl font-bold">0</p>
-              </div>
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-red-100">
-                <AlertTriangle className="h-5 w-5 text-red-600" />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+        {statCards.map((card) => (
+          <StatCard
+            key={card.title}
+            title={card.title}
+            value={card.value}
+            icon={card.icon}
+            color={card.color}
+            iconBg={card.iconBg}
+            borderColor={card.borderColor}
+            href={card.href}
+            loading={loading}
+          />
+        ))}
       </div>
 
-      {/* Recent Activity + Quick Actions */}
+      {/* Recent Activity + My Tasks */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Recent Batches */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">近期批次动态</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-3">
-              {[
-                {
-                  batch: 'IPSC-260410-003-P5',
-                  status: 'IN_PRODUCTION',
-                  statusLabel: '生产中',
-                  action: '扩增培养进行中',
-                  time: '10 分钟前',
-                  color: 'bg-amber-500',
-                },
-                {
-                  batch: 'IPSC-260409-002-P3',
-                  status: 'QC_PENDING',
-                  statusLabel: '待质检',
-                  action: '等待质检部门接收',
-                  time: '2 小时前',
-                  color: 'bg-sky-500',
-                },
-                {
-                  batch: 'IPSC-260408-001-P2',
-                  status: 'RELEASED',
-                  statusLabel: '已放行',
-                  action: 'CoA已批准，产品已放行',
-                  time: '昨天',
-                  color: 'bg-emerald-500',
-                },
-              ].map((item) => (
-                <div
-                  key={item.batch}
-                  className="flex items-center justify-between rounded-lg border p-3 hover:bg-muted/50 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`h-2.5 w-2.5 rounded-full ${item.color}`} />
-                    <div>
-                      <p className="text-sm font-medium">{item.batch}</p>
-                      <p className="text-xs text-muted-foreground">{item.action}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <Badge variant="outline" className="text-xs">
-                      {item.statusLabel}
-                    </Badge>
-                    <span className="text-xs text-muted-foreground hidden sm:inline">
-                      {item.time}
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Quick Actions & System Info */}
-        <div className="space-y-4">
-          {/* Quick Actions */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">快捷操作</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {[
-                { label: '新建批次', icon: FlaskConical, href: '/batches/new', enabled: true },
-                { label: '待办事项', icon: Clock, href: '/todos', enabled: false },
-                { label: '质检管理', icon: CheckCircle2, href: '#', enabled: false },
-              ].map((action) => (
-                <button
-                  key={action.label}
-                  disabled={!action.enabled}
-                  className={`w-full flex items-center gap-3 rounded-lg border p-3 text-left text-sm transition-colors ${
-                    action.enabled
-                      ? 'hover:bg-muted/50 cursor-pointer'
-                      : 'opacity-50 cursor-not-allowed'
-                  }`}
-                >
-                  <action.icon className="h-4 w-4 text-muted-foreground" />
-                  <span>{action.label}</span>
-                  {!action.enabled && (
-                    <Badge variant="secondary" className="ml-auto text-[10px] px-1.5">
-                      即将上线
-                    </Badge>
-                  )}
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-
-          {/* System Info */}
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base font-semibold">系统信息</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">系统版本</span>
-                <span className="font-medium">v1.0 (MVP)</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">在线用户</span>
-                <div className="flex items-center gap-1">
-                  <Users className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="font-medium">4</span>
-                </div>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">产品类型</span>
-                <span className="font-medium">iPSC细胞株</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">合规标准</span>
-                <Badge variant="outline" className="text-xs font-medium text-emerald-600 border-emerald-200">
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
-                  GMP
-                </Badge>
-              </div>
-            </CardContent>
-          </Card>
+        <RecentBatches />
+        <div className="lg:col-span-1">
+          <MyTasks />
         </div>
       </div>
     </div>
