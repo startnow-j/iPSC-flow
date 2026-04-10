@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromCookies, verifyToken, hashPassword } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, hashPassword } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 // GET /api/users — List all users (admin only)
 export async function GET(request: NextRequest) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
@@ -39,7 +39,7 @@ export async function GET(request: NextRequest) {
 // POST /api/users — Create user (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }

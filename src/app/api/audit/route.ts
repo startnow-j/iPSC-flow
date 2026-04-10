@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { getAuditLogs } from '@/lib/services/audit-log'
 
 // GET /api/audit — List audit logs with filters and pagination
 export async function GET(request: NextRequest) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }

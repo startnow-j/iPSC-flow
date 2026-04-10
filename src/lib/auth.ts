@@ -61,7 +61,28 @@ export async function verifyToken(
 }
 
 /**
- * Extract JWT token from request cookies
+ * Extract JWT token from request — checks Authorization header first,
+ * then falls back to cookie. This handles Caddy proxy cookie issues.
+ */
+export function getTokenFromRequest(request: Request): string | null {
+  // 1. Check Authorization header (most reliable for proxy setups)
+  const authHeader = request.headers.get('authorization')
+  if (authHeader?.startsWith('Bearer ')) {
+    return authHeader.slice(7)
+  }
+
+  // 2. Fall back to cookie
+  const cookies = Object.fromEntries(
+    (request.headers.get('cookie') || '').split(';').map(c => {
+      const [key, ...val] = c.trim().split('=')
+      return [key, val.join('=')]
+    })
+  )
+  return cookies[COOKIE_NAME] ?? null
+}
+
+/**
+ * Extract JWT token from request cookies only (legacy helper)
  */
 export function getTokenFromCookies(
   cookies: Record<string, string | undefined>

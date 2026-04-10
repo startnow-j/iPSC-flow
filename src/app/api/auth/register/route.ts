@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { hashPassword, getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { hashPassword, getTokenFromRequest, verifyToken } from '@/lib/auth'
 
 export async function POST(request: NextRequest) {
   try {
     // Verify admin access
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    const token = getTokenFromRequest(request)
 
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })

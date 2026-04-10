@@ -1,12 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 
 export async function GET(request: NextRequest) {
   try {
-    // Extract token from cookies
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    // Extract token — checks Authorization header first, then cookie
+    const token = getTokenFromRequest(request)
 
     if (!token) {
       return NextResponse.json(

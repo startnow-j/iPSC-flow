@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
@@ -13,8 +13,7 @@ export async function GET(
 ) {
   try {
     // 认证检查
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
@@ -59,8 +58,7 @@ export async function PATCH(
 ) {
   try {
     // 认证检查
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }

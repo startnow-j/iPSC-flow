@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { validateBatchCreation } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
 import type { BatchStatus } from '@prisma/client'
@@ -11,8 +11,7 @@ import type { BatchStatus } from '@prisma/client'
 export async function GET(request: NextRequest) {
   try {
     // 认证检查
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
@@ -107,8 +106,7 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     // 认证检查
-    const cookies = Object.fromEntries(request.cookies)
-    const token = getTokenFromCookies(cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }

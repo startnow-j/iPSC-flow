@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromCookies, verifyToken, hashPassword } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, hashPassword } from '@/lib/auth'
 import { db } from '@/lib/db'
 
 // GET /api/users/[id] — Get single user (admin only)
@@ -8,7 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
@@ -51,7 +51,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }
@@ -138,7 +138,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   try {
-    const token = getTokenFromCookies(request.cookies)
+    const token = getTokenFromRequest(request)
     if (!token) {
       return NextResponse.json({ error: '未登录' }, { status: 401 })
     }

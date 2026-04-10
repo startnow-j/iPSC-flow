@@ -52,6 +52,7 @@ export async function POST(request: NextRequest) {
 
     // Create response with cookie
     const response = NextResponse.json({
+      token, // Return token in body for localStorage fallback
       user: {
         id: user.id,
         name: user.name,
@@ -61,7 +62,7 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Set HttpOnly cookie
+    // Set HttpOnly cookie (primary auth mechanism)
     response.cookies.set(COOKIE_NAME, token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

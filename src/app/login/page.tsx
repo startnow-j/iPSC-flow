@@ -12,13 +12,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
-import { useToast } from '@/hooks/use-toast'
 import { useAuthStore } from '@/stores/auth-store'
 import { Loader2, Microscope, Dna } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function LoginPage() {
   const router = useRouter()
-  const { toast } = useToast()
   const { setUser } = useAuthStore()
 
   const [email, setEmail] = useState('')
@@ -51,15 +50,15 @@ export default function LoginPage() {
         return
       }
 
-      // Store user info in Zustand
-      setUser(data.user)
+      // Store user info AND token in Zustand (persists to localStorage)
+      setUser(data.user, data.token)
 
-      toast({
-        title: '登录成功',
+      toast.success('登录成功', {
         description: `欢迎回来，${data.user.name}`,
       })
 
-      router.push('/')
+      // Use replace to avoid back-button returning to login
+      router.replace('/')
     } catch {
       setError('网络错误，请稍后重试')
     } finally {
