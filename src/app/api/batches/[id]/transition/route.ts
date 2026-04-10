@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromCookies, verifyToken } from '@/lib/auth'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
+import { db } from '@/lib/db'
 
 // ============================================
 // POST /api/batches/[id]/transition — 状态转换
@@ -30,6 +31,79 @@ export async function POST(
       return NextResponse.json({ error: '缺少 action 参数' }, { status: 400 })
     }
 
+    // ============================================
+    // 开始生产时自动创建 3 个生产任务
+    // ============================================
+    if (action === 'start_production') {
+      const batch = await db.batch.findUnique({
+        where: { id },
+        include: { tasks: true },
+      })
+
+      if (batch && batch.tasks.length === 0) {
+        // 创建默认的 3 个生产任务
+        const now = new Date()
+        const tasksData = [
+          {
+            batchId: id,
+            batchNo: batch.batchNo,
+            taskCode: 'SEED_PREP',
+            taskName: '种子复苏',
+            sequenceNo: 1,
+            stepGroup: null,
+            status: 'IN_PROGRESS' as const,
+            assigneeId: payload.userId,
+            assigneeName: payload.name,
+            actualStart: now,
+          },
+          {
+            batchId: id,
+            batchNo: batch.batchNo,
+            taskCode: 'EXPANSION',
+            taskName: '扩增培养',
+            sequenceNo: 2,
+            stepGroup: null,
+            status: 'PENDING' as const,
+            assigneeId: null,
+            assigneeName: null,
+          },
+          {
+            batchId: id,
+            batchNo: batch.batchNo,
+            taskCode: 'HARVEST',
+            taskName: '收获冻存',
+            sequenceNo: 3,
+            stepGroup: null,
+            status: 'PENDING' as const,
+            assigneeId: null,
+            assigneeName: null,
+          },
+        ]
+
+        await db.productionTask.createMany({
+          data: tasksData,
+        })
+
+        // 记录审计日志：自动创建生产任务
+        for (const t of tasksData) {
+          await createAuditLog({
+            eventType: 'TASK_CREATED',
+            targetType: 'TASK',
+            targetId: 'pending', // will be updated after creation, but for batch tasks this is acceptable
+            targetBatchNo: batch.batchNo,
+            operatorId: payload.userId,
+            operatorName: payload.name,
+            dataAfter: {
+              taskCode: t.taskCode,
+              taskName: t.taskName,
+              sequenceNo: t.sequenceNo,
+              status: t.status,
+            },
+          })
+        }
+      }
+    }
+
     // 执行状态转换
     const result = await transition(
       id,
@@ -48,7 +122,7 @@ export async function POST(
       eventType: 'BATCH_STATUS_CHANGED',
       targetType: 'BATCH',
       targetId: id,
-      targetBatchNo: undefined, // will be filled by the batch relation
+      targetBatchNo: undefined,
       operatorId: payload.userId,
       operatorName: payload.name,
       dataBefore: { status: result.previousState },

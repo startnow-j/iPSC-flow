@@ -1,0 +1,178 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getTokenFromCookies, verifyToken } from '@/lib/auth'
+import { db } from '@/lib/db'
+import { validateProductionTask } from '@/lib/services/validation'
+import { createAuditLog } from '@/lib/services/audit-log'
+
+// ============================================
+// GET /api/batches/[id]/tasks — 列出批次的所有生产任务
+// ============================================
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // 认证检查
+    const cookies = Object.fromEntries(request.cookies)
+    const token = getTokenFromCookies(cookies)
+    if (!token) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
+    }
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
+    const { id } = await params
+
+    // 检查批次是否存在
+    const batch = await db.batch.findUnique({
+      where: { id },
+    })
+    if (!batch) {
+      return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    // 查询所有任务，按 sequenceNo 排序
+    const tasks = await db.productionTask.findMany({
+      where: { batchId: id },
+      orderBy: [{ sequenceNo: 'asc' }, { createdAt: 'asc' }],
+    })
+
+    // 解析 JSON 字段
+    const parsedTasks = tasks.map((task) => ({
+      ...task,
+      formData: task.formData ? JSON.parse(task.formData) : null,
+      attachments: task.attachments ? JSON.parse(task.attachments) : null,
+    }))
+
+    return NextResponse.json({ tasks: parsedTasks })
+  } catch (error) {
+    console.error('GET /api/batches/[id]/tasks error:', error)
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+  }
+}
+
+// ============================================
+// POST /api/batches/[id]/tasks — 创建新的传代记录 (EXPANSION)
+// ============================================
+export async function POST(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // 认证检查
+    const cookies = Object.fromEntries(request.cookies)
+    const token = getTokenFromCookies(cookies)
+    if (!token) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
+    }
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const { formData, notes, attachments } = body
+
+    // 检查批次是否存在且在生产中
+    const batch = await db.batch.findUnique({
+      where: { id },
+    })
+    if (!batch) {
+      return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    if (batch.status !== 'IN_PRODUCTION') {
+      return NextResponse.json(
+        { error: '只能在生产中状态下创建传代记录' },
+        { status: 400 }
+      )
+    }
+
+    // 校验表单数据
+    const validation = validateProductionTask('EXPANSION', formData ?? {})
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: '表单校验失败', validation },
+        { status: 400 }
+      )
+    }
+
+    // 构建 stepGroup
+    const stepGroup = `${formData.passage_from}→${formData.passage_to}`
+
+    // 查询当前已有的 EXPANSION 任务数量，用于确定 sequenceNo
+    const existingExpansions = await db.productionTask.findMany({
+      where: { batchId: id, taskCode: 'EXPANSION' },
+      orderBy: { createdAt: 'asc' },
+    })
+
+    // 创建新的传代任务
+    const task = await db.productionTask.create({
+      data: {
+        batchId: id,
+        batchNo: batch.batchNo,
+        taskCode: 'EXPANSION',
+        taskName: '扩增培养',
+        sequenceNo: 2,
+        stepGroup,
+        status: 'COMPLETED',
+        assigneeId: payload.userId,
+        assigneeName: payload.name,
+        formData: JSON.stringify(formData),
+        attachments: attachments ? JSON.stringify(attachments) : null,
+        notes: notes || null,
+        actualStart: new Date(),
+        actualEnd: new Date(),
+      },
+    })
+
+    // 更新批次的 currentPassage
+    await db.batch.update({
+      where: { id },
+      data: {
+        currentPassage: `P${formData.passage_to}`,
+      },
+    })
+
+    // 记录审计日志
+    await createAuditLog({
+      eventType: 'TASK_COMPLETED',
+      targetType: 'TASK',
+      targetId: task.id,
+      targetBatchNo: batch.batchNo,
+      operatorId: payload.userId,
+      operatorName: payload.name,
+      dataAfter: {
+        taskCode: 'EXPANSION',
+        stepGroup,
+        formData,
+      },
+    })
+
+    // 同时更新批次记录
+    await createAuditLog({
+      eventType: 'BATCH_UPDATED',
+      targetType: 'BATCH',
+      targetId: id,
+      targetBatchNo: batch.batchNo,
+      operatorId: payload.userId,
+      operatorName: payload.name,
+      dataBefore: { currentPassage: batch.currentPassage },
+      dataAfter: { currentPassage: `P${formData.passage_to}` },
+    })
+
+    return NextResponse.json({
+      task: {
+        ...task,
+        formData: JSON.parse(task.formData),
+        attachments: task.attachments ? JSON.parse(task.attachments) : null,
+      },
+    })
+  } catch (error) {
+    console.error('POST /api/batches/[id]/tasks error:', error)
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+  }
+}

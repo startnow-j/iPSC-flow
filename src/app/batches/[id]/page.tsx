@@ -35,7 +35,9 @@ import {
   Activity,
   History,
   AlertCircle,
+  RotateCcw,
 } from 'lucide-react'
+import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
 
 // ============================================
 // Types
@@ -312,6 +314,11 @@ export default function BatchDetailPage({
     if (value === 'timeline' && timeline.length === 0) {
       fetchTimeline()
     }
+  }
+
+  const handleProductionUpdate = async () => {
+    await fetchBatchDetail()
+    fetchTimeline()
   }
 
   const handleTransition = async () => {
@@ -598,14 +605,12 @@ export default function BatchDetailPage({
           </div>
         </TabsContent>
 
-        {/* ============================================ */}
-        {/* Production Tab (Placeholder) */}
-        {/* ============================================ */}
+        {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
-          <PlaceholderCard
-            icon={Activity}
-            title="暂无生产记录"
-            description="生产记录功能将在第三阶段开发完成后可用，届时可在此查看种子复苏、扩增培养、收获冻存等详细步骤。"
+          <EbprStepGuide
+            batchId={id}
+            batch={batch}
+            onBatchUpdated={handleProductionUpdate}
           />
         </TabsContent>
 
