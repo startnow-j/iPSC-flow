@@ -36,8 +36,13 @@ import {
   History,
   AlertCircle,
   RotateCcw,
+  PlayCircle,
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
+import { QcForm } from '@/components/qc/qc-form'
+import { QcResultsSummary } from '@/components/qc/qc-results-summary'
+import { CoaDetail } from '@/components/coa/coa-detail'
 
 // ============================================
 // Types
@@ -65,6 +70,55 @@ interface BatchDetail {
   createdByName: string
   createdAt: string
   updatedAt: string
+}
+
+interface QcRecord {
+  id: string
+  batchId: string
+  batchNo: string
+  qcType: string
+  testResults: TestResultItem[]
+  overallJudgment: string
+  failReason?: string | null
+  operatorId?: string | null
+  operatorName?: string | null
+  operatedAt?: string | null
+  reviewerId?: string | null
+  reviewerName?: string | null
+  reviewComment?: string | null
+  reviewedAt?: string | null
+  createdAt: string
+}
+
+interface TestResultItem {
+  itemCode: string
+  itemName: string
+  method: string
+  standard: string
+  resultValue?: string | number | null
+  resultUnit?: string
+  judgment?: string
+}
+
+interface CoaRecord {
+  id: string
+  batchId: string
+  batchNo: string
+  coaNo: string
+  content: Record<string, unknown>
+  status: string
+  createdBy?: string | null
+  createdByName?: string | null
+  createdAt: string
+  submittedBy?: string | null
+  submittedAt?: string | null
+  reviewedBy?: string | null
+  reviewedByName?: string | null
+  reviewComment?: string | null
+  reviewedAt?: string | null
+  approvedBy?: string | null
+  approvedByName?: string | null
+  approvedAt?: string | null
 }
 
 interface TimelineEntry {
@@ -269,6 +323,10 @@ export default function BatchDetailPage({
   const [batch, setBatch] = useState<BatchDetail | null>(null)
   const [availableActions, setAvailableActions] = useState<AvailableAction[]>([])
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
+  const [qcRecords, setQcRecords] = useState<QcRecord[]>([])
+  const [coa, setCoa] = useState<CoaRecord | null>(null)
+  const [qcLoading, setQcLoading] = useState(false)
+  const [coaLoading, setCoaLoading] = useState(false)
   const [loading, setLoading] = useState(true)
   const [transitioning, setTransitioning] = useState(false)
 
@@ -314,11 +372,85 @@ export default function BatchDetailPage({
     if (value === 'timeline' && timeline.length === 0) {
       fetchTimeline()
     }
+    if (value === 'qc' && qcRecords.length === 0) {
+      fetchQcRecords()
+    }
+    if (value === 'coa' && !coa) {
+      fetchCoa()
+    }
   }
 
   const handleProductionUpdate = async () => {
     await fetchBatchDetail()
     fetchTimeline()
+  }
+
+  const fetchQcRecords = useCallback(async () => {
+    setQcLoading(true)
+    try {
+      const res = await fetch(`/api/batches/${id}/qc`)
+      if (res.ok) {
+        const data = await res.json()
+        setQcRecords(data.qcRecords || [])
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setQcLoading(false)
+    }
+  }, [id])
+
+  const fetchCoa = useCallback(async () => {
+    setCoaLoading(true)
+    try {
+      const res = await fetch(`/api/batches/${id}/coa`)
+      if (res.ok) {
+        const data = await res.json()
+        setCoa(data.coa || null)
+      }
+    } catch {
+      // Silently fail
+    } finally {
+      setCoaLoading(false)
+    }
+  }, [id])
+
+  const handleQcSubmitted = async () => {
+    await fetchBatchDetail()
+    fetchTimeline()
+    // After QC pass, the CoA is auto-generated, fetch it
+    if (batch?.status === 'QC_PASS' || batch?.status === 'COA_PENDING') {
+      fetchCoa()
+    }
+  }
+
+  const handleCoaUpdated = async () => {
+    await fetchBatchDetail()
+    fetchTimeline()
+    fetchCoa()
+  }
+
+  const handleStartQc = async () => {
+    setTransitioning(true)
+    try {
+      const res = await fetch(`/api/batches/${id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'start_qc' }),
+      })
+      if (!res.ok) {
+        const data = await res.json()
+        toast.error(data.error || '操作失败')
+        return
+      }
+      toast.success('质检已开始')
+      await fetchBatchDetail()
+      fetchTimeline()
+    } catch {
+      toast.error('网络错误，请重试')
+    } finally {
+      setTransitioning(false)
+    }
   }
 
   const handleTransition = async () => {
@@ -615,25 +747,133 @@ export default function BatchDetailPage({
         </TabsContent>
 
         {/* ============================================ */}
-        {/* QC Tab (Placeholder) */}
+        {/* QC Tab */}
         {/* ============================================ */}
         <TabsContent value="qc" className="mt-4">
-          <PlaceholderCard
-            icon={ClipboardCheck}
-            title="暂无质检记录"
-            description="质检记录功能将在第四阶段开发完成后可用，届时可在此查看细胞活力、形态学、支原体检测等质检结果。"
-          />
+          {/* Status: before QC_PENDING — show message */}
+          {(['NEW', 'IN_PRODUCTION'].includes(batch.status)) && (
+            <PlaceholderCard
+              icon={ClipboardCheck}
+              title="请先完成生产记录"
+              description="完成所有生产步骤并提交后，方可进行质检。"
+            />
+          )}
+
+          {/* Status: QC_PENDING — show start QC button */}
+          {batch.status === 'QC_PENDING' && (
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+                  <ClipboardCheck className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-base font-medium mb-2">准备质检</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-xs mb-4">
+                  生产已完成，可以开始质检。质检将对复苏活率、细胞形态、支原体检测三个项目进行检验。
+                </p>
+                <Button onClick={handleStartQc} disabled={transitioning}>
+                  {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  <PlayCircle className="mr-2 h-4 w-4" />
+                  开始质检
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Status: QC_IN_PROGRESS — show QC form */}
+          {batch.status === 'QC_IN_PROGRESS' && (
+            <QcForm
+              batchId={id}
+              batchNo={batch.batchNo}
+              onSubmitted={handleQcSubmitted}
+            />
+          )}
+
+          {/* Status: QC_PASS — show QC results summary */}
+          {(batch.status === 'QC_PASS' || batch.status === 'QC_FAIL' ||
+            batch.status === 'COA_PENDING' || batch.status === 'COA_SUBMITTED' ||
+            batch.status === 'COA_APPROVED' || batch.status === 'REJECTED' ||
+            batch.status === 'RELEASED') && (
+            <>
+              {qcLoading ? (
+                <div className="space-y-4">
+                  <Skeleton className="h-48" />
+                  <Skeleton className="h-24" />
+                </div>
+              ) : qcRecords.length > 0 ? (
+                <QcResultsSummary qcRecords={qcRecords} />
+              ) : (
+                <PlaceholderCard
+                  icon={ClipboardCheck}
+                  title="暂无质检记录"
+                  description="质检记录功能将在第四阶段开发完成后可用，届时可在此查看细胞活力、形态学、支原体检测等质检结果。"
+                />
+              )}
+            </>
+          )}
+
+          {/* Status: QC_FAIL — show results + rework button */}
+          {batch.status === 'QC_FAIL' && (
+            <div className="mt-4">
+              <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+                <CardContent className="flex items-center justify-between p-4">
+                  <div className="flex items-center gap-3">
+                    <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+                    <div>
+                      <p className="text-sm font-medium">质检不合格</p>
+                      <p className="text-xs text-muted-foreground">请联系主管安排返工或报废</p>
+                    </div>
+                  </div>
+                  {availableActions.some(a => a.action === 'rework') && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const reworkAction = availableActions.find(a => a.action === 'rework')
+                        if (reworkAction) setConfirmAction(reworkAction)
+                      }}
+                    >
+                      <RotateCcw className="mr-2 h-4 w-4" />
+                      返工
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+
+          {/* SCRAPPED status */}
+          {batch.status === 'SCRAPPED' && (
+            <PlaceholderCard
+              icon={ClipboardCheck}
+              title="批次已报废"
+              description="该批次已报废，无法进行质检。"
+            />
+          )}
         </TabsContent>
 
         {/* ============================================ */}
-        {/* CoA Tab (Placeholder) */}
+        {/* CoA Tab */}
         {/* ============================================ */}
         <TabsContent value="coa" className="mt-4">
-          <PlaceholderCard
-            icon={FileText}
-            title="暂无CoA"
-            description="分析证书（CoA）将在质检合格后自动生成，届时可在此查看、编辑、提交审核。"
-          />
+          {coaLoading ? (
+            <Skeleton className="h-96" />
+          ) : coa ? (
+            <CoaDetail coa={coa} onUpdated={handleCoaUpdated} />
+          ) : (
+            ['QC_PASS', 'COA_PENDING', 'COA_SUBMITTED', 'COA_APPROVED', 'REJECTED', 'RELEASED'].includes(batch.status) ? (
+              <PlaceholderCard
+                icon={FileText}
+                title="CoA生成中"
+                description="CoA将自动生成，请稍后刷新查看。"
+              />
+            ) : (
+              <PlaceholderCard
+                icon={FileText}
+                title="暂无CoA"
+                description="分析证书（CoA）将在质检合格后自动生成，届时可在此查看、编辑、提交审核。"
+              />
+            )
+          )}
         </TabsContent>
 
         {/* ============================================ */}
