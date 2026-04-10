@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -75,7 +76,7 @@ export function CreateUserDialog({
         if (email !== editUser.email) body.email = email
         if (password) body.password = password
 
-        const res = await fetch(`/api/users/${editUser.id}`, {
+        const res = await authFetch(`/api/users/${editUser.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
@@ -90,7 +91,7 @@ export function CreateUserDialog({
         toast.success(`用户 ${name} 已更新`)
       } else {
         // Create user
-        const res = await fetch('/api/users', {
+        const res = await authFetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, email, password, role, department }),

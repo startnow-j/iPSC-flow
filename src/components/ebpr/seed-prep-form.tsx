@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -81,7 +82,7 @@ export function SeedPrepForm({ task, batch, onSuccess }: SeedPrepFormProps) {
         notes,
       }
 
-      const res = await fetch(
+      const res = await authFetch(
         `/api/batches/${task.batchId}/tasks/${task.id}`,
         {
           method: 'PATCH',

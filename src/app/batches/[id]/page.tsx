@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, use } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useRouter } from 'next/navigation'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
 import type { AvailableAction } from '@/lib/services'
@@ -433,7 +434,7 @@ export default function BatchDetailPage({
 
   const fetchBatchDetail = useCallback(async () => {
     try {
-      const res = await fetch(`/api/batches/${id}`)
+      const res = await authFetch(`/api/batches/${id}`)
       if (res.ok) {
         const data = await res.json()
         setBatch(data.batch)
@@ -451,7 +452,7 @@ export default function BatchDetailPage({
 
   const fetchTimeline = useCallback(async () => {
     try {
-      const res = await fetch(`/api/batches/${id}/timeline`)
+      const res = await authFetch(`/api/batches/${id}/timeline`)
       if (res.ok) {
         const data = await res.json()
         setTimeline(data.timeline || [])
@@ -486,7 +487,7 @@ export default function BatchDetailPage({
   const fetchQcRecords = useCallback(async () => {
     setQcLoading(true)
     try {
-      const res = await fetch(`/api/batches/${id}/qc`)
+      const res = await authFetch(`/api/batches/${id}/qc`)
       if (res.ok) {
         const data = await res.json()
         setQcRecords(data.qcRecords || [])
@@ -501,7 +502,7 @@ export default function BatchDetailPage({
   const fetchCoa = useCallback(async () => {
     setCoaLoading(true)
     try {
-      const res = await fetch(`/api/batches/${id}/coa`)
+      const res = await authFetch(`/api/batches/${id}/coa`)
       if (res.ok) {
         const data = await res.json()
         setCoa(data.coa || null)
@@ -531,7 +532,7 @@ export default function BatchDetailPage({
   const handleStartQc = async () => {
     setTransitioning(true)
     try {
-      const res = await fetch(`/api/batches/${id}/transition`, {
+      const res = await authFetch(`/api/batches/${id}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'start_qc' }),
@@ -556,7 +557,7 @@ export default function BatchDetailPage({
 
     setTransitioning(true)
     try {
-      const res = await fetch(`/api/batches/${id}/transition`, {
+      const res = await authFetch(`/api/batches/${id}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: confirmAction.action }),

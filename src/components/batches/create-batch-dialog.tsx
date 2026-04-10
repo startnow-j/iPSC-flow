@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import {
   Dialog,
@@ -69,7 +70,7 @@ export function CreateBatchDialog({
 
   const fetchProducts = useCallback(async () => {
     try {
-      const res = await fetch('/api/products')
+      const res = await authFetch('/api/products')
       if (res.ok) {
         const data = await res.json()
         setProducts(data.products || [])
@@ -126,7 +127,7 @@ export function CreateBatchDialog({
 
     setSubmitting(true)
     try {
-      const res = await fetch('/api/batches', {
+      const res = await authFetch('/api/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

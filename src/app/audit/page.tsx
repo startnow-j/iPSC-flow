@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
 import {
@@ -111,7 +112,7 @@ export default function AuditPage() {
       if (eventTypeFilter) params.set('eventType', eventTypeFilter)
       if (batchNoFilter) params.set('batchNo', batchNoFilter)
 
-      const res = await fetch(`/api/audit?${params.toString()}`)
+      const res = await authFetch(`/api/audit?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         setLogs(data.logs || [])

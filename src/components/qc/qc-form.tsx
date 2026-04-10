@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -133,7 +134,7 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
     setSubmitting(true)
     try {
       // Create QC record
-      const qcRes = await fetch(`/api/batches/${batchId}/qc`, {
+      const qcRes = await authFetch(`/api/batches/${batchId}/qc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -158,7 +159,7 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
 
       // Trigger batch transition based on QC result
       const action = overallJudgment === 'PASS' ? 'pass_qc' : 'fail_qc'
-      const transitionRes = await fetch(`/api/batches/${batchId}/transition`, {
+      const transitionRes = await authFetch(`/api/batches/${batchId}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action }),
@@ -171,7 +172,7 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
 
       // If QC passes, chain the auto generate_coa transition
       if (overallJudgment === 'PASS') {
-        const coaRes = await fetch(`/api/batches/${batchId}/transition`, {
+        const coaRes = await authFetch(`/api/batches/${batchId}/transition`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'generate_coa' }),

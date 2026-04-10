@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { authFetch } from '@/lib/auth-fetch'
 import { useEffect, useState, useCallback } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -51,7 +52,7 @@ export function MyTasks() {
         // Admin sees everything, don't filter by status
       }
 
-      const res = await fetch(`/api/batches?${params.toString()}`)
+      const res = await authFetch(`/api/batches?${params.toString()}`)
       if (res.ok) {
         const data = await res.json()
         const myTasks: MyTask[] = (data.batches || []).map(

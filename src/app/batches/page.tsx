@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
@@ -106,7 +107,7 @@ export default function BatchListPage() {
       if (searchQuery) params.set('search', searchQuery)
       if (viewMode === 'my' && user?.id) params.set('assignee', user.id)
 
-      const res = await fetch(`/api/batches?${params.toString()}`)
+      const res = await authFetch(`/api/batches?${params.toString()}`)
       if (res.ok) {
         const data: BatchesResponse = await res.json()
         setBatches(data.batches || [])

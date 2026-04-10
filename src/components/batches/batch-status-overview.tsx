@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { cn } from '@/lib/utils'
 import { getStatusColor } from '@/lib/services'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -40,7 +41,7 @@ export function BatchStatusOverview({ maxItems, className }: BatchStatusOverview
 
   const fetchStatusCounts = async () => {
     try {
-      const res = await fetch('/api/batches?pageSize=1')
+      const res = await authFetch('/api/batches?pageSize=1')
       if (res.ok) {
         const data = await res.json()
         setStatusCounts(data.statusCounts || {})

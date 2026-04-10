@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import { authFetch } from '@/lib/auth-fetch'
 import { useEffect, useState, useCallback } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -24,7 +25,7 @@ export function RecentBatches() {
 
   const fetchRecentBatches = useCallback(async () => {
     try {
-      const res = await fetch('/api/batches?pageSize=5')
+      const res = await authFetch('/api/batches?pageSize=5')
       if (res.ok) {
         const data = await res.json()
         setBatches(data.batches || [])

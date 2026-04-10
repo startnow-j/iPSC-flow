@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -132,7 +133,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
         body.reviewComment = rejectComment.trim()
       }
 
-      const res = await fetch(`/api/coa/${coa.id}`, {
+      const res = await authFetch(`/api/coa/${coa.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),

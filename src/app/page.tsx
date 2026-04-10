@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { useRouter } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { StatCard } from '@/components/dashboard/stat-card'
@@ -30,7 +31,7 @@ export default function HomePage() {
 
   const fetchStatusCounts = useCallback(async () => {
     try {
-      const res = await fetch('/api/batches?pageSize=1')
+      const res = await authFetch('/api/batches?pageSize=1')
       if (res.ok) {
         const data = await res.json()
         setStatusCounts(data.statusCounts || {})

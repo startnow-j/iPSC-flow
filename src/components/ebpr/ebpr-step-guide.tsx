@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -251,7 +252,7 @@ export function EbprStepGuide({
 
   const fetchTasks = useCallback(async () => {
     try {
-      const res = await fetch(`/api/batches/${batchId}/tasks`)
+      const res = await authFetch(`/api/batches/${batchId}/tasks`)
       if (res.ok) {
         const data = await res.json()
         setTasks(data.tasks || [])
@@ -307,7 +308,7 @@ export function EbprStepGuide({
   const handleSubmitQc = async () => {
     setSubmittingQc(true)
     try {
-      const res = await fetch(`/api/batches/${batchId}/transition`, {
+      const res = await authFetch(`/api/batches/${batchId}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'complete_production' }),

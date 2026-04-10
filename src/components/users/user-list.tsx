@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { authFetch } from '@/lib/auth-fetch'
 import { toast } from 'sonner'
 import {
   Table,
@@ -79,7 +80,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
   const fetchUsers = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch('/api/users')
+      const res = await authFetch('/api/users')
       if (res.ok) {
         const data = await res.json()
         setUsers(data.users || [])
@@ -104,7 +105,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
     const { type, user } = confirmAction
     try {
       if (type === 'disable') {
-        const res = await fetch(`/api/users/${user.id}`, { method: 'DELETE' })
+        const res = await authFetch(`/api/users/${user.id}`, { method: 'DELETE' })
         if (res.ok) {
           toast.success(`已禁用用户 ${user.name}`)
           fetchUsers()
@@ -114,7 +115,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
           toast.error(data.error || '操作失败')
         }
       } else {
-        const res = await fetch(`/api/users/${user.id}`, {
+        const res = await authFetch(`/api/users/${user.id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ active: true }),
