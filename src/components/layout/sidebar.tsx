@@ -15,7 +15,6 @@ import {
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 
-import { cn } from '@/lib/utils'
 import {
   Sidebar,
   SidebarContent,
@@ -32,7 +31,6 @@ import {
   SidebarSeparator,
 } from '@/components/ui/sidebar'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +40,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { BatchStatusOverview } from '@/components/batches/batch-status-overview'
 
 // Navigation items
 const mainNavItems = [
@@ -71,14 +70,6 @@ const secondaryNavItems = [
     disabled: true,
     badge: '5',
   },
-]
-
-// Placeholder batch status counts
-const batchStatusItems = [
-  { label: '生产中', count: 2, color: 'bg-amber-400' },
-  { label: '待质检', count: 1, color: 'bg-sky-400' },
-  { label: '已放行', count: 5, color: 'bg-emerald-400' },
-  { label: '已报废', count: 0, color: 'bg-gray-400' },
 ]
 
 export function AppSidebar() {
@@ -158,28 +149,15 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupLabel>批次状态概览</SidebarGroupLabel>
           <SidebarGroupContent>
-            <div className="flex flex-col gap-1.5 px-2 py-1">
-              {batchStatusItems.map((item) => (
-                <div
-                  key={item.label}
-                  className="flex items-center justify-between rounded-md px-2 py-1.5 text-sm group-data-[collapsible=icon]:hidden"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className={cn('inline-block h-2.5 w-2.5 rounded-full', item.color)} />
-                    <span className="text-muted-foreground">{item.label}</span>
-                  </div>
-                  <span className="font-medium tabular-nums text-sidebar-foreground">
-                    {item.count}
-                  </span>
-                </div>
-              ))}
+            <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
+              <BatchStatusOverview maxItems={6} />
             </div>
             <Button
               size="sm"
               className="mx-2 mt-1 group-data-[collapsible=icon]:hidden"
               asChild
             >
-              <Link href="/batches/new">
+              <Link href="/batches">
                 <Plus className="size-4" />
                 新建批次
               </Link>

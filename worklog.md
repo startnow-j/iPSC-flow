@@ -197,3 +197,149 @@ Stage Summary:
 - 认证方案：JWT (jose) + HttpOnly Cookie + bcryptjs + Zustand
 - 默认账号：admin@ipsc.com / supervisor@ipsc.com / operator@ipsc.com / qa@ipsc.com（密码 123456）
 - 种子产品：IPSC-WT-001 iPSC细胞株(野生型)
+
+---
+Task ID: 2-2 + 2-3 + 2-4
+Agent: Batch Management Frontend Developer
+Task: 批次管理前端 — 列表页、新建对话框、详情页、状态概览组件、侧边栏更新
+
+Work Log:
+- 读取 worklog.md 和项目结构，了解已有技术栈（Next.js 16 + shadcn/ui + Tailwind CSS 4 + Zustand）
+- 分析已有 API：GET/POST /api/batches 已由另一 agent 实现，但缺少 [id] 路由和 products 路由
+- 分析领域服务：state-machine.ts 提供 getStatusLabel/getStatusColor/getAvailableActions，audit-log.ts 提供 getBatchTimeline
+
+**1. 后端 API 路由（补充缺失）**
+
+创建 4 个 API 路由文件：
+
+- `src/app/api/products/route.ts`：GET /api/products — 返回所有活跃产品列表（用于新建批次对话框产品选择）
+- `src/app/api/batches/[id]/route.ts`：GET 批次详情（含 availableActions）+ PATCH 更新批次信息
+- `src/app/api/batches/[id]/transition/route.ts`：POST 状态转换 — 调用 state-machine.transition()，记录审计日志
+- `src/app/api/batches/[id]/timeline/route.ts`：GET 批次时间线 — 调用 audit-log.getBatchTimeline()，附加中文事件标签
+
+**2. BatchStatusOverview 组件**
+
+- 文件：`src/components/batches/batch-status-overview.tsx`
+- 从 GET /api/batches?pageSize=1 获取 statusCounts
+- 仅显示有计数的状态项（非零不显示）
+- 加载时显示 Skeleton 骨架屏
+- 支持 maxItems prop 限制显示数量（侧边栏用 6）
+- 11 种状态各有独立颜色圆点
+
+**3. CreateBatchDialog 组件**
+
+- 文件：`src/components/batches/create-batch-dialog.tsx`
+- shadcn Dialog 组件，支持 open/onOpenChange 受控模式
+- 表单字段：产品选择(Select)、计划数量(Input)、种子批号(Input)、种子代次(Input)、计划交付日期(Input date)
+- 产品数据从 /api/products 获取，失败时降级为硬编码 IPSC-WT-001
+- 批次编号预览：`IPSC-{YYMMDD}-XXX-{passage}`（灰色提示文本）
+- 校验：产品必选、种子代次格式 P{n}
+- 提交后自动刷新列表（通过 onSuccess 回调）
+- 创建人信息自动从 auth store 获取并显示
+
+**4. Batch List Page**
+
+- 文件：`src/app/batches/page.tsx`
+- 支持两个视图：`/batches`（我的批次，按 assignee=当前用户过滤）和 `/batches/all`（所有批次）
+- 状态筛选芯片（9种状态 + 全部），圆角全宽按钮，active 状态使用 primary 色
+- 搜索框：按批次号模糊搜索，支持 Enter 键触发
+- 批次卡片列表：图标 + 批次号（加粗）+ 状态徽标（彩色）+ 产品名 + 代次 + 创建人 + 日期
+- 点击卡片 → /batches/[id] 详情页
+- 分页控件（上一页/下一页）
+- 空状态：区分无数据和筛选无结果两种情况
+- 加载状态：5 个 Skeleton 占位卡片
+- 浮动新建按钮 + CreateBatchDialog
+
+**5. Batch Detail Page**
+
+- 文件：`src/app/batches/[id]/page.tsx`
+- 顶部：返回按钮 + 批次号（大号 mono）+ 状态徽标 + 产品名 + 操作按钮组
+- 操作按钮：根据 availableActions 动态渲染，报废/不合格使用 destructive 样式
+- 确认对话框：AlertDialog，报废/不合格显示红色警告文案
+- Tab 导航（5 个标签页）：
+  - 概览：4 张信息卡片（基础信息/种子信息/时间信息/创建信息），每行图标+标签+值
+  - 生产记录：PlaceholderCard 占位（Phase 3）
+  - 质检：PlaceholderCard 占位（Phase 4）
+  - CoA：PlaceholderCard 占位
+  - 时间线：垂直时间线，圆点+连线，显示事件标签/操作人/时间/数据变更（状态变更用彩色徽标）
+- 加载/空/未找到三种状态处理
+
+**6. Sidebar 更新**
+
+- 修改 `src/components/layout/sidebar.tsx`：
+  - 移除硬编码的 batchStatusItems 占位数据
+  - 引入 BatchStatusOverview 组件替代静态状态列表
+  - 新建批次按钮链接改为 /batches（触发对话框方式）
+  - 清理未使用的 cn、Badge 导入
+
+**7. 质量检查**
+- Lint 通过：仅剩余预存的 generate-plan.js 2 个 error
+- Dev server 正常编译运行
+
+Stage Summary:
+- 新增文件：src/app/api/products/route.ts
+- 新增文件：src/app/api/batches/[id]/route.ts、transition/route.ts、timeline/route.ts
+- 新增文件：src/components/batches/batch-status-overview.tsx、create-batch-dialog.tsx
+- 新增文件：src/app/batches/page.tsx、src/app/batches/[id]/page.tsx
+- 修改文件：src/components/layout/sidebar.tsx（集成 BatchStatusOverview 实时数据）
+- API 完整度：GET 列表 + POST 创建 + GET 详情 + PATCH 更新 + POST 状态转换 + GET 时间线 + GET 产品列表
+- 前端功能：批次列表（我的/所有）、状态筛选、搜索、分页、新建批次对话框、批次详情（5个标签页）、状态转换确认、时间线展示
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: 2-1
+Agent: Batch Management API Developer
+Task: 批次管理 API 路由 — 列表/创建/详情/更新/状态转换/时间线
+
+Work Log:
+- 读取了 worklog.md、Prisma schema、领域服务层（state-machine/validation/audit-log）、auth.ts
+- 确认认证模式：getTokenFromCookies + verifyToken（与现有 /api/auth 路由一致）
+- 确认 Next.js 16 App Router 动态路由 params 类型为 Promise<{ id: string }>
+
+**1. GET /api/batches — 批次列表 (route.ts)**
+- JWT 认证检查（401）
+- 查询参数：status（BatchStatus 过滤）、search（batchNo 模糊匹配）、assignee（createdBy 过滤）、page、pageSize
+- 并行查询批次列表 + 总数 + 各状态计数（groupBy status）
+- 返回 batches/total/page/pageSize/statusCounts
+
+**2. POST /api/batches — 创建批次 (route.ts)**
+- JWT 认证检查
+- validateBatchCreation() 校验产品编码、数量、日期
+- 查询产品信息获取 productName/specification/unit
+- 生成批次编号：IPSC-YYMMDD-XXX-Pn（查询当天最大序号+1，3位补零）
+- 创建批次记录 + createAuditLog(BATCH_CREATED)
+
+**3. GET /api/batches/[id] — 批次详情 (route.ts)**
+- JWT 认证检查
+- 查询批次 + include tasks/qcRecords/coa（按 sequenceNo/createdAt 排序）
+- getAvailableActions() 返回当前用户角色可执行操作列表
+
+**4. PATCH /api/batches/[id] — 更新批次 (route.ts)**
+- JWT 认证检查
+- 仅允许 NEW/IN_PRODUCTION 状态修改（403）
+- 白名单字段：plannedQuantity/plannedStartDate/plannedEndDate/seedBatchNo/seedPassage/storageLocation/notes
+- 更新 seedPassage 时同步更新 currentPassage
+- createAuditLog(BATCH_UPDATED) 记录变更前后快照
+
+**5. POST /api/batches/[id]/transition — 状态转换 (route.ts)**
+- JWT 认证检查
+- getAvailableActions() 权限校验（403）
+- transition() 执行状态转换（含 CoA 自动创建、日期设置等副作用）
+- createAuditLog(BATCH_STATUS_CHANGED/BATCH_SCRAPPED/BATCH_RELEASED)
+
+**6. GET /api/batches/[id]/timeline — 批次时间线 (route.ts)**
+- JWT 认证检查
+- 查询 batchNo → getBatchTimeline() 返回正序审计日志列表
+
+- Lint 检查通过（仅预存 generate-plan.js 错误，本任务零新增）
+- Dev server 正常编译，无新增错误
+
+Stage Summary:
+- 新增文件：src/app/api/batches/route.ts（GET 列表 + POST 创建）
+- 新增文件：src/app/api/batches/[id]/route.ts（GET 详情 + PATCH 更新）
+- 新增文件：src/app/api/batches/[id]/transition/route.ts（POST 状态转换）
+- 新增文件：src/app/api/batches/[id]/timeline/route.ts（GET 时间线）
+- 认证模式：getTokenFromCookies + verifyToken，统一 401/403/400/404/500 状态码
+- 审计日志：所有数据变更操作均通过 createAuditLog() 记录
+- 状态转换：集成 transition() 状态机服务，含权限校验和副作用处理
+- 代码零新增 ESLint error/warning
