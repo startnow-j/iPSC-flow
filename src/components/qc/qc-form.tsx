@@ -21,6 +21,7 @@ import {
   XCircle,
   Loader2,
   ArrowRight,
+  TestTubes,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { toast } from 'sonner'
@@ -43,6 +44,8 @@ interface TestResultItem {
 interface QcFormProps {
   batchId: string
   batchNo: string
+  batchActualQuantity: number | null
+  batchUnit?: string
   onSubmitted: () => void
 }
 
@@ -79,9 +82,10 @@ const QC_TEMPLATE: TestResultItem[] = [
 // QC Form Component
 // ============================================
 
-export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
+export function QcForm({ batchId, batchNo, batchActualQuantity, batchUnit, onSubmitted }: QcFormProps) {
   const user = useAuthStore((s) => s.user)
   const [submitting, setSubmitting] = useState(false)
+  const [thawedVials, setThawedVials] = useState<string>('1')
   const [results, setResults] = useState<TestResultItem[]>(
     QC_TEMPLATE.map((item) => ({ ...item }))
   )
@@ -125,9 +129,19 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
   const passCount = results.filter((item) => item.judgment === 'PASS').length
   const failCount = results.filter((item) => item.judgment === 'FAIL').length
 
+  // Parsed thawed vials for validation display
+  const parsedThawedVialsDisplay = Number(thawedVials)
+  const isThawedVialsValid = thawedVials && !isNaN(parsedThawedVialsDisplay) && parsedThawedVialsDisplay >= 1
+
   const handleSubmit = async () => {
     if (!allFilled) {
       toast.error('请填写所有检测项')
+      return
+    }
+
+    const parsedThawedVials = Number(thawedVials)
+    if (!thawedVials || isNaN(parsedThawedVials) || parsedThawedVials < 1) {
+      toast.error('请填写有效的复苏支数（至少1支）')
       return
     }
 
@@ -147,6 +161,7 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
             resultUnit: item.resultUnit,
             judgment: item.judgment,
           })),
+          thawedVials: parsedThawedVials,
           operatorId: user?.id,
           operatorName: user?.name,
         }),
@@ -197,6 +212,48 @@ export function QcForm({ batchId, batchNo, onSubmitted }: QcFormProps) {
 
   return (
     <div className="space-y-6">
+      {/* Thawed Vials Section */}
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-sm font-semibold flex items-center gap-2">
+            <TestTubes className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            复苏信息
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {batchActualQuantity !== null && batchActualQuantity !== undefined && (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-muted-foreground">实际数量:</span>
+              <span className="font-medium">{batchActualQuantity} {batchUnit || '支'}</span>
+            </div>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="thawedVials" className="text-sm">
+              复苏支数 <span className="text-destructive">*</span>
+            </Label>
+            <div className="flex items-center gap-2">
+              <Input
+                id="thawedVials"
+                type="number"
+                min={1}
+                max={batchActualQuantity || undefined}
+                step={1}
+                placeholder="输入本次质检复苏的支数"
+                value={thawedVials}
+                onChange={(e) => setThawedVials(e.target.value)}
+                className="max-w-[200px]"
+              />
+              <span className="text-sm text-muted-foreground">{batchUnit || '支'}</span>
+            </div>
+            {batchActualQuantity && isThawedVialsValid && parsedThawedVialsDisplay > batchActualQuantity && (
+              <p className="text-xs text-red-600">
+                复苏支数不能超过实际数量 {batchActualQuantity} {batchUnit || '支'}
+              </p>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
       {/* Test Items */}
       <div className="space-y-4">
         {results.map((item, index) => (

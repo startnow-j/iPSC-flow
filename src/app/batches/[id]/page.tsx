@@ -420,6 +420,8 @@ export default function BatchDetailPage({
   const router = useRouter()
 
   const [batch, setBatch] = useState<BatchDetail | null>(null)
+  const [remainingQuantity, setRemainingQuantity] = useState<number | null>(null)
+  const [totalConsumedVials, setTotalConsumedVials] = useState<number>(0)
   const [availableActions, setAvailableActions] = useState<AvailableAction[]>([])
   const [timeline, setTimeline] = useState<TimelineEntry[]>([])
   const [qcRecords, setQcRecords] = useState<QcRecord[]>([])
@@ -439,6 +441,8 @@ export default function BatchDetailPage({
         const data = await res.json()
         setBatch(data.batch)
         setAvailableActions(data.availableActions || [])
+        setRemainingQuantity(data.remainingQuantity ?? null)
+        setTotalConsumedVials(data.totalConsumedVials ?? 0)
       } else {
         // Batch not found
         setBatch(null)
@@ -735,9 +739,23 @@ export default function BatchDetailPage({
                 />
                 <InfoRow
                   icon={Package}
-                  label="实际数量"
+                  label="生产数量"
                   value={batch.actualQuantity ? `${batch.actualQuantity} ${batch.unit}` : null}
                 />
+                {remainingQuantity !== null && batch.actualQuantity !== null && batch.actualQuantity > 0 && (
+                  <InfoRow
+                    icon={Package}
+                    label="剩余数量"
+                    value={`${remainingQuantity} ${batch.unit}`}
+                  />
+                )}
+                {totalConsumedVials > 0 && (
+                  <InfoRow
+                    icon={Package}
+                    label="质检消耗"
+                    value={`${totalConsumedVials} ${batch.unit}`}
+                  />
+                )}
               </CardContent>
             </Card>
 
@@ -883,6 +901,8 @@ export default function BatchDetailPage({
             <QcForm
               batchId={id}
               batchNo={batch.batchNo}
+              batchActualQuantity={remainingQuantity}
+              batchUnit={batch.unit}
               onSubmitted={handleQcSubmitted}
             />
           )}

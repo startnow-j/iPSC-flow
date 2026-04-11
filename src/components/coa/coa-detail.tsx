@@ -26,10 +26,14 @@ import {
   RotateCcw,
   Loader2,
   Stamp,
+  Eye,
+  EyeOff,
+  PackageMinus,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasRole } from '@/lib/roles'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
 
 // ============================================
 // Types
@@ -60,6 +64,8 @@ interface CoaContent {
   overallJudgment?: string
   actualStartDate?: string | null
   actualEndDate?: string | null
+  releaseQuantity?: number | null
+  totalConsumedVials?: number | null
 }
 
 interface CoaRecord {
@@ -87,6 +93,8 @@ interface CoaDetailProps {
   coa: CoaRecord
   onUpdated?: () => void
 }
+
+type ViewMode = 'internal' | 'customer'
 
 // ============================================
 // Helper
@@ -119,11 +127,14 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
   const [loading, setLoading] = useState(false)
   const [confirmAction, setConfirmAction] = useState<'submit' | 'approve' | 'reject' | null>(null)
   const [rejectComment, setRejectComment] = useState('')
+  const [viewMode, setViewMode] = useState<ViewMode>('internal')
 
   const statusConfig = COA_STATUS_CONFIG[coa.status] || COA_STATUS_CONFIG.DRAFT
   const userRoles = user?.roles || [user?.role || 'OPERATOR']
   const isSupervisorOrQA = hasRole(userRoles, 'SUPERVISOR') || hasRole(userRoles, 'QA')
   const isSupervisor = hasRole(userRoles, 'SUPERVISOR')
+
+  const isCustomerView = viewMode === 'customer'
 
   const handleAction = async () => {
     if (!confirmAction) return
@@ -160,7 +171,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
   return (
     <div className="space-y-4">
       {/* CoA Document */}
-      <Card className="overflow-hidden">
+      <Card className={cn('overflow-hidden', isCustomerView && 'ring-2 ring-amber-400/50 dark:ring-amber-500/30')}>
         {/* Document Header */}
         <div className="border-b bg-gradient-to-r from-teal-600 to-emerald-600 px-6 py-5 text-white">
           <div className="flex items-start justify-between">
@@ -168,9 +179,39 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
               <h2 className="text-lg font-bold tracking-wide">分析证书</h2>
               <p className="text-sm opacity-90 mt-1">Certificate of Analysis</p>
             </div>
-            <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
-              {statusConfig.label}
-            </Badge>
+            <div className="flex items-center gap-2">
+              <Badge className="bg-white/20 text-white border-white/30 hover:bg-white/30">
+                {statusConfig.label}
+              </Badge>
+            </div>
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="mt-4 flex items-center gap-1 rounded-lg bg-white/15 p-1 w-fit">
+            <button
+              onClick={() => setViewMode('internal')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                !isCustomerView
+                  ? 'bg-white text-teal-700 shadow-sm'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              )}
+            >
+              <Eye className="h-3.5 w-3.5" />
+              内部视图
+            </button>
+            <button
+              onClick={() => setViewMode('customer')}
+              className={cn(
+                'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all',
+                isCustomerView
+                  ? 'bg-white text-teal-700 shadow-sm'
+                  : 'text-white/80 hover:text-white hover:bg-white/10'
+              )}
+            >
+              <EyeOff className="h-3.5 w-3.5" />
+              客户版本
+            </button>
           </div>
         </div>
 
@@ -204,23 +245,47 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
 
           <Separator />
 
-          {/* Production Information */}
-          <div>
-            <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-              <Stamp className="h-4 w-4 text-primary" />
-              生产信息
-            </h3>
-            <div className="grid gap-3 sm:grid-cols-2 text-sm">
-              <InfoItem label="种子批号" value={coa.content.seedBatchNo} />
-              <InfoItem label="种子代次" value={coa.content.seedPassage} />
-              <InfoItem label="当前代次" value={coa.content.currentPassage} />
-              <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} 支` : null} />
-              <InfoItem label="实际数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 支` : null} />
-              <InfoItem label="存储位置" value={coa.content.storageLocation} />
-            </div>
-          </div>
+          {/* Production Information — only in internal view */}
+          {!isCustomerView && (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Stamp className="h-4 w-4 text-primary" />
+                  生产信息
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <InfoItem label="种子批号" value={coa.content.seedBatchNo} />
+                  <InfoItem label="种子代次" value={coa.content.seedPassage} />
+                  <InfoItem label="当前代次" value={coa.content.currentPassage} />
+                  <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} 支` : null} />
+                  <InfoItem label="实际数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 支` : null} />
+                  <InfoItem label="存储位置" value={coa.content.storageLocation} />
+                </div>
+              </div>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
+
+          {/* Release Quantity — only in customer view */}
+          {isCustomerView && coa.content.releaseQuantity != null && (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <PackageMinus className="h-4 w-4 text-primary" />
+                  发放数量
+                </h3>
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <InfoItem label="发放数量" value={`${coa.content.releaseQuantity} 支`} />
+                  {coa.content.totalConsumedVials != null && coa.content.totalConsumedVials > 0 && (
+                    <InfoItem label="质检消耗" value={`${coa.content.totalConsumedVials} 支`} />
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+            </>
+          )}
 
           {/* QC Results Table */}
           {coa.content.testResults && coa.content.testResults.length > 0 && (
@@ -298,28 +363,38 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
 
           <Separator />
 
-          {/* Review History */}
-          <div>
-            <h3 className="text-sm font-semibold mb-3">审核记录</h3>
-            <div className="space-y-2 text-sm">
-              <InfoItem label="创建人" value={coa.createdByName} extra={coa.createdAt ? formatDate(coa.createdAt) : ''} />
-              {coa.submittedByName && (
-                <InfoItem label="提交人" value={coa.submittedByName} extra={coa.submittedAt ? formatDate(coa.submittedAt) : ''} />
-              )}
-              {coa.reviewedByName && (
-                <InfoItem label="审核人" value={coa.reviewedByName} extra={coa.reviewedAt ? formatDate(coa.reviewedAt) : ''} />
-              )}
-              {coa.reviewComment && (
-                <div className="text-sm">
-                  <span className="text-muted-foreground">审核意见: </span>
-                  <span>{coa.reviewComment}</span>
-                </div>
-              )}
-              {coa.approvedByName && (
-                <InfoItem label="批准人" value={coa.approvedByName} extra={coa.approvedAt ? formatDate(coa.approvedAt) : ''} />
-              )}
+          {/* Review History — only in internal view */}
+          {!isCustomerView && (
+            <div>
+              <h3 className="text-sm font-semibold mb-3">审核记录</h3>
+              <div className="space-y-2 text-sm">
+                <InfoItem label="创建人" value={coa.createdByName} extra={coa.createdAt ? formatDate(coa.createdAt) : ''} />
+                {coa.submittedByName && (
+                  <InfoItem label="提交人" value={coa.submittedByName} extra={coa.submittedAt ? formatDate(coa.submittedAt) : ''} />
+                )}
+                {coa.reviewedByName && (
+                  <InfoItem label="审核人" value={coa.reviewedByName} extra={coa.reviewedAt ? formatDate(coa.reviewedAt) : ''} />
+                )}
+                {coa.reviewComment && (
+                  <div className="text-sm">
+                    <span className="text-muted-foreground">审核意见: </span>
+                    <span>{coa.reviewComment}</span>
+                  </div>
+                )}
+                {coa.approvedByName && (
+                  <InfoItem label="批准人" value={coa.approvedByName} extra={coa.approvedAt ? formatDate(coa.approvedAt) : ''} />
+                )}
+              </div>
             </div>
-          </div>
+          )}
+
+          {/* Customer View Watermark Footer */}
+          {isCustomerView && (
+            <div className="flex items-center justify-center gap-2 pt-2 text-xs text-muted-foreground">
+              <EyeOff className="h-3.5 w-3.5" />
+              客户版本 · 生产信息已隐藏
+            </div>
+          )}
         </CardContent>
       </Card>
 

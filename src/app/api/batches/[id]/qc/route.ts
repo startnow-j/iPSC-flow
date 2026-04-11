@@ -71,10 +71,16 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { testResults, operatorId, operatorName } = body
+    const { testResults, operatorId, operatorName, thawedVials } = body
 
     if (!Array.isArray(testResults) || testResults.length === 0) {
       return NextResponse.json({ error: '检测结果不能为空' }, { status: 400 })
+    }
+
+    // 校验复苏支数
+    const parsedThawedVials = thawedVials !== undefined ? Number(thawedVials) : null
+    if (thawedVials !== undefined && (isNaN(parsedThawedVials!) || parsedThawedVials! < 1)) {
+      return NextResponse.json({ error: '复苏支数必须为大于0的整数' }, { status: 400 })
     }
 
     // 检查批次是否存在
@@ -122,6 +128,7 @@ export async function POST(
         batchId: id,
         batchNo: batch.batchNo,
         qcType: 'ROUTINE',
+        sampleQuantity: parsedThawedVials,
         testResults: JSON.stringify(testResults),
         overallJudgment,
         failReason,
@@ -141,6 +148,7 @@ export async function POST(
       operatorName: payload.name,
       dataAfter: {
         qcType: 'ROUTINE',
+        sampleQuantity: parsedThawedVials,
         overallJudgment,
         testResults,
         failReason,

@@ -37,7 +37,25 @@ export async function GET(
       getRolesFromPayload(payload)
     )
 
-    return NextResponse.json({ batch, availableActions })
+    // 计算剩余数量：生产数量 - 所有质检记录消耗的复苏支数
+    const qcRecords = await db.qcRecord.findMany({
+      where: { batchId: id },
+      select: { sampleQuantity: true },
+    })
+    const totalConsumed = qcRecords.reduce(
+      (sum, r) => sum + (r.sampleQuantity || 0),
+      0
+    )
+    const remainingQuantity = batch.actualQuantity
+      ? Math.max(0, batch.actualQuantity - totalConsumed)
+      : null
+
+    return NextResponse.json({
+      batch,
+      availableActions,
+      remainingQuantity,
+      totalConsumedVials: totalConsumed,
+    })
   } catch (error) {
     console.error('GET /api/batches/[id] error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

@@ -267,6 +267,14 @@ export async function transition(
           orderBy: { createdAt: 'desc' },
         })
 
+        // 计算质检消耗总量（用于客户版本发放数量）
+        const qcRecords = await db.qcRecord.findMany({
+          where: { batchId },
+          select: { sampleQuantity: true },
+        })
+        const totalConsumed = qcRecords.reduce((sum, r) => sum + (r.sampleQuantity || 0), 0)
+        const releaseQuantity = (batch.actualQuantity || 0) - totalConsumed
+
         // 构建 CoA 内容
         const coaContent = JSON.stringify({
           productCode: batch.productCode,
@@ -281,6 +289,8 @@ export async function transition(
           storageLocation: batch.storageLocation,
           testResults: latestQc ? JSON.parse(latestQc.testResults) : [],
           overallJudgment: latestQc?.overallJudgment ?? '',
+          releaseQuantity,
+          totalConsumedVials: totalConsumed,
         })
 
         await db.coa.create({

@@ -749,3 +749,89 @@ Stage Summary:
 - 新增逻辑：HARVEST 任务完成时自动同步实际数量和存储位置到 batch 表
 - 历史数据已通过 SQL 修复
 - 后续所有收获冻存操作都会自动回写批次信息
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: 4-b
+Agent: Main Agent
+Task: CoA 双视图模式 — 内部草稿 vs 客户交付版本
+
+Work Log:
+- 读取 worklog.md、coa-detail.tsx、state-machine.ts 了解现有 CoA 模块实现
+- 分析现有 CoaContent 接口和 CoA 文档渲染结构
+- 确认 Prisma schema 中 QcRecord.sampleQuantity 字段可用于计算质检消耗量
+
+**1. CoA 双视图模式 (coa-detail.tsx)**
+- 新增 ViewMode 类型：'internal' | 'customer'，默认为 'internal'
+- 在 CoA 文档头部（渐变色横幅下方）添加视图切换按钮组：
+  - 两个按钮使用白色半透明背景容器，选中态为白色文字+阴影
+  - "内部视图" 按钮（Eye 图标）：显示完整信息
+  - "客户版本" 按钮（EyeOff 图标）：隐藏生产敏感信息
+- 客户版本视图隐藏以下区域：
+  - 生产信息区（种子批号、种子代次、计划/实际数量、存储位置）
+  - 审核记录区（创建人、提交人、审核人、批准人信息）
+- 客户版本视图新增区域：
+  - "发放数量" 信息区：显示 releaseQuantity（实际数量减去质检消耗）
+  - 质检消耗行：当 totalConsumedVials > 0 时显示
+  - 底部水印："客户版本 · 生产信息已隐藏"（EyeOff 图标 + 灰色小字）
+- 客户版本卡片外框：添加 amber 色描边提示（ring-2 ring-amber-400/50）
+- CoaContent 接口新增字段：releaseQuantity、totalConsumedVials
+- 新增 import：cn (Tailwind 合并工具)、Eye/EyeOff/PackageMinus (Lucide 图标)
+
+**2. CoA 内容生成更新 (state-machine.ts)**
+- 在 generate_coa 动作中新增 QC 记录查询：
+  - `db.qcRecord.findMany({ where: { batchId }, select: { sampleQuantity: true } })`
+  - 累加所有 QC 记录的 sampleQuantity 得到 totalConsumed
+  - 计算 releaseQuantity = batch.actualQuantity - totalConsumed
+- CoA content JSON 新增 releaseQuantity 和 totalConsumedVials 字段
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，本任务零新增）
+- Dev server 正常编译运行，✓ Compiled 无报错
+
+Stage Summary:
+- 修改文件：src/components/coa/coa-detail.tsx（双视图模式）
+- 修改文件：src/lib/services/state-machine.ts（CoA 生成含发放数量计算）
+- 视图切换：内部视图（完整信息）/ 客户版本（隐藏生产+审核，显示发放数量）
+- 客户版本水印："客户版本 · 生产信息已隐藏"
+- 新增 CoA 字段：releaseQuantity、totalConsumedVials
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: 4-a
+Agent: Main Agent
+Task: 添加"复苏支数"字段到质检流程，更新批次剩余数量
+
+Work Log:
+- 读取 worklog.md 了解现有 QC 模块、批次管理、eBPR 的实现
+- 确认 Prisma schema 中 QcRecord.sampleQuantity (Int?) 字段可复用
+- 修改 4 个文件实现完整的复苏支数追踪
+
+**1. 批次详情 API (src/app/api/batches/[id]/route.ts)**
+- GET handler 增加 remainingQuantity 和 totalConsumedVials 计算
+- 查询所有 QC 记录的 sampleQuantity 求和
+- remainingQuantity = max(0, actualQuantity - totalConsumed)
+
+**2. 质检 API (src/app/api/batches/[id]/qc/route.ts)**
+- POST handler 接受 thawedVials 参数
+- 校验：必须为 >=1 的数字
+- 保存到 qcRecord.sampleQuantity 字段
+- 审计日志记录 sampleQuantity
+
+**3. 质检表单 (src/components/qc/qc-form.tsx)**
+- 新增 batchActualQuantity/batchUnit props
+- 新增 thawedVials state（默认1）
+- 在检测项前添加"复苏信息"卡片（amber 主题）
+  - 显示当前实际数量
+  - 复苏支数输入框（必填，min 1）
+  - 实时验证：超过实际数量时显示警告
+- 提交时包含 thawedVials
+
+**4. 批次详情页 (src/app/batches/[id]/page.tsx)**
+- 概览 Tab："实际数量"→"生产数量"，新增"剩余数量"和"质检消耗"信息行
+- QcForm 传入 remainingQuantity（而非原始 actualQuantity）作为可用数量
+
+Stage Summary:
+- 修改文件：4 个（batch API、QC API、QC 表单、批次详情页）
+- 数据模型：actualQuantity 保持原始生产数量不变，剩余数量动态计算
+- QC 消耗的复苏支数存储在 qcRecord.sampleQuantity 中
+- 代码零新增 ESLint error/warning
