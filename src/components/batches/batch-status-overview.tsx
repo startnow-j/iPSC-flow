@@ -41,10 +41,10 @@ export function BatchStatusOverview({ maxItems, className }: BatchStatusOverview
 
   const fetchStatusCounts = async () => {
     try {
-      const res = await authFetch('/api/batches?pageSize=1')
+      const res = await authFetch('/api/batches/status-stats')
       if (res.ok) {
         const data = await res.json()
-        setStatusCounts(data.statusCounts || {})
+        setStatusCounts(data.global || {})
       }
     } catch {
       // Silently fail, show zeros
