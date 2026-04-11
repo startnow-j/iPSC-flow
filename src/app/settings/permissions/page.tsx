@@ -414,9 +414,9 @@ export default function PermissionsOverviewPage() {
                       <TableHead className="w-[140px]">用户</TableHead>
                       <TableHead>邮箱</TableHead>
                       <TableHead>状态</TableHead>
-                      <TableHead>全局角色</TableHead>
-                      <TableHead>产品线</TableHead>
-                      <TableHead>
+                      <TableHead className={selectedProductId ? 'text-muted-foreground/60' : ''}>全局角色</TableHead>
+                      <TableHead className={selectedProductId ? 'text-muted-foreground/60' : ''}>产品线</TableHead>
+                      <TableHead className={selectedProductId ? 'bg-primary/5 font-semibold' : ''}>
                         {selectedProductId ? (
                           <span className="flex items-center gap-1.5">
                             <FlaskConical className="h-3 w-3" />
@@ -475,7 +475,7 @@ export default function PermissionsOverviewPage() {
                           </TableCell>
 
                           {/* Global roles */}
-                          <TableCell>
+                          <TableCell className={selectedProductId ? 'opacity-40' : ''}>
                             <div className="flex items-center gap-1 flex-wrap">
                               {user.roles.map((r) => (
                                 <Badge
@@ -490,7 +490,7 @@ export default function PermissionsOverviewPage() {
                           </TableCell>
 
                           {/* Product lines */}
-                          <TableCell>
+                          <TableCell className={selectedProductId ? 'opacity-40' : ''}>
                             <div className="flex items-center gap-1 flex-wrap">
                               {(user.productLines || []).length > 0 ? (
                                 user.productLines.map((pl) => (
@@ -503,7 +503,7 @@ export default function PermissionsOverviewPage() {
                           </TableCell>
 
                           {/* Product permissions */}
-                          <TableCell>
+                          <TableCell className={selectedProductId ? 'bg-primary/5' : ''}>
                             {/* Product-specific view: when a product is selected */}
                             {selectedProductId ? (
                               isMgmt ? (
@@ -514,19 +514,19 @@ export default function PermissionsOverviewPage() {
                                   {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
                                 </Badge>
                               ) : showProductSpecific ? (
-                                <div className="flex items-center gap-1 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   {productSpecificRoles.map((r) => (
                                     <Badge
                                       key={r}
                                       variant="secondary"
-                                      className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                                      className={`text-[10px] font-medium ${ROLE_COLORS[r] || ''}`}
                                     >
                                       {ROLE_LABELS[r]}
                                     </Badge>
                                   ))}
                                 </div>
                               ) : (
-                                <span className="text-xs text-muted-foreground">-</span>
+                                <span className="text-xs text-muted-foreground/60">-</span>
                               )
                             ) : (
                               /* Default view: no product selected */
@@ -616,7 +616,7 @@ export default function PermissionsOverviewPage() {
                             <div className="text-xs text-muted-foreground">{user.email}</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-1.5">
+                        <div className={`flex items-center gap-1.5 ${selectedProductId ? 'opacity-40' : ''}`}>
                           {/* Status badge */}
                           {user.active ? (
                             <Badge
@@ -646,8 +646,8 @@ export default function PermissionsOverviewPage() {
                         </div>
                       </div>
 
-                      {/* Product lines */}
-                      <div className="flex items-center gap-1.5 flex-wrap">
+                      {/* Product lines — dimmed when product selected */}
+                      <div className={`flex items-center gap-1.5 flex-wrap ${selectedProductId ? 'opacity-40' : ''}`}>
                         <span className="text-xs text-muted-foreground">产品线:</span>
                         {(user.productLines || []).length > 0 ? (
                           user.productLines.map((pl) => (
@@ -658,33 +658,36 @@ export default function PermissionsOverviewPage() {
                         )}
                       </div>
 
-                      {/* Product roles */}
+                      {/* Product roles — highlighted when product selected */}
                       {selectedProductId ? (
                         /* Product-specific view */
                         isMgmt ? (
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1.5 rounded-md bg-primary/5 px-2.5 py-1.5 -mx-1">
                             <Badge
                               variant="secondary"
-                              className="text-[10px] bg-primary/10 text-primary"
+                              className="text-[10px] bg-primary/10 text-primary font-medium"
                             >
                               {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
                             </Badge>
                           </div>
                         ) : showProductSpecific ? (
-                          <div className="flex items-center gap-1.5">
-                            <span className="text-xs text-muted-foreground">产品权限:</span>
+                          <div className="flex items-center gap-1.5 rounded-md bg-primary/5 px-2.5 py-1.5 -mx-1">
+                            <FlaskConical className="h-3.5 w-3.5 text-primary shrink-0" />
+                            <span className="text-xs font-medium text-foreground">产品权限:</span>
                             {productSpecificRoles.map((r) => (
                               <Badge
                                 key={r}
                                 variant="secondary"
-                                className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                                className={`text-[10px] font-medium ${ROLE_COLORS[r] || ''}`}
                               >
                                 {ROLE_LABELS[r]}
                               </Badge>
                             ))}
                           </div>
                         ) : (
-                          <span className="text-xs text-muted-foreground">无该产品权限</span>
+                          <div className="rounded-md bg-muted/30 px-2.5 py-1.5 -mx-1">
+                            <span className="text-xs text-muted-foreground/60">无该产品权限</span>
+                          </div>
                         )
                       ) : (
                         /* Default view */
