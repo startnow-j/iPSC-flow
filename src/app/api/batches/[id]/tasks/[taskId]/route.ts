@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
-import { canOperate } from '@/lib/roles'
+import { canManage, canOperate } from '@/lib/roles'
 import { db } from '@/lib/db'
 import { validateProductionTask } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
@@ -67,7 +67,7 @@ export async function PATCH(
 
     const { id, taskId } = await params
     const body = await request.json()
-    const { formData, status, notes, attachments } = body
+    const { formData, status, notes, attachments, assigneeId, assigneeName, reviewerId, reviewerName } = body
 
     // 获取任务和批次信息
     const task = await db.productionTask.findFirst({
@@ -86,23 +86,46 @@ export async function PATCH(
       return NextResponse.json({ error: '批次不存在' }, { status: 404 })
     }
 
-    // 操作类权限检查：只有 OPERATOR（在该产品上有授权）或 ADMIN 可以更新任务
+    // 权限检查：
+    // - assign/review 操作：ADMIN 或 SUPERVISOR（需要产品线归属）
+    // - status/formData/notes 操作：OPERATOR（需要产品级授权）或 ADMIN
     const roles = getRolesFromPayload(payload)
-    const userWithPermissions = await db.user.findUnique({
-      where: { id: payload.userId },
-      select: {
-        productRoles: {
-          where: { product: { active: true } },
-          select: { productId: true, roles: true },
+    const isAdmin = roles.includes('ADMIN')
+
+    const isAssignmentAction = assigneeId !== undefined || reviewerId !== undefined || status === 'REVIEWED'
+
+    if (isAssignmentAction && !isAdmin) {
+      // 非管理员指派/复核需要 SUPERVISOR 权限
+      const userWithPerms = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          productLines: { select: { productLine: true } },
         },
-      },
-    })
-    const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
-      productId: pr.productId,
-      roles: JSON.parse(pr.roles || '[]'),
-    })) || []
-    if (!canOperate(roles, userProductRoles, batch.productId, ['OPERATOR'])) {
-      return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
+      })
+      const userProductLines = userWithPerms?.productLines.map(pl => pl.productLine) || []
+      if (!roles.includes('SUPERVISOR') || !userProductLines.includes(batch.productLine as string)) {
+        return NextResponse.json({ error: '无权限指派该产品线的任务' }, { status: 403 })
+      }
+    }
+
+    if (!isAssignmentAction && !isAdmin) {
+      // 操作类操作需要 OPERATOR 产品级授权
+      const userWithPermissions = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          productRoles: {
+            where: { product: { active: true } },
+            select: { productId: true, roles: true },
+          },
+        },
+      })
+      const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
+        productId: pr.productId,
+        roles: JSON.parse(pr.roles || '[]'),
+      })) || []
+      if (!canOperate(roles, userProductRoles, batch.productId, ['OPERATOR'])) {
+        return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
+      }
     }
 
     // 如果提交了 formData，进行校验
@@ -134,6 +157,16 @@ export async function PATCH(
       updateData.attachments = JSON.stringify(attachments)
     }
 
+    // 指派操作：设置 assigneeId / reviewerId
+    if (assigneeId !== undefined) {
+      updateData.assigneeId = assigneeId || null
+      updateData.assigneeName = assigneeName || null
+    }
+    if (reviewerId !== undefined) {
+      updateData.reviewerId = reviewerId || null
+      updateData.reviewerName = reviewerName || null
+    }
+
     // 状态变更处理
     if (status !== undefined && status !== task.status) {
       updateData.status = status
@@ -151,6 +184,10 @@ export async function PATCH(
           updateData.assigneeName = payload.name
         }
       }
+
+      if (status === 'REVIEWED') {
+        updateData.reviewedAt = new Date()
+      }
     }
 
     // 如果状态变为 COMPLETED 但没有 formData，用之前的
@@ -166,11 +203,15 @@ export async function PATCH(
 
     // 记录审计日志
     const eventType =
-      status === 'COMPLETED'
-        ? 'TASK_COMPLETED'
-        : status === 'IN_PROGRESS'
-          ? 'TASK_STARTED'
-          : 'TASK_UPDATED'
+      status === 'REVIEWED'
+        ? 'TASK_REVIEWED'
+        : status === 'COMPLETED'
+          ? 'TASK_COMPLETED'
+          : status === 'IN_PROGRESS'
+            ? 'TASK_STARTED'
+            : assigneeId !== undefined || reviewerId !== undefined
+              ? 'TASK_ASSIGNED'
+              : 'TASK_UPDATED'
 
     await createAuditLog({
       eventType,

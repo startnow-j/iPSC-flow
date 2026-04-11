@@ -169,18 +169,16 @@ export async function POST(
         if (templates && templates.length > 0) {
           // 仅在没有任务时创建（防重复）
           if (batch.tasks.length === 0) {
-            const now = new Date()
-            const tasksData = templates.map((t: TaskTemplate, idx: number) => ({
+            const tasksData = templates.map((t: TaskTemplate) => ({
               batchId: id,
               batchNo: batch.batchNo,
               taskCode: t.taskCode,
               taskName: t.taskName,
               sequenceNo: t.sequenceNo,
               stepGroup: t.stepGroup || null,
-              status: idx === 0 ? 'IN_PROGRESS' as const : 'PENDING' as const,
-              assigneeId: idx === 0 ? payload.userId : null,
-              assigneeName: idx === 0 ? payload.name : null,
-              actualStart: idx === 0 ? now : null,
+              status: 'PENDING' as const,
+              assigneeId: null as null,
+              assigneeName: null as null,
             }))
 
             await db.productionTask.createMany({ data: tasksData })

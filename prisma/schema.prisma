@@ -59,6 +59,7 @@ enum TaskStatus {
   PENDING      // 待开始
   IN_PROGRESS  // 进行中
   COMPLETED    // 已完成
+  REVIEWED     // 已复核（复核人确认）
   SKIPPED      // 已跳过
 }
 
@@ -94,6 +95,7 @@ model User {
 
   createdBatches    Batch[]  @relation("CreatedBatches")
   productionTasks   ProductionTask[]
+  reviewedTasks     ProductionTask[] @relation("TaskReviewer")
   qcRecords         QcRecord[]
   auditLogs         AuditLog[]
   conversations     Conversation[]
@@ -210,6 +212,11 @@ model ProductionTask {
   assigneeId      String?
   assigneeName    String?
 
+  // 复核人
+  reviewerId      String?
+  reviewerName    String?
+  reviewedAt      DateTime?
+
   // 时间
   plannedStart    DateTime?
   plannedEnd      DateTime?
@@ -230,6 +237,7 @@ model ProductionTask {
 
   batch           Batch      @relation(fields: [batchId], references: [id])
   assignee        User?      @relation(fields: [assigneeId], references: [id])
+  reviewer        User?      @relation("TaskReviewer", fields: [reviewerId], references: [id])
 
   @@map("production_task")
 }

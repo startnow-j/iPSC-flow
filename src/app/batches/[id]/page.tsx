@@ -47,6 +47,7 @@ import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
 import { ProductLineBadge } from '@/components/shared/product-line-badge'
+import { AssignTaskDialog } from '@/components/batches/assign-task-dialog'
 
 // ============================================
 // Types
@@ -439,6 +440,9 @@ export default function BatchDetailPage({
   // Transition confirmation dialog
   const [confirmAction, setConfirmAction] = useState<AvailableAction | null>(null)
 
+  // Assign task dialog
+  const [assignDialog, setAssignDialog] = useState({ open: false, taskId: '', taskName: '', productId: '' })
+
   const fetchBatchDetail = useCallback(async () => {
     try {
       const res = await authFetch(`/api/batches/${id}`)
@@ -559,6 +563,12 @@ export default function BatchDetailPage({
     } finally {
       setTransitioning(false)
     }
+  }
+
+  const handleAssignTask = async () => {
+    setAssignDialog(prev => ({ ...prev, open: false }))
+    await fetchBatchDetail()
+    fetchTimeline()
   }
 
   const handleTransition = async () => {
@@ -878,7 +888,14 @@ export default function BatchDetailPage({
             <GenericTaskList
               batchId={id}
               productLine={batch.productLine || 'CELL_PRODUCT'}
+              productId={batch.productCode || ''}
               onBatchUpdated={handleProductionUpdate}
+              onAssignTask={(req) => setAssignDialog({
+                open: true,
+                taskId: req.taskId,
+                taskName: req.taskName,
+                productId: req.productId || batch.productCode || '',
+              })}
             />
           )}
         </TabsContent>
@@ -1092,6 +1109,19 @@ export default function BatchDetailPage({
           <TimelineCard timeline={timeline} />
         </TabsContent>
       </Tabs>
+
+      {/* ============================================ */}
+      {/* Assign Task Dialog */}
+      {/* ============================================ */}
+      <AssignTaskDialog
+        open={assignDialog.open}
+        onOpenChange={(open) => setAssignDialog(prev => ({ ...prev, open }))}
+        batchId={id}
+        taskId={assignDialog.taskId}
+        taskName={assignDialog.taskName}
+        productId={assignDialog.productId}
+        onSuccess={handleAssignTask}
+      />
 
       {/* ============================================ */}
       {/* Transition Confirmation Dialog */}

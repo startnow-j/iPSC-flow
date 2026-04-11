@@ -2,8 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
+import { useAuthStore } from '@/stores/auth-store'
+import { hasAnyRole } from '@/lib/roles'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Separator } from '@/components/ui/separator'
 import {
@@ -18,6 +21,8 @@ import {
   Beaker,
   TestTubes,
   Layers,
+  UserPlus,
+  ShieldCheck,
 } from 'lucide-react'
 
 // ============================================
@@ -35,6 +40,9 @@ interface ProductionTask {
   status: string
   assigneeId: string | null
   assigneeName: string | null
+  reviewerId: string | null
+  reviewerName: string | null
+  reviewedAt: string | null
   formData: Record<string, unknown> | null
   attachments: unknown[] | null
   notes: string | null
@@ -46,10 +54,18 @@ interface ProductionTask {
   updatedAt: string
 }
 
+interface AssignTaskRequest {
+  taskId: string
+  taskName: string
+  productId: string
+}
+
 interface GenericTaskListProps {
   batchId: string
   productLine: string
+  productId: string
   onBatchUpdated?: () => void
+  onAssignTask?: (request: AssignTaskRequest) => void
 }
 
 // ============================================
@@ -69,6 +85,10 @@ function TaskStatusBadge({ status }: { status: string }) {
     COMPLETED: {
       label: '已完成',
       className: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    },
+    REVIEWED: {
+      label: '已复核',
+      className: 'bg-teal-100 text-teal-800 dark:bg-teal-900/40 dark:text-teal-300',
     },
     SKIPPED: {
       label: '已跳过',
@@ -130,24 +150,26 @@ function formatDate(dateStr: string | null): string {
 // Single Task Card
 // ============================================
 
-function TaskCard({ task }: { task: ProductionTask }) {
+function TaskCard({ task, onAssignTask, canAssign }: { task: ProductionTask; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean }) {
   const isCompleted = task.status === 'COMPLETED'
+  const isReviewed = task.status === 'REVIEWED'
   const isSkipped = task.status === 'SKIPPED'
   const isIdTask = task.taskCode.startsWith('ID_')
+  const showAssignButton = canAssign && task.status === 'PENDING' && !task.assigneeId
 
   return (
-    <Card className={isCompleted ? 'border-emerald/20 bg-emerald/5' : isSkipped ? 'opacity-60' : ''}>
+    <Card className={isCompleted || isReviewed ? 'border-emerald/20 bg-emerald/5' : isSkipped ? 'opacity-60' : ''}>
       <CardContent className="p-4">
         <div className="flex items-start gap-3">
           {/* Status icon */}
           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full mt-0.5 ${
-            isCompleted
+            isCompleted || isReviewed
               ? 'bg-emerald/10'
               : task.status === 'IN_PROGRESS'
                 ? 'bg-blue/10'
                 : 'bg-muted'
           }`}>
-            {isCompleted ? (
+            {isCompleted || isReviewed ? (
               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
             ) : task.status === 'IN_PROGRESS' ? (
               <Construction className="h-4 w-4 text-blue-600" />
@@ -174,12 +196,37 @@ function TaskCard({ task }: { task: ProductionTask }) {
               )}
             </div>
 
-            {/* Assignee + dates */}
+            {/* Assign button for PENDING tasks without assignee */}
+            {showAssignButton && (
+              <div className="flex items-center justify-end">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1"
+                  onClick={() => onAssignTask?.({
+                    taskId: task.id,
+                    taskName: task.taskName,
+                    productId: '',
+                  })}
+                >
+                  <UserPlus className="h-3.5 w-3.5" />
+                  指派
+                </Button>
+              </div>
+            )}
+
+            {/* Assignee + reviewer + dates */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
               {task.assigneeName && (
                 <span className="flex items-center gap-1">
                   <User className="h-3 w-3" />
                   {task.assigneeName}
+                </span>
+              )}
+              {task.reviewerName && (
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" />
+                  复核: {task.reviewerName}
                 </span>
               )}
               {task.actualStart && (
@@ -267,9 +314,12 @@ function ProgressSummary({ tasks }: { tasks: ProductionTask[] }) {
 // Main GenericTaskList Component
 // ============================================
 
-export function GenericTaskList({ batchId, productLine, onBatchUpdated }: GenericTaskListProps) {
+export function GenericTaskList({ batchId, productLine, productId, onBatchUpdated, onAssignTask }: GenericTaskListProps) {
+  const { user } = useAuthStore()
   const [tasks, setTasks] = useState<ProductionTask[]>([])
   const [loading, setLoading] = useState(true)
+
+  const canAssign = hasAnyRole(user?.roles || [], ['ADMIN', 'SUPERVISOR'])
 
   const fetchTasks = useCallback(async () => {
     try {
@@ -359,7 +409,7 @@ export function GenericTaskList({ batchId, productLine, onBatchUpdated }: Generi
             </Badge>
           </div>
           {regularTasks.map(task => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id} task={task} onAssignTask={onAssignTask} canAssign={canAssign} />
           ))}
         </div>
       )}
@@ -377,7 +427,7 @@ export function GenericTaskList({ batchId, productLine, onBatchUpdated }: Generi
               </Badge>
             </div>
             {identificationTasks.map(task => (
-              <TaskCard key={task.id} task={task} />
+              <TaskCard key={task.id} task={task} onAssignTask={onAssignTask} canAssign={canAssign} />
             ))}
           </div>
         </>

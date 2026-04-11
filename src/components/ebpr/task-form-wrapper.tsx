@@ -25,6 +25,9 @@ interface ProductionTask {
   status: string
   assigneeId: string | null
   assigneeName: string | null
+  reviewerId: string | null
+  reviewerName: string | null
+  reviewedAt: string | null
   formData: Record<string, any> | null
   attachments: any[] | null
   notes: string | null
@@ -68,8 +71,8 @@ export function TaskFormWrapper({
     }, 500)
   }
 
-  // For completed tasks that aren't the current active one, show summary
-  if (task.status === 'COMPLETED') {
+  // For completed or reviewed tasks that aren't the current active one, show summary
+  if (task.status === 'COMPLETED' || task.status === 'REVIEWED') {
     return <TaskSummary task={task} />
   }
 

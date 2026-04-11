@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Clock, User } from 'lucide-react'
+import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Clock, User, ShieldCheck } from 'lucide-react'
 
 // ============================================
 // Types
@@ -17,6 +17,8 @@ interface TaskSummaryProps {
     status: string
     formData: Record<string, any> | null
     assigneeName: string | null
+    reviewerName: string | null
+    reviewedAt: string | null
     actualStart: string | null
     actualEnd: string | null
     notes: string | null
@@ -177,6 +179,12 @@ export function TaskSummary({ task }: TaskSummaryProps) {
                 <span className="flex items-center gap-1">
                   <User className="h-3 w-3" />
                   {task.assigneeName}
+                </span>
+              )}
+              {task.reviewerName && (
+                <span className="flex items-center gap-1">
+                  <ShieldCheck className="h-3 w-3" />
+                  复核: {task.reviewerName}
                 </span>
               )}
               {task.actualEnd && (

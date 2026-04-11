@@ -4,79 +4,70 @@ import { useRouter } from 'next/navigation'
 import { authFetch } from '@/lib/auth-fetch'
 import { useEffect, useState, useCallback } from 'react'
 import { useAuthStore } from '@/stores/auth-store'
-import { getRoleDisplay, hasRole } from '@/lib/roles'
+import { getRoleDisplay } from '@/lib/roles'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { getStatusLabel, getStatusColor } from '@/lib/services'
+import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import {
-  FlaskConical,
-  ClipboardCheck,
   FileCheck,
-  AlertCircle,
   Plus,
   Users,
   ListChecks,
+  FlaskConical,
+  ClipboardCheck,
+  ArrowRight,
+  ClipboardList,
+  Eye,
 } from 'lucide-react'
 
-interface MyTask {
-  id: string
+interface TaskItem {
+  taskId: string
+  batchId: string
   batchNo: string
+  taskCode: string
+  taskName: string
   productName: string
+  productLine: string
+  assigneeName: string | null
+  reviewerName: string | null
   status: string
-  action: string
+}
+
+interface MyTasksData {
+  toExecute: TaskItem[]
+  toReview: TaskItem[]
+  toExecuteCount: number
+  toReviewCount: number
+}
+
+const TASK_STATUS_LABELS: Record<string, string> = {
+  PENDING: '待开始',
+  IN_PROGRESS: '进行中',
+  COMPLETED: '已完成',
+}
+
+const TASK_STATUS_COLORS: Record<string, string> = {
+  PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
+  COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
 }
 
 export function MyTasks() {
   const router = useRouter()
   const { user } = useAuthStore()
-  const [tasks, setTasks] = useState<MyTask[]>([])
+  const [data, setData] = useState<MyTasksData | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchMyTasks = useCallback(async () => {
     if (!user) return
     setLoading(true)
     try {
-      const params = new URLSearchParams()
-      params.set('pageSize', '10')
-
-      const userRoles = user.roles || [user.role]
-
-      // Build query based on roles (use first matching role's typical filter)
-      if (hasRole(userRoles, 'OPERATOR')) {
-        params.set('assignee', user.id)
-        params.set('status', 'IN_PRODUCTION')
-      } else if (hasRole(userRoles, 'SUPERVISOR')) {
-        params.set('status', 'COA_SUBMITTED')
-      } else if (hasRole(userRoles, 'QC')) {
-        params.set('status', 'QC_PENDING')
-      }
-      // ADMIN sees everything
-
-      const res = await authFetch(`/api/batches?${params.toString()}`)
+      const res = await authFetch('/api/tasks/my-tasks')
       if (res.ok) {
-        const data = await res.json()
-        const myTasks: MyTask[] = (data.batches || []).map(
-          (b: { id: string; batchNo: string; productName: string; status: string }) => {
-            let action = '查看详情'
-            if (hasRole(userRoles, 'OPERATOR') && b.status === 'IN_PRODUCTION') {
-              action = '继续生产操作'
-            } else if (hasRole(userRoles, 'SUPERVISOR') && b.status === 'COA_SUBMITTED') {
-              action = '审核CoA'
-            } else if (hasRole(userRoles, 'QC') && b.status === 'QC_PENDING') {
-              action = '开始质检'
-            }
-            return {
-              id: b.id,
-              batchNo: b.batchNo,
-              productName: b.productName,
-              status: b.status,
-              action,
-            }
-          },
-        )
-        setTasks(myTasks)
+        const json = await res.json()
+        setData(json)
       }
     } catch {
       // Silently fail
@@ -94,24 +85,22 @@ export function MyTasks() {
     const userRoles = user.roles || [user.role]
     const actions: { label: string; icon: typeof Plus; href: string }[] = []
 
-    // Collect actions from ALL roles the user has
     const seen = new Set<string>()
 
-    if (hasRole(userRoles, 'ADMIN')) {
+    if (hasRoleCheck(userRoles, 'ADMIN')) {
       if (!seen.has('users')) { actions.push({ label: '用户管理', icon: Users, href: '/users' }); seen.add('users') }
       if (!seen.has('audit')) { actions.push({ label: '审计日志', icon: ListChecks, href: '/audit' }); seen.add('audit') }
     }
-    if (hasRole(userRoles, 'SUPERVISOR')) {
+    if (hasRoleCheck(userRoles, 'SUPERVISOR')) {
       if (!seen.has('batches-all')) { actions.push({ label: '所有批次', icon: FlaskConical, href: '/batches/all' }); seen.add('batches-all') }
     }
-    if (hasRole(userRoles, 'OPERATOR')) {
+    if (hasRoleCheck(userRoles, 'OPERATOR')) {
       if (!seen.has('batches')) { actions.push({ label: '我的批次', icon: FlaskConical, href: '/batches' }); seen.add('batches') }
     }
-    if (hasRole(userRoles, 'QC')) {
+    if (hasRoleCheck(userRoles, 'QC')) {
       if (!seen.has('qc-pending')) { actions.push({ label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' }); seen.add('qc-pending') }
     }
-    // Common action: add batch (available to OPERATOR, SUPERVISOR, ADMIN)
-    if (hasRole(userRoles, 'OPERATOR') || hasRole(userRoles, 'SUPERVISOR') || hasRole(userRoles, 'ADMIN')) {
+    if (hasRoleCheck(userRoles, 'OPERATOR') || hasRoleCheck(userRoles, 'SUPERVISOR') || hasRoleCheck(userRoles, 'ADMIN')) {
       if (!seen.has('new-batch')) { actions.unshift({ label: '新建批次', icon: Plus, href: '/batches' }); seen.add('new-batch') }
     }
 
@@ -119,6 +108,8 @@ export function MyTasks() {
   }
 
   const roleName = user?.roles ? getRoleDisplay(user.roles) : '用户'
+
+  const hasAnyTasks = data && (data.toExecuteCount > 0 || data.toReviewCount > 0)
 
   return (
     <div className="space-y-4">
@@ -134,47 +125,71 @@ export function MyTasks() {
         </CardHeader>
         <CardContent>
           {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Skeleton className="h-5 w-5 rounded-full" />
-                  <div className="flex-1 space-y-1">
-                    <Skeleton className="h-4 w-36" />
-                    <Skeleton className="h-3 w-20" />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : tasks.length === 0 ? (
+            <TaskListSkeleton />
+          ) : !hasAnyTasks ? (
             <div className="flex flex-col items-center justify-center py-6 text-center">
               <FileCheck className="h-8 w-8 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">暂无待办事项</p>
             </div>
           ) : (
-            <div className="space-y-1">
-              {tasks.slice(0, 5).map((task) => (
-                <div
-                  key={task.id}
-                  className="flex items-center justify-between rounded-lg p-2.5 hover:bg-muted/50 transition-colors cursor-pointer"
-                  onClick={() => router.push(`/batches/${task.id}`)}
-                >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <AlertCircle className="h-4 w-4 text-amber-500 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium font-mono truncate">
-                        {task.batchNo}
-                      </p>
-                      <p className="text-xs text-muted-foreground">{task.action}</p>
+            <div className="space-y-4">
+              {/* To Execute Section */}
+              {data && data.toExecuteCount > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <ClipboardList className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-medium">待执行</span>
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                        {data.toExecuteCount}
+                      </Badge>
                     </div>
                   </div>
-                  <Badge
-                    variant="secondary"
-                    className={`shrink-0 text-[10px] ${getStatusColor(task.status)}`}
-                  >
-                    {getStatusLabel(task.status)}
-                  </Badge>
+                  <div className="space-y-1">
+                    {data.toExecute.slice(0, 5).map((task) => (
+                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(`/batches/${task.batchId}`)} />
+                    ))}
+                    {data.toExecuteCount > 5 && (
+                      <button
+                        className="w-full text-xs text-primary hover:underline py-1 flex items-center justify-center gap-1"
+                        onClick={() => router.push('/batches')}
+                      >
+                        查看全部 {data.toExecuteCount} 项
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
                 </div>
-              ))}
+              )}
+
+              {/* To Review Section */}
+              {data && data.toReviewCount > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Eye className="h-4 w-4 text-amber-500" />
+                      <span className="text-sm font-medium">待复核</span>
+                      <Badge variant="secondary" className="text-[10px] h-5 px-1.5">
+                        {data.toReviewCount}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    {data.toReview.slice(0, 5).map((task) => (
+                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(`/batches/${task.batchId}`)} />
+                    ))}
+                    {data.toReviewCount > 5 && (
+                      <button
+                        className="w-full text-xs text-primary hover:underline py-1 flex items-center justify-center gap-1"
+                        onClick={() => router.push('/batches')}
+                      >
+                        查看全部 {data.toReviewCount} 项
+                        <ArrowRight className="h-3 w-3" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -201,4 +216,90 @@ export function MyTasks() {
       </Card>
     </div>
   )
+}
+
+/* ── Task Card ───────────────────────────────────── */
+
+function TaskCard({ task, onClick }: { task: TaskItem; onClick: () => void }) {
+  return (
+    <div
+      className="flex items-center justify-between rounded-lg p-2.5 hover:bg-muted/50 transition-colors cursor-pointer group"
+      onClick={onClick}
+    >
+      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <p className="text-sm font-medium truncate group-hover:text-primary transition-colors">
+              {task.taskName}
+            </p>
+            <ProductLineBadge productLine={task.productLine} />
+          </div>
+          <p className="text-xs text-muted-foreground truncate">
+            {task.batchNo} · {task.assigneeName && task.reviewerName && task.assigneeName !== task.reviewerName
+              ? `${task.assigneeName} → ${task.reviewerName}`
+              : task.assigneeName || ''}
+          </p>
+        </div>
+      </div>
+      <Badge
+        variant="secondary"
+        className={`shrink-0 text-[10px] ${TASK_STATUS_COLORS[task.status] || ''}`}
+      >
+        {TASK_STATUS_LABELS[task.status] || task.status}
+      </Badge>
+    </div>
+  )
+}
+
+/* ── Skeleton ────────────────────────────────────── */
+
+function TaskListSkeleton() {
+  return (
+    <div className="space-y-4">
+      {/* To Execute skeleton */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-5 w-5 rounded-full" />
+        </div>
+        <div className="space-y-1">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-2.5">
+              <div className="flex-1 space-y-1">
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </div>
+              <Skeleton className="h-5 w-12 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+      {/* To Review skeleton */}
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <Skeleton className="h-4 w-4 rounded" />
+          <Skeleton className="h-4 w-14" />
+          <Skeleton className="h-5 w-5 rounded-full" />
+        </div>
+        <div className="space-y-1">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3 p-2.5">
+              <div className="flex-1 space-y-1">
+                <Skeleton className="h-4 w-28" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+              <Skeleton className="h-5 w-12 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/* ── Helpers ─────────────────────────────────────── */
+
+function hasRoleCheck(roles: string[], role: string): boolean {
+  return roles.includes(role)
 }

@@ -32,6 +32,9 @@ interface ProductionTask {
   status: string
   assigneeId: string | null
   assigneeName: string | null
+  reviewerId: string | null
+  reviewerName: string | null
+  reviewedAt: string | null
   formData: Record<string, any> | null
   attachments: any[] | null
   notes: string | null
@@ -98,14 +101,14 @@ function getStepStatus(
   // SEED_PREP and HARVEST: check the single task
   if (stepCode === 'SEED_PREP') {
     const seedTask = stepTasks[0]
-    if (seedTask.status === 'COMPLETED') return 'completed'
+    if (seedTask.status === 'COMPLETED' || seedTask.status === 'REVIEWED') return 'completed'
     if (seedTask.status === 'IN_PROGRESS') return 'current'
     return 'pending'
   }
 
   // EXPANSION: at least one completed means it's been worked on
   if (stepCode === 'EXPANSION') {
-    const hasCompleted = stepTasks.some((t) => t.status === 'COMPLETED')
+    const hasCompleted = stepTasks.some((t) => t.status === 'COMPLETED' || t.status === 'REVIEWED')
     const hasInProgress = stepTasks.some((t) => t.status === 'IN_PROGRESS')
     if (hasInProgress) return 'current'
     if (hasCompleted) return 'completed'
@@ -115,7 +118,7 @@ function getStepStatus(
   // HARVEST
   if (stepCode === 'HARVEST') {
     const harvestTask = stepTasks[0]
-    if (harvestTask.status === 'COMPLETED') return 'completed'
+    if (harvestTask.status === 'COMPLETED' || harvestTask.status === 'REVIEWED') return 'completed'
     if (harvestTask.status === 'IN_PROGRESS') return 'current'
     return 'pending'
   }
@@ -128,7 +131,7 @@ function getStepCompletedCount(
   tasks: ProductionTask[]
 ): number {
   return tasks.filter(
-    (t) => t.taskCode === stepCode && t.status === 'COMPLETED'
+    (t) => t.taskCode === stepCode && (t.status === 'COMPLETED' || t.status === 'REVIEWED')
   ).length
 }
 
@@ -370,7 +373,7 @@ export function EbprStepGuide({
           t.taskCode === activeStep &&
           (activeStep === 'EXPANSION'
             ? t.status === 'IN_PROGRESS' || t.status === 'PENDING'
-            : t.status !== 'COMPLETED' && t.status !== 'SKIPPED')
+            : t.status !== 'COMPLETED' && t.status !== 'REVIEWED' && t.status !== 'SKIPPED')
       ) ?? tasks.find((t) => t.taskCode === activeStep)
     : null
 
