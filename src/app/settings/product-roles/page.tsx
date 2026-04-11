@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
-import { isAdmin, hasAnyRole, ROLE_LABELS, ROLE_COLORS, PRODUCT_LINE_LABELS } from '@/lib/roles'
+import { isAdmin, hasAnyRole, ROLE_LABELS, ROLE_COLORS } from '@/lib/roles'
 import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,6 +36,7 @@ import {
   FlaskConical,
   Microscope,
   TestTubes,
+  CheckCircle2,
 } from 'lucide-react'
 
 // ========================
@@ -49,29 +50,19 @@ interface ProductItem {
   productLine: string
 }
 
-interface UserItem {
+interface AssignableUser {
   id: string
   name: string
   email: string
   roles: string[]
   productLines: string[]
+  department?: string | null
 }
 
 interface RoleAssignment {
   productId: string
   roles: string[]
 }
-
-// ========================
-// Product line tabs
-// ========================
-
-const PRODUCT_LINE_TABS = [
-  { key: 'ALL', label: '全部', icon: ShieldAlert },
-  { key: 'CELL_PRODUCT', label: '细胞产品', icon: FlaskConical },
-  { key: 'SERVICE', label: '服务项目', icon: Microscope },
-  { key: 'KIT', label: '试剂盒', icon: TestTubes },
-]
 
 // ========================
 // Page Component
@@ -87,7 +78,7 @@ export default function ProductRolesPage() {
 
   // Data
   const [products, setProducts] = useState<ProductItem[]>([])
-  const [users, setUsers] = useState<UserItem[]>([])
+  const [assignableUsers, setAssignableUsers] = useState<AssignableUser[]>([])
   const [assignments, setAssignments] = useState<Record<string, RoleAssignment>>({})
   const [originalAssignments, setOriginalAssignments] = useState<Record<string, RoleAssignment>>({})
 
@@ -126,29 +117,21 @@ export default function ProductRolesPage() {
     }
   }, [isCurrentUserAdmin, visibleProductLines])
 
-  // Fetch users for dropdown
-  const fetchUsers = useCallback(async () => {
+  // Fetch assignable users via the new endpoint (both ADMIN and SUPERVISOR can access)
+  const fetchAssignableUsers = useCallback(async () => {
     try {
-      const res = await authFetch('/api/users')
+      const res = await authFetch('/api/product-roles/available-users')
       if (res.ok) {
         const data = await res.json()
-        let filtered = (data.users || []).filter((u: UserItem) => u.active)
-        // Non-admin: only show users in their product lines
-        if (!isCurrentUserAdmin) {
-          filtered = filtered.filter((u: UserItem) =>
-            u.productLines?.some((pl) => visibleProductLines.includes(pl))
-          )
-        }
-        // Only show users who have operational roles (OPERATOR or QC)
-        filtered = filtered.filter((u: UserItem) =>
-          u.roles.some((r) => ['OPERATOR', 'QC'].includes(r))
-        )
-        setUsers(filtered)
+        setAssignableUsers(data.users || [])
+      } else {
+        console.error('Failed to fetch assignable users:', res.status)
+        toast.error('获取用户列表失败，请确认权限配置')
       }
     } catch {
       // ignore
     }
-  }, [isCurrentUserAdmin, visibleProductLines])
+  }, [])
 
   // Fetch assignments for selected user
   const fetchAssignments = useCallback(async (userId: string) => {
@@ -176,9 +159,9 @@ export default function ProductRolesPage() {
   // Load everything
   const loadAll = useCallback(async () => {
     setLoading(true)
-    await Promise.all([fetchProducts(selectedLine), fetchUsers()])
+    await Promise.all([fetchProducts(selectedLine), fetchAssignableUsers()])
     setLoading(false)
-  }, [fetchProducts, fetchUsers, selectedLine])
+  }, [fetchProducts, fetchAssignableUsers, selectedLine])
 
   useEffect(() => {
     if (!authLoading && canAccess) {
@@ -191,8 +174,18 @@ export default function ProductRolesPage() {
     fetchAssignments(selectedUserId)
   }, [selectedUserId, fetchAssignments])
 
-  // Filter products by selected line and search
+  // Filter products by: selected line, search, AND selected user's product lines
+  const userProductLines = selectedUser?.productLines || []
   const filteredProducts = products.filter((p) => {
+    // Only show products in the user's assigned product lines
+    if (!isCurrentUserAdmin && userProductLines.length > 0 && !userProductLines.includes(p.productLine)) {
+      return false
+    }
+    // Even for admin, only show products matching the user's product lines
+    // (API will reject assignments to products outside user's lines)
+    if (isCurrentUserAdmin && userProductLines.length > 0 && !userProductLines.includes(p.productLine)) {
+      return false
+    }
     if (selectedLine !== 'ALL' && p.productLine !== selectedLine) return false
     if (searchQuery) {
       const q = searchQuery.toLowerCase()
@@ -204,8 +197,13 @@ export default function ProductRolesPage() {
     return true
   })
 
+  // Filter assignable users by search
+  const filteredUsers = useMemo(() => {
+    return assignableUsers
+  }, [assignableUsers])
+
   // Selected user info
-  const selectedUser = users.find((u) => u.id === selectedUserId)
+  const selectedUser = assignableUsers.find((u) => u.id === selectedUserId)
 
   // Check if has changes
   const hasChanges = JSON.stringify(assignments) !== JSON.stringify(originalAssignments)
@@ -234,14 +232,15 @@ export default function ProductRolesPage() {
     })
   }
 
-  // Save
+  // Save all changes at once
   const handleSave = async () => {
     if (!selectedUser || !hasChanges) return
     setSaving(true)
     try {
-      // Find changed entries
+      // Collect all changes
       const changes: Array<{ productId: string; roles: string[]; action: 'upsert' | 'delete' }> = []
 
+      // Find changed or new entries
       for (const productId of Object.keys(assignments)) {
         const current = assignments[productId].roles
         const original = originalAssignments[productId]?.roles || []
@@ -257,25 +256,50 @@ export default function ProductRolesPage() {
         }
       }
 
+      if (changes.length === 0) {
+        toast.info('无变更需要保存')
+        setSaving(false)
+        return
+      }
+
       let successCount = 0
+      let errorCount = 0
+
       for (const change of changes) {
-        if (change.action === 'delete' && change.roles.length === 0) {
-          const res = await authFetch(
-            `/api/product-roles/${selectedUserId}/${change.productId}`,
-            { method: 'DELETE' }
-          )
-          if (res.ok) successCount++
-        } else {
-          const res = await authFetch('/api/product-roles', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: selectedUserId,
-              productId: change.productId,
-              roles: change.roles,
-            }),
-          })
-          if (res.ok) successCount++
+        try {
+          if (change.action === 'delete') {
+            const res = await authFetch(
+              `/api/product-roles/${selectedUserId}/${change.productId}`,
+              { method: 'DELETE' }
+            )
+            if (res.ok) {
+              successCount++
+            } else {
+              const errData = await res.json().catch(() => ({}))
+              console.error('DELETE failed:', errData)
+              errorCount++
+            }
+          } else {
+            const res = await authFetch('/api/product-roles', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userId: selectedUserId,
+                productId: change.productId,
+                roles: change.roles,
+              }),
+            })
+            if (res.ok) {
+              successCount++
+            } else {
+              const errData = await res.json().catch(() => ({}))
+              console.error('POST failed:', errData)
+              errorCount++
+            }
+          }
+        } catch (err) {
+          console.error('Save error for product', change.productId, err)
+          errorCount++
         }
       }
 
@@ -283,8 +307,11 @@ export default function ProductRolesPage() {
         toast.success(`已保存 ${selectedUser.name} 的产品权限（${successCount} 项变更）`)
         // Refresh original assignments
         setOriginalAssignments(JSON.parse(JSON.stringify(assignments)))
+      } else if (successCount > 0) {
+        toast.warning(`部分保存成功（${successCount}/${changes.length}），请检查失败的项`)
+        setOriginalAssignments(JSON.parse(JSON.stringify(assignments)))
       } else {
-        toast.error('部分保存失败，请重试')
+        toast.error('保存失败，请检查用户是否属于对应产品线')
       }
     } catch {
       toast.error('网络错误，请重试')
@@ -326,7 +353,7 @@ export default function ProductRolesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">产品权限配置</h1>
+          <h1 className="text-2xl font-bold tracking-tight">权限配置</h1>
           <p className="text-sm text-muted-foreground mt-1">
             为操作人员分配具体产品的 OPERATOR / QC 角色权限
           </p>
@@ -343,26 +370,6 @@ export default function ProductRolesPage() {
         )}
       </div>
 
-      {/* Product Line Tabs */}
-      <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/30 overflow-x-auto">
-        {PRODUCT_LINE_TABS.filter((tab) => {
-          if (isCurrentUserAdmin) return true
-          if (tab.key === 'ALL') return true
-          return visibleProductLines.includes(tab.key)
-        }).map((tab) => (
-          <Button
-            key={tab.key}
-            variant={selectedLine === tab.key ? 'default' : 'ghost'}
-            size="sm"
-            className="flex items-center gap-1.5 text-xs"
-            onClick={() => setSelectedLine(tab.key)}
-          >
-            <tab.icon className="h-3.5 w-3.5" />
-            <span className="hidden sm:inline">{tab.label}</span>
-          </Button>
-        ))}
-      </div>
-
       {/* User Selection Card */}
       <Card>
         <CardHeader className="pb-3">
@@ -371,57 +378,76 @@ export default function ProductRolesPage() {
             选择需要配置产品权限的操作人员（需有 OPERATOR 或 QC 全局角色）
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Select value={selectedUserId} onValueChange={setSelectedUserId}>
-            <SelectTrigger className="w-full sm:w-80">
-              <SelectValue placeholder="请选择用户" />
-            </SelectTrigger>
-            <SelectContent>
-              {users.map((u) => (
-                <SelectItem key={u.id} value={u.id}>
-                  <div className="flex items-center gap-2">
-                    <span>{u.name}</span>
-                    <span className="text-xs text-muted-foreground">{u.email}</span>
-                    <div className="flex gap-1">
-                      {u.roles.map((r) => (
-                        <Badge
-                          key={r}
-                          variant="secondary"
-                          className={`text-[9px] px-1 ${ROLE_COLORS[r] || ''}`}
-                        >
-                          {ROLE_LABELS[r]}
-                        </Badge>
-                      ))}
+        <CardContent className="space-y-3">
+          {loading ? (
+            <Skeleton className="h-10 w-full sm:w-80" />
+          ) : (
+            <>
+              <Select value={selectedUserId} onValueChange={setSelectedUserId}>
+                <SelectTrigger className="w-full sm:w-80">
+                  <SelectValue placeholder={
+                    assignableUsers.length === 0
+                      ? '暂无可分配权限的用户'
+                      : '请选择用户'
+                  } />
+                </SelectTrigger>
+                <SelectContent>
+                  {filteredUsers.length === 0 ? (
+                    <div className="p-3 text-sm text-muted-foreground text-center">
+                      暂无可分配权限的用户
+                    </div>
+                  ) : (
+                    filteredUsers.map((u) => (
+                      <SelectItem key={u.id} value={u.id}>
+                        <div className="flex items-center gap-2">
+                          <span>{u.name}</span>
+                          <span className="text-xs text-muted-foreground">{u.email}</span>
+                          <div className="flex gap-1">
+                            {u.roles.map((r) => (
+                              <Badge
+                                key={r}
+                                variant="secondary"
+                                className={`text-[9px] px-1 ${ROLE_COLORS[r] || ''}`}
+                              >
+                                {ROLE_LABELS[r]}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+
+              {/* Selected user info */}
+              {selectedUser && (
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 text-sm rounded-lg border p-3 bg-muted/30">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                      <span className="font-medium">{selectedUser.name}</span>
+                      <span className="text-muted-foreground">{selectedUser.email}</span>
                     </div>
                   </div>
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-
-          {/* Selected user info */}
-          {selectedUser && (
-            <div className="mt-3 flex items-center gap-3 text-sm rounded-lg border p-3 bg-muted/30">
-              <div className="flex-1">
-                <span className="font-medium">{selectedUser.name}</span>
-                <span className="text-muted-foreground ml-2">{selectedUser.email}</span>
-              </div>
-              <div className="flex items-center gap-1 flex-wrap">
-                {selectedUser.roles.map((r) => (
-                  <Badge
-                    key={r}
-                    variant="secondary"
-                    className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
-                  >
-                    {ROLE_LABELS[r]}
-                  </Badge>
-                ))}
-                <span className="text-muted-foreground mx-1">·</span>
-                {selectedUser.productLines?.map((pl) => (
-                  <ProductLineBadge key={pl} productLine={pl} />
-                ))}
-              </div>
-            </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {selectedUser.roles.map((r) => (
+                      <Badge
+                        key={r}
+                        variant="secondary"
+                        className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                      >
+                        {ROLE_LABELS[r]}
+                      </Badge>
+                    ))}
+                    <span className="text-muted-foreground mx-0.5">|</span>
+                    {selectedUser.productLines?.map((pl) => (
+                      <ProductLineBadge key={pl} productLine={pl} />
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </CardContent>
       </Card>
@@ -449,16 +475,56 @@ export default function ProductRolesPage() {
             </div>
           </CardHeader>
           <CardContent>
-            {/* Global role warning */}
+            {/* Info bar */}
             <div className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30 p-3 mb-4">
               <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
               <p className="text-xs text-amber-700 dark:text-amber-300">
-                产品角色不能超出用户的全局资质。用户当前全局角色：
-                {selectedUser.roles.map((r) => ROLE_LABELS[r]).join('、')}
-                {selectedUser.roles.includes('OPERATOR') ? '' : '（无 OPERATOR 角色则不可勾选操作员）'}
-                {selectedUser.roles.includes('QC') ? '' : '（无 QC 角色则不可勾选质检）'}
+                {selectedUser.name} 的全局角色：{selectedUser.roles.map((r) => ROLE_LABELS[r]).join('、')}
+                {userProductLines.length > 0
+                  ? `，归属产品线：${userProductLines.map((pl) => {
+                      const labels: Record<string, string> = { SERVICE: '服务项目', CELL_PRODUCT: '细胞产品', KIT: '试剂盒' }
+                      return labels[pl] || pl
+                    }).join('、')}`
+                  : '，未分配产品线（请在用户管理中配置）'}
+                。只能为用户分配其归属产品线内的产品角色。
               </p>
             </div>
+
+            {/* Product line filter chips — only show user's product lines */}
+            {userProductLines.length > 0 && (
+              <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+                <Button
+                  variant={selectedLine === 'ALL' ? 'default' : 'outline'}
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSelectedLine('ALL')}
+                >
+                  全部 ({userProductLines.length} 线)
+                </Button>
+                {userProductLines.map((pl) => {
+                  const lineConfig: Record<string, { label: string; icon: React.ElementType }> = {
+                    CELL_PRODUCT: { label: '细胞产品', icon: FlaskConical },
+                    SERVICE: { label: '服务项目', icon: Microscope },
+                    KIT: { label: '试剂盒', icon: TestTubes },
+                  }
+                  const cfg = lineConfig[pl]
+                  if (!cfg) return null
+                  const Icon = cfg.icon
+                  return (
+                    <Button
+                      key={pl}
+                      variant={selectedLine === pl ? 'default' : 'outline'}
+                      size="sm"
+                      className="h-7 text-xs gap-1"
+                      onClick={() => setSelectedLine(pl)}
+                    >
+                      <Icon className="h-3 w-3" />
+                      {cfg.label}
+                    </Button>
+                  )
+                })}
+              </div>
+            )}
 
             {loading ? (
               <div className="space-y-3">

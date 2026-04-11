@@ -11,10 +11,9 @@ import {
   ROLE_LABELS,
   ROLE_COLORS,
   MANAGEMENT_ROLES,
-  PRODUCT_LINE_LABELS,
 } from '@/lib/roles'
 import { ProductLineBadge } from '@/components/shared/product-line-badge'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -26,22 +25,21 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
+import {
+  ShieldAlert,
+  Search,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  UserCog,
+  Eye,
+} from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import {
-  ShieldAlert,
-  ShieldCheck,
-  Search,
-  FlaskConical,
-  Microscope,
-  TestTubes,
-  ChevronDown,
-  Eye,
-} from 'lucide-react'
+import { Button } from '@/components/ui/button'
 
 // ========================
 // Types
@@ -69,17 +67,6 @@ interface ProductRoleItem {
 }
 
 // ========================
-// Product line tabs
-// ========================
-
-const PRODUCT_LINE_TABS = [
-  { key: 'ALL', label: '全部', icon: ShieldCheck },
-  { key: 'SERVICE', label: '服务项目', icon: Microscope },
-  { key: 'CELL_PRODUCT', label: '细胞产品', icon: FlaskConical },
-  { key: 'KIT', label: '试剂盒', icon: TestTubes },
-]
-
-// ========================
 // Page Component
 // ========================
 
@@ -96,7 +83,6 @@ export default function PermissionsOverviewPage() {
   const [loading, setLoading] = useState(false)
 
   // UI
-  const [selectedLine, setSelectedLine] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
 
@@ -132,6 +118,9 @@ export default function PermissionsOverviewPage() {
       if (usersRes.ok) {
         const data = await usersRes.json()
         fetchedUsers = data.users || []
+      } else {
+        // For non-admin users who can't access /api/users, return empty
+        // They'll only see their own data from product-roles
       }
 
       let fetchedRoles: ProductRoleItem[] = []
@@ -155,7 +144,8 @@ export default function PermissionsOverviewPage() {
         )
       }
 
-      setUsers(fetchedUsers.filter((u) => u.active))
+      // Do NOT filter out inactive users — show all to indicate status
+      setUsers(fetchedUsers)
       setProductRoles(fetchedRoles)
     } catch {
       toast.error('加载数据失败')
@@ -170,26 +160,17 @@ export default function PermissionsOverviewPage() {
     }
   }, [authLoading, fetchData])
 
-  // Filter users
+  // Filter users by search query
   const filteredUsers = useMemo(() => {
-    return users.filter((u) => {
-      // Product line filter
-      if (selectedLine !== 'ALL') {
-        if (!u.productLines?.includes(selectedLine)) return false
-      }
-      // Search filter
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase()
-        return (
-          u.name.toLowerCase().includes(q) ||
-          u.email.toLowerCase().includes(q)
-        )
-      }
-      return true
-    })
-  }, [users, selectedLine, searchQuery])
+    if (!searchQuery) return users
+    const q = searchQuery.toLowerCase()
+    return users.filter((u) =>
+      u.name.toLowerCase().includes(q) ||
+      u.email.toLowerCase().includes(q)
+    )
+  }, [users, searchQuery])
 
-  // Toggle expanded row
+  // Toggle expanded row (mobile)
   const toggleExpanded = (userId: string) => {
     setExpandedUsers((prev) => {
       const next = new Set(prev)
@@ -200,7 +181,7 @@ export default function PermissionsOverviewPage() {
   }
 
   // ========================
-  // Loading / Access denied
+  // Loading
   // ========================
 
   if (authLoading) {
@@ -213,7 +194,10 @@ export default function PermissionsOverviewPage() {
     )
   }
 
-  // All authenticated users can view (at least their own permissions)
+  // ========================
+  // Render
+  // ========================
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -228,37 +212,30 @@ export default function PermissionsOverviewPage() {
         </div>
       </div>
 
-      {/* Product Line Tabs */}
-      {!isOperationalOnly && (
-        <div className="flex items-center gap-1 rounded-lg border p-1 bg-muted/30 overflow-x-auto">
-          {PRODUCT_LINE_TABS.filter((tab) => {
-            if (isCurrentUserAdmin) return true
-            if (tab.key === 'ALL') return true
-            return visibleProductLines.includes(tab.key)
-          }).map((tab) => (
-            <Button
-              key={tab.key}
-              variant={selectedLine === tab.key ? 'default' : 'ghost'}
-              size="sm"
-              className="flex items-center gap-1.5 text-xs"
-              onClick={() => setSelectedLine(tab.key)}
-            >
-              <tab.icon className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">{tab.label}</span>
-            </Button>
-          ))}
+      {/* Search + Stats */}
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="relative flex-1 max-w-sm">
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+          <Input
+            placeholder="搜索用户名或邮箱..."
+            className="pl-8 h-9 text-sm"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
         </div>
-      )}
-
-      {/* Search */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-        <Input
-          placeholder="搜索用户..."
-          className="pl-8 h-9 text-sm"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+        {!loading && users.length > 0 && (
+          <div className="flex items-center gap-3 text-xs text-muted-foreground">
+            <span>共 {users.length} 名用户</span>
+            <span className="inline-flex items-center gap-1">
+              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+              {users.filter((u) => u.active).length} 启用
+            </span>
+            <span className="inline-flex items-center gap-1">
+              <XCircle className="h-3 w-3 text-red-400" />
+              {users.filter((u) => !u.active).length} 停用
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Data Table */}
@@ -275,7 +252,7 @@ export default function PermissionsOverviewPage() {
               <ShieldAlert className="h-10 w-10 mb-3" />
               <p className="text-sm font-medium">无匹配用户</p>
               <p className="text-xs mt-1">
-                {searchQuery ? '尝试修改搜索条件' : '当前筛选条件下无用户'}
+                {searchQuery ? '尝试修改搜索条件' : '暂无用户数据'}
               </p>
             </div>
           ) : (
@@ -285,25 +262,59 @@ export default function PermissionsOverviewPage() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead className="w-[140px]">用户名</TableHead>
+                      <TableHead className="w-[140px]">用户</TableHead>
                       <TableHead>邮箱</TableHead>
+                      <TableHead>状态</TableHead>
                       <TableHead>全局角色</TableHead>
                       <TableHead>产品线</TableHead>
-                      <TableHead>产品权限详情</TableHead>
+                      <TableHead>产品权限</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((user) => {
                       const userPr = userProductRolesMap[user.id] || []
                       const isManagement = hasManagementRole(user.roles)
-                      const isExpanded = expandedUsers.has(user.id)
 
                       return (
-                        <TableRow key={user.id}>
-                          <TableCell className="font-medium">{user.name}</TableCell>
+                        <TableRow
+                          key={user.id}
+                          className={!user.active ? 'opacity-50' : ''}
+                        >
+                          {/* User name */}
+                          <TableCell className="font-medium">
+                            <div className="flex items-center gap-2">
+                              <UserCog className="h-3.5 w-3.5 text-muted-foreground" />
+                              {user.name}
+                            </div>
+                          </TableCell>
+
+                          {/* Email */}
                           <TableCell className="text-sm text-muted-foreground">
                             {user.email}
                           </TableCell>
+
+                          {/* Active status */}
+                          <TableCell>
+                            {user.active ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                              >
+                                <CheckCircle2 className="h-2.5 w-2.5 mr-0.5" />
+                                启用
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                              >
+                                <XCircle className="h-2.5 w-2.5 mr-0.5" />
+                                停用
+                              </Badge>
+                            )}
+                          </TableCell>
+
+                          {/* Global roles */}
                           <TableCell>
                             <div className="flex items-center gap-1 flex-wrap">
                               {user.roles.map((r) => (
@@ -317,26 +328,29 @@ export default function PermissionsOverviewPage() {
                               ))}
                             </div>
                           </TableCell>
+
+                          {/* Product lines */}
                           <TableCell>
                             <div className="flex items-center gap-1 flex-wrap">
-                              {(user.productLines || []).map((pl) => (
-                                <ProductLineBadge key={pl} productLine={pl} />
-                              ))}
-                              {(!user.productLines || user.productLines.length === 0) && (
-                                <span className="text-xs text-muted-foreground">-</span>
+                              {(user.productLines || []).length > 0 ? (
+                                user.productLines.map((pl) => (
+                                  <ProductLineBadge key={pl} productLine={pl} />
+                                ))
+                              ) : (
+                                <span className="text-xs text-muted-foreground">未分配</span>
                               )}
                             </div>
                           </TableCell>
+
+                          {/* Product permissions */}
                           <TableCell>
                             {isManagement ? (
-                              <div className="flex items-center gap-1.5">
-                                <Badge
-                                  variant="secondary"
-                                  className="text-[10px] bg-primary/10 text-primary"
-                                >
-                                  {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
-                                </Badge>
-                              </div>
+                              <Badge
+                                variant="secondary"
+                                className="text-[10px] bg-primary/10 text-primary"
+                              >
+                                {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
+                              </Badge>
                             ) : userPr.length === 0 ? (
                               <span className="text-xs text-muted-foreground">暂无产品权限</span>
                             ) : (
@@ -348,23 +362,24 @@ export default function PermissionsOverviewPage() {
                                     <ChevronDown className="h-3 w-3" />
                                   </Button>
                                 </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-72 max-h-64 overflow-y-auto">
+                                <DropdownMenuContent align="start" className="w-80 max-h-72 overflow-y-auto">
                                   <div className="p-2 space-y-1.5">
                                     {userPr.map((pr) => (
                                       <div
                                         key={`${pr.productId}-${pr.roles.join()}`}
                                         className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
                                       >
+                                        <ProductLineBadge productLine={pr.productLine} />
                                         <Badge
                                           variant="secondary"
                                           className="text-[9px] font-mono bg-primary/10 text-primary"
                                         >
                                           {pr.productCode}
                                         </Badge>
-                                        <span className="text-[10px] text-muted-foreground truncate">
+                                        <span className="text-[10px] text-muted-foreground truncate flex-1">
                                           {pr.productName}
                                         </span>
-                                        <div className="flex gap-0.5 ml-auto shrink-0">
+                                        <div className="flex gap-0.5 shrink-0">
                                           {pr.roles.map((r) => (
                                             <Badge
                                               key={r}
@@ -397,14 +412,39 @@ export default function PermissionsOverviewPage() {
                   const isExpanded = expandedUsers.has(user.id)
 
                   return (
-                    <div key={user.id} className="p-4 space-y-3">
+                    <div
+                      key={user.id}
+                      className={`p-4 space-y-3 ${!user.active ? 'opacity-50' : ''}`}
+                    >
                       {/* User header */}
                       <div className="flex items-center justify-between">
-                        <div>
-                          <div className="font-medium">{user.name}</div>
-                          <div className="text-xs text-muted-foreground">{user.email}</div>
+                        <div className="flex items-center gap-2">
+                          <div className="flex items-center justify-center w-8 h-8 rounded-full bg-muted">
+                            <UserCog className="h-4 w-4 text-muted-foreground" />
+                          </div>
+                          <div>
+                            <div className="font-medium text-sm">{user.name}</div>
+                            <div className="text-xs text-muted-foreground">{user.email}</div>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-1 flex-wrap justify-end">
+                        <div className="flex items-center gap-1.5">
+                          {/* Status badge */}
+                          {user.active ? (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300"
+                            >
+                              启用
+                            </Badge>
+                          ) : (
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300"
+                            >
+                              停用
+                            </Badge>
+                          )}
+                          {/* Role badges */}
                           {user.roles.map((r) => (
                             <Badge
                               key={r}
@@ -418,12 +458,14 @@ export default function PermissionsOverviewPage() {
                       </div>
 
                       {/* Product lines */}
-                      <div className="flex items-center gap-1 flex-wrap">
-                        {(user.productLines || []).map((pl) => (
-                          <ProductLineBadge key={pl} productLine={pl} />
-                        ))}
-                        {(!user.productLines || user.productLines.length === 0) && (
-                          <span className="text-xs text-muted-foreground">未分配产品线</span>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs text-muted-foreground">产品线:</span>
+                        {(user.productLines || []).length > 0 ? (
+                          user.productLines.map((pl) => (
+                            <ProductLineBadge key={pl} productLine={pl} />
+                          ))
+                        ) : (
+                          <span className="text-xs text-muted-foreground">未分配</span>
                         )}
                       </div>
 
@@ -457,6 +499,7 @@ export default function PermissionsOverviewPage() {
                                   key={`${pr.productId}-${pr.roles.join()}`}
                                   className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
                                 >
+                                  <ProductLineBadge productLine={pr.productLine} />
                                   <Badge
                                     variant="secondary"
                                     className="text-[9px] font-mono bg-primary/10 text-primary"
@@ -497,7 +540,7 @@ export default function PermissionsOverviewPage() {
       {/* Summary stats */}
       {!loading && filteredUsers.length > 0 && (
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span>共 {filteredUsers.length} 名用户</span>
+          <span>显示 {filteredUsers.length} / {users.length} 名用户</span>
           {isOperationalOnly && (
             <Badge variant="secondary" className="text-[10px]">
               仅显示当前用户
