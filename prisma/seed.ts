@@ -20,14 +20,7 @@ const USERS = [
     name: '李主管',
     email: 'supervisor@ipsc.com',
     role: 'SUPERVISOR' as const,
-    roles: '["SUPERVISOR","OPERATOR"]',  // 主管兼操作员
-    department: '生产部',
-  },
-  {
-    name: '张三',
-    email: 'operator@ipsc.com',
-    role: 'OPERATOR' as const,
-    roles: '["OPERATOR","QA"]',  // 操作员兼QA
+    roles: '["SUPERVISOR"]',
     department: '生产部',
   },
   {
@@ -35,6 +28,20 @@ const USERS = [
     email: 'qa@ipsc.com',
     role: 'QA' as const,
     roles: '["QA"]',
+    department: '质量部',
+  },
+  {
+    name: '张三',
+    email: 'operator@ipsc.com',
+    role: 'OPERATOR' as const,
+    roles: '["OPERATOR","QC"]',
+    department: '生产部',
+  },
+  {
+    name: '李质检',
+    email: 'qc@ipsc.com',
+    role: 'QC' as const,
+    roles: '["QC"]',
     department: '质量部',
   },
 ]
@@ -118,40 +125,45 @@ const PRODUCTS = [
   },
 ]
 
-// 用户-产品角色分配
-// 粒度: userId(通过email查找) + productCode + roles
+// 用户-产品角色分配（只存操作类角色: OPERATOR / QC）
 const USER_PRODUCT_ROLES: { email: string; productCode: string; roles: string[] }[] = [
-  // Admin: 所有产品都是 ADMIN
-  ...['IPSC-WT-001', 'NPC-001', 'SRV-REPG-001', 'SRV-EDIT-001', 'KIT-NDF-001', 'KIT-CDM-001'].flatMap(code => ({
-    email: 'admin@ipsc.com',
-    productCode: code,
-    roles: ['ADMIN'],
-  })),
+  // Admin 不需要产品级分配（天然全通）
 
-  // 李主管: 所有产品都是 SUPERVISOR
-  ...['IPSC-WT-001', 'NPC-001', 'SRV-REPG-001', 'SRV-EDIT-001', 'KIT-NDF-001', 'KIT-CDM-001'].flatMap(code => ({
-    email: 'supervisor@ipsc.com',
-    productCode: code,
-    roles: ['SUPERVISOR'],
-  })),
+  // 李主管(SUPERVISOR): 管理类不需要产品级角色，通过 UserProductLine 控制范围
 
-  // 张三: 细胞产品的操作员 + 服务项目的操作员
+  // 张三: 细胞产品的操作员，NPC 同时有生产和质检权限
   { email: 'operator@ipsc.com', productCode: 'IPSC-WT-001', roles: ['OPERATOR'] },
-  { email: 'operator@ipsc.com', productCode: 'NPC-001', roles: ['OPERATOR'] },
+  { email: 'operator@ipsc.com', productCode: 'NPC-001', roles: ['OPERATOR', 'QC'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-REPG-001', roles: ['OPERATOR'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['OPERATOR'] },
 
-  // 王QA: 细胞产品和服务项目的质检
-  { email: 'qa@ipsc.com', productCode: 'IPSC-WT-001', roles: ['QA'] },
-  { email: 'qa@ipsc.com', productCode: 'NPC-001', roles: ['QA'] },
-  { email: 'qa@ipsc.com', productCode: 'SRV-REPG-001', roles: ['QA'] },
-  { email: 'qa@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['QA'] },
-  { email: 'qa@ipsc.com', productCode: 'KIT-NDF-001', roles: ['QA'] },  // 试剂盒效力验证
-  { email: 'qa@ipsc.com', productCode: 'KIT-CDM-001', roles: ['QA'] },  // 试剂盒效力验证
+  // 李质检(QC): 细胞产品和服务项目的质检员
+  { email: 'qc@ipsc.com', productCode: 'IPSC-WT-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'NPC-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'SRV-REPG-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'KIT-NDF-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'KIT-CDM-001', roles: ['QC'] },
+]
+
+// 用户-产品线归属（ADMIN 配置，控制用户的活动范围）
+const USER_PRODUCT_LINES: { email: string; productLine: string }[] = [
+  // 李主管: 管理细胞产品和服务项目线
+  { email: 'supervisor@ipsc.com', productLine: 'CELL_PRODUCT' },
+  { email: 'supervisor@ipsc.com', productLine: 'SERVICE' },
+  // 王QA: 质量保证，归属细胞产品线
+  { email: 'qa@ipsc.com', productLine: 'CELL_PRODUCT' },
+  // 张三: 归属细胞产品和服务项目线
+  { email: 'operator@ipsc.com', productLine: 'CELL_PRODUCT' },
+  { email: 'operator@ipsc.com', productLine: 'SERVICE' },
+  // 李质检: 归属所有三条线
+  { email: 'qc@ipsc.com', productLine: 'CELL_PRODUCT' },
+  { email: 'qc@ipsc.com', productLine: 'SERVICE' },
+  { email: 'qc@ipsc.com', productLine: 'KIT' },
 ]
 
 async function main() {
-  console.log('🌱 Seeding database (v2.0 — 多产品线)...')
+  console.log('🌱 Seeding database (v2.0 — QA/QC分离 + 产品线归属)...')
 
   const hashedPassword = await bcrypt.hash('123456', 10)
 
@@ -195,6 +207,31 @@ async function main() {
     console.log(`    ✓ [${lineLabel}] ${prod.productName} (${prod.productCode})`)
   }
 
+  // 2.5. 创建用户-产品线归属
+  console.log('\n  ── 用户-产品线归属 ──')
+  const PRODUCT_LINE_LABELS: Record<string, string> = { SERVICE: '服务项目', CELL_PRODUCT: '细胞产品', KIT: '试剂盒' }
+  for (const upl of USER_PRODUCT_LINES) {
+    const user = await db.user.findUnique({ where: { email: upl.email } })
+    if (!user) {
+      console.log(`    ⚠ 跳过 ${upl.email} × ${upl.productLine}（用户不存在）`)
+      continue
+    }
+
+    await db.userProductLine.upsert({
+      where: {
+        userId_productLine: { userId: user.id, productLine: upl.productLine },
+      },
+      update: {},
+      create: {
+        userId: user.id,
+        productLine: upl.productLine,
+      },
+    })
+
+    const lineLabel = PRODUCT_LINE_LABELS[upl.productLine] || upl.productLine
+    console.log(`    ✓ ${upl.email.split('@')[0]} → ${lineLabel}`)
+  }
+
   // 3. 创建用户-产品角色关联
   console.log('\n  ── 用户-产品角色 ──')
   for (const upr of USER_PRODUCT_ROLES) {
@@ -227,6 +264,7 @@ async function main() {
   console.log('\n📊 Summary:')
   console.log(`  Users: ${USERS.length}`)
   console.log(`  Products: ${PRODUCTS.length} (细胞产品×2 + 服务项目×2 + 试剂盒×2)`)
+  console.log(`  User-Product Lines: ${USER_PRODUCT_LINES.length} 条归属`)
   console.log(`  User-Product Roles: ${USER_PRODUCT_ROLES.length} 条关联`)
   console.log('  Default password: 123456')
 }

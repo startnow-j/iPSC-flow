@@ -76,12 +76,12 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
     ],
     QC_PENDING: [
-      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['OPERATOR', 'QA'], label: '开始质检' },
+      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC', 'OPERATOR'], label: '开始质检' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
     ],
     QC_IN_PROGRESS: [
-      { to: 'QC_PASS', action: 'pass_qc', roles: ['QA', 'OPERATOR'], label: '质检合格' },
-      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QA', 'OPERATOR'], label: '质检不合格' },
+      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC', 'OPERATOR'], label: '质检合格' },
+      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QC', 'OPERATOR'], label: '质检不合格' },
     ],
     QC_PASS: [
       { to: 'COA_PENDING', action: 'generate_coa', roles: ['SYSTEM'], label: '生成CoA', auto: true },
@@ -159,12 +159,12 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
     ],
     QC_PENDING: [
-      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['OPERATOR', 'QA'], label: '开始质检' },
+      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC', 'OPERATOR'], label: '开始质检' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
     ],
     QC_IN_PROGRESS: [
-      { to: 'QC_PASS', action: 'pass_qc', roles: ['QA', 'OPERATOR'], label: '质检合格' },
-      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QA', 'OPERATOR'], label: '质检不合格' },
+      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC', 'OPERATOR'], label: '质检合格' },
+      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QC', 'OPERATOR'], label: '质检不合格' },
     ],
     QC_PASS: [
       { to: 'COA_PENDING', action: 'generate_coa', roles: ['SYSTEM'], label: '生成CoA', auto: true },

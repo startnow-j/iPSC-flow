@@ -16,6 +16,7 @@ export interface UserInfo {
   roles: string[]   // 所有角色
   department: string | null
   productRoles: ProductRoleAssignment[]
+  productLines: string[]  // 归属的产品线列表
 }
 
 interface AuthState {

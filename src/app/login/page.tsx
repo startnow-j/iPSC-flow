@@ -138,8 +138,9 @@ function LoginForm() {
           {[
             { label: '管理员', email: 'admin@ipsc.com' },
             { label: '生产主管', email: 'supervisor@ipsc.com' },
-            { label: '操作员', email: 'operator@ipsc.com' },
             { label: 'QA', email: 'qa@ipsc.com' },
+            { label: '操作员', email: 'operator@ipsc.com' },
+            { label: 'QC', email: 'qc@ipsc.com' },
           ].map((account) => (
             <button
               key={account.email}

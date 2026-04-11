@@ -49,6 +49,11 @@ export async function GET(request: NextRequest) {
             },
           },
         },
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
     })
 
@@ -88,6 +93,7 @@ export async function GET(request: NextRequest) {
         roles: roles,
         department: user.department,
         productRoles: productRoles,
+        productLines: user.productLines.map((pl) => pl.productLine),
       },
     })
   } catch (error) {

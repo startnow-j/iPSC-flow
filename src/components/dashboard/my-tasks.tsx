@@ -49,7 +49,7 @@ export function MyTasks() {
         params.set('status', 'IN_PRODUCTION')
       } else if (hasRole(userRoles, 'SUPERVISOR')) {
         params.set('status', 'COA_SUBMITTED')
-      } else if (hasRole(userRoles, 'QA')) {
+      } else if (hasRole(userRoles, 'QC')) {
         params.set('status', 'QC_PENDING')
       }
       // ADMIN sees everything
@@ -64,7 +64,7 @@ export function MyTasks() {
               action = '继续生产操作'
             } else if (hasRole(userRoles, 'SUPERVISOR') && b.status === 'COA_SUBMITTED') {
               action = '审核CoA'
-            } else if (hasRole(userRoles, 'QA') && b.status === 'QC_PENDING') {
+            } else if (hasRole(userRoles, 'QC') && b.status === 'QC_PENDING') {
               action = '开始质检'
             }
             return {
@@ -107,7 +107,7 @@ export function MyTasks() {
     if (hasRole(userRoles, 'OPERATOR')) {
       if (!seen.has('batches')) { actions.push({ label: '我的批次', icon: FlaskConical, href: '/batches' }); seen.add('batches') }
     }
-    if (hasRole(userRoles, 'QA')) {
+    if (hasRole(userRoles, 'QC')) {
       if (!seen.has('qc-pending')) { actions.push({ label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' }); seen.add('qc-pending') }
     }
     // Common action: add batch (available to OPERATOR, SUPERVISOR, ADMIN)

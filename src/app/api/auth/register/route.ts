@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate role
-    const validRoles = ['ADMIN', 'SUPERVISOR', 'OPERATOR', 'QA']
+    const validRoles = ['ADMIN', 'SUPERVISOR', 'OPERATOR', 'QA', 'QC']
     if (!validRoles.includes(role)) {
       return NextResponse.json(
         { error: '无效的角色类型' },

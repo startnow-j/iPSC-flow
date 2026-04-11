@@ -1,9 +1,41 @@
 ---
-Task ID: 1
+Task ID: Phase 0
 Agent: Main Agent
-Task: 对比分析两份iPSC生产管理系统开发计划，并创建融合版开发计划文档
+Task: 权限系统升级 Phase 0 — QA/QC 角色分离 + 产品线归属
 
 Work Log:
+- 读取 worklog.md 和全部 6 个待修改文件，了解现有代码结构
+- 确认 Prisma schema 中 UserProductLine 模型已存在（userId + productLine，唯一约束）
+- 修改 6 个文件完成 Phase 0 全部变更：
+
+**1. register/route.ts** — validRoles 增加 'QC'
+
+**2. login/route.ts** — db.user.findUnique 增加 productLines include；响应 JSON 增加 productLines 字段
+
+**3. me/route.ts** — 同 login，增加 productLines include 和响应字段
+
+**4. auth-store.ts** — UserInfo 接口增加 productLines: string[]
+
+**5. login/page.tsx** — 演示账号重排序（QA 在操作员前）+ 新增 QC 演示按钮（qc@ipsc.com）
+
+**6. prisma/seed.ts** — 最大改动：
+  - USERS 数组：5 个用户（新增 李质检 qc@ipsc.com），supervisor 去掉 OPERATOR 角色，operator 改为 OPERATOR+QC
+  - USER_PRODUCT_ROLES：移除 Admin/Supervisor 的管理角色条目，operator NPC 增加 QC 角色，新增 qc@ipsc.com 6 条 QC 记录
+  - USER_PRODUCT_LINES：新增常量，8 条用户-产品线归属关系
+  - main() 函数：新增 step 2.5 创建 UserProductLine 记录，更新 summary 和版本标识
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：6 个（register/route.ts、login/route.ts、me/route.ts、auth-store.ts、login/page.tsx、seed.ts）
+- 新增角色：QC（质检操作员），与 QA（质量保证）分离
+- QA 职责：质量保证、审计、CoA 审核（管理类角色）
+- QC 职责：实际质检操作（填写质检记录、判定结果），通过产品级角色分配
+- 新增数据：5 个用户、10 条产品角色、8 条产品线归属
+- 登录/me API 返回 productLines 字段，auth store 同步更新
+- 代码零新增 ESLint error/warning
+
 - 读取了用户上传的开发计划文档（传统LIMS方案，Spring Boot + React，20周，7人团队）
 - 读取了之前对话中产出的双模式交互架构设计文档（Intent Layer抽象，7项架构准备）
 - 进行了系统性的对比分析，从架构理念、功能范围、技术栈、项目管理、AI战略5个维度评估
@@ -1541,3 +1573,29 @@ Stage Summary:
 - prisma schema 已更新：新增 QC 枚举值，新增 UserProductLine 模型
 - 数据库已同步
 - §2.6 设计文档已完整重写（v2.0），涵盖角色体系、三级数据模型、双轨验证、四眼原则、配置职责、权限总览页面
+
+---
+Task ID: Phase 0
+Agent: Main Agent + full-stack-developer subagent
+Task: Phase 0 权限基础设施 — QA/QC分离 + 双轨验证 + 种子数据更新
+
+Work Log:
+- 重写 `src/lib/roles.ts`：新增 QC 到 VALID_ROLES/ROLE_LABELS/ROLE_COLORS，新增 MANAGEMENT_ROLES/OPERATIONAL_ROLES 常量，新增 canManage()+canOperate() 双轨验证函数，废弃 getProductRoles() 合并逻辑
+- 修正 `state-machine.ts`：start_qc/pass_qc/fail_qc 角色从 QA 改为 QC（3条产品线共6处），approve_coa 保持 SUPERVISOR+QA（管理类操作不变）
+- 更新 `api/auth/login` 和 `api/auth/me`：查询增加 productLines 关联，响应 JSON 增加 productLines 数组
+- 更新 `stores/auth-store.ts`：UserInfo 接口增加 productLines: string[]
+- 更新 `api/auth/register`：validRoles 加入 QC
+- 更新 `login/page.tsx`：新增 QC 演示账号按钮，调整顺序
+- 更新 `components/dashboard/my-tasks.tsx`：QC_PENDING 任务路由从 QA 改为 QC，快捷操作同步
+- 重写 `prisma/seed.ts`：5个用户（新增 qc@ipsc.com），operator 改为 ["OPERATOR","QC"]，新增 USER_PRODUCT_LINES（8条归属），UserProductRole 只存操作类角色（10条）
+- 运行 bun run seed 成功
+- 更新 `docs/plans/多产品线扩展计划-v1.0.md` v2.0：新增 Phase 0 章节，修正种子数据方案，更新依赖图，记录7处矛盾及修正方案
+- 更新 `PROJECT_DOCS.md`：开发计划状态更新为 Phase 0 开发中
+
+Stage Summary:
+- Phase 0 全部9个工作项（P0-1 到 P0-9）已完成
+- prisma schema 已在之前更新（QC枚举 + UserProductLine表）
+- 种子数据运行成功：5用户、8产品线归属、10产品角色关联
+- lint 通过（仅有预存的 generate-plan.js 错误）
+- dev server 编译正常
+- 准备进入 Phase 1 开发

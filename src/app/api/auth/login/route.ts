@@ -32,6 +32,11 @@ export async function POST(request: NextRequest) {
             },
           },
         },
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
     })
 
@@ -99,6 +104,7 @@ export async function POST(request: NextRequest) {
         roles: roles,
         department: user.department,
         productRoles: productRoles,
+        productLines: user.productLines.map((pl) => pl.productLine),
       },
     })
 
