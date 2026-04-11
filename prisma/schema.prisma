@@ -1,7 +1,7 @@
 // ============================================
-// iPSC 生产管理系统 — MVP Prisma Schema
-// 版本: v1.0
-// 基于: PRD v2.0 (MVP版)
+// iPSC 生产管理系统 — Prisma Schema
+// 版本: v2.0 (多产品线支持)
+// 基于: PRD v2.0 + 多产品线生产实现方案
 // 数据库: SQLite (String = TEXT, 无需VarChar注解)
 // ============================================
 
@@ -57,6 +57,13 @@ enum CoaStatus {
   REJECTED   // 已退回
 }
 
+/// 产品线
+enum ProductLine {
+  SERVICE        // 服务项目（订单驱动）
+  CELL_PRODUCT   // 细胞产品（库存驱动）
+  KIT            // 试剂盒（产品驱动）
+}
+
 // ============================================
 // 用户
 // ============================================
@@ -77,45 +84,52 @@ model User {
   qcRecords         QcRecord[]
   auditLogs         AuditLog[]
   conversations     Conversation[]
+  productRoles      UserProductRole[]
 
   @@map("user")
 }
 
 // ============================================
-// 产品定义（MVP: 预置，不支持前端配置）
+// 产品定义
 // ============================================
 model Product {
-  id               String   @id @default(cuid())
-  productCode      String   @unique               // 如 IPSC-WT-001
-  productName      String                          // 如 iPSC细胞株(野生型)
-  category         String                          // MVP固定为 CELL_PRODUCT
-  cellType         String                          // IPSC
-  specification    String                          // 1×10^6 cells/支
+  id               String      @id @default(cuid())
+  productCode      String      @unique               // 如 IPSC-WT-001
+  productName      String                             // 如 iPSC细胞株(野生型)
+  productLine      ProductLine @default(CELL_PRODUCT) // 产品线
+  category         String                             // 细分类别: REPROGRAM/EDIT/DIFF_SERVICE/IPSC/NPC/DIFF_KIT/MEDIUM
+  cellType         String?                            // IPSC / NPC / CM 等（仅细胞产品/服务）
+  specification    String                             // 1×10^6 cells/支
   storageCondition String?
-  shelfLife        String?                         // 如 5年
-  unit             String                          // 支
+  shelfLife        String?                            // 如 5年
+  unit             String                             // 支
   description      String?
-  active           Boolean  @default(true)
-  createdAt        DateTime @default(now())
+  active           Boolean     @default(true)
+  createdAt        DateTime    @default(now())
 
   batches          Batch[]
+  userRoles        UserProductRole[]
 
   @@map("product")
 }
 
 // ============================================
-// 批次（MVP: 仅细胞产品）
+// 批次
 // ============================================
 model Batch {
   id              String      @id @default(cuid())
 
   // 基础信息
-  batchNo         String      @unique               // IPSC-260410-003-P5
+  batchNo         String      @unique               // 如 IPSC-260410-003
   productCode     String
   productName     String
   productId       String
+  productLine     ProductLine @default(CELL_PRODUCT) // 产品线（冗余字段，便于查询过滤）
   specification   String
   unit            String
+
+  // 订单信息（服务项目关联）
+  orderNo         String?                            // 服务订单号
 
   // 状态
   status          BatchStatus @default(NEW)
@@ -375,4 +389,25 @@ model ConversationMessage {
   qcRecord            QcRecord?        @relation(fields: [relatedActionId], references: [id])
 
   @@map("conversation_message")
+}
+
+// ============================================
+// 用户-产品角色关联表
+// 粒度: 用户 + 具体产品 + 角色列表
+// 例: 张三在 IPSC-WT-001 上是 ["OPERATOR"]，在 NPC-001 上是 ["OPERATOR","QA"]
+// ============================================
+model UserProductRole {
+  id        String   @id @default(cuid())
+  userId    String
+  productId String
+  roles     String   @default("[]")  // JSON数组: ["OPERATOR","QA"]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productId])
+  @@map("user_product_role")
 }

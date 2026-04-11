@@ -7,6 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
+import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import { Clock, ArrowRight } from 'lucide-react'
 
 interface RecentBatch {
@@ -14,6 +15,7 @@ interface RecentBatch {
   batchNo: string
   productName: string
   status: string
+  productLine?: string
   createdAt: string
   createdByName: string
 }
@@ -99,9 +101,14 @@ export function RecentBatches() {
                     </span>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium font-mono truncate group-hover:text-primary transition-colors">
-                      {batch.batchNo}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium font-mono truncate group-hover:text-primary transition-colors">
+                        {batch.batchNo}
+                      </p>
+                      {batch.productLine && (
+                        <ProductLineBadge productLine={batch.productLine} />
+                      )}
+                    </div>
                     <p className="text-xs text-muted-foreground truncate">
                       {batch.productName} · {batch.createdByName}
                     </p>

@@ -1,5 +1,13 @@
 import { create } from 'zustand'
 
+export interface ProductRoleAssignment {
+  productId: string
+  productCode: string
+  productName: string
+  productLine: string
+  roles: string[]
+}
+
 export interface UserInfo {
   id: string
   name: string
@@ -7,6 +15,7 @@ export interface UserInfo {
   role: string       // 主角色
   roles: string[]   // 所有角色
   department: string | null
+  productRoles: ProductRoleAssignment[]
 }
 
 interface AuthState {

@@ -14,9 +14,25 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find user
+    // Find user with product roles
     const user = await db.user.findUnique({
       where: { email },
+      include: {
+        productRoles: {
+          where: { product: { active: true } },
+          select: {
+            productId: true,
+            roles: true,
+            product: {
+              select: {
+                productCode: true,
+                productName: true,
+                productLine: true,
+              },
+            },
+          },
+        },
+      },
     })
 
     if (!user) {
@@ -46,6 +62,23 @@ export async function POST(request: NextRequest) {
     // Parse user roles
     const roles = parseRoles(user.roles, user.role)
 
+    // Parse product role assignments
+    const productRoles = user.productRoles.map((pr) => {
+      let parsedRoles: string[] = []
+      try {
+        parsedRoles = JSON.parse(pr.roles)
+      } catch {
+        parsedRoles = []
+      }
+      return {
+        productId: pr.productId,
+        productCode: pr.product.productCode,
+        productName: pr.product.productName,
+        productLine: pr.product.productLine,
+        roles: parsedRoles,
+      }
+    })
+
     // Create JWT token
     const token = await createToken({
       userId: user.id,
@@ -65,6 +98,7 @@ export async function POST(request: NextRequest) {
         role: user.role,
         roles: roles,
         department: user.department,
+        productRoles: productRoles,
       },
     })
 

@@ -4,6 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import {
+  PRODUCT_LINE_LABELS,
+  BATCH_NO_PREFIXES,
+} from '@/lib/roles'
+import {
   Dialog,
   DialogContent,
   DialogHeader,
@@ -17,12 +21,15 @@ import { Label } from '@/components/ui/label'
 import {
   Select,
   SelectContent,
+  SelectGroup,
   SelectItem,
+  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FlaskConical, Loader2 } from 'lucide-react'
+import { FlaskConical, Loader2, ShoppingCart } from 'lucide-react'
 
 interface Product {
   id: string
@@ -30,7 +37,11 @@ interface Product {
   productName: string
   specification: string
   unit: string
+  productLine?: string
 }
+
+// 产品线显示顺序
+const PRODUCT_LINE_ORDER = ['CELL_PRODUCT', 'SERVICE', 'KIT']
 
 interface CreateBatchDialogProps {
   open: boolean
@@ -56,6 +67,17 @@ export function CreateBatchDialog({
   const [seedBatchNo, setSeedBatchNo] = useState('')
   const [seedPassage, setSeedPassage] = useState('')
   const [plannedEndDate, setPlannedEndDate] = useState('')
+  const [orderNo, setOrderNo] = useState('') // 订单号（仅服务项目）
+
+  // Derive selected product
+  const selectedProduct = products.find((p) => p.productCode === productCode)
+
+  // Batch number prefix based on product line
+  const batchNoPrefix = selectedProduct?.productLine
+    ? BATCH_NO_PREFIXES[selectedProduct.productLine] || 'IPSC'
+    : 'IPSC'
+
+  const isServiceProduct = selectedProduct?.productLine === 'SERVICE'
 
   // Batch number preview
   const batchNoPreview = (() => {
@@ -65,7 +87,7 @@ export function CreateBatchDialog({
       String(now.getFullYear()).slice(-2) +
       String(now.getMonth() + 1).padStart(2, '0') +
       String(now.getDate()).padStart(2, '0')
-    return `IPSC-${dateStr}-XXX-${seedPassage}`
+    return `${batchNoPrefix}-${dateStr}-XXX-${seedPassage}`
   })()
 
   const fetchProducts = useCallback(async () => {
@@ -73,10 +95,11 @@ export function CreateBatchDialog({
       const res = await authFetch('/api/products')
       if (res.ok) {
         const data = await res.json()
-        setProducts(data.products || [])
+        const list: Product[] = data.products || []
+        setProducts(list)
         // Auto-select first product if only one
-        if (data.products?.length === 1) {
-          setProductCode(data.products[0].productCode)
+        if (list.length === 1) {
+          setProductCode(list[0].productCode)
         }
       }
     } catch {
@@ -88,6 +111,7 @@ export function CreateBatchDialog({
           productName: 'iPSC细胞株(野生型)',
           specification: '1×10^6 cells/支',
           unit: '支',
+          productLine: 'CELL_PRODUCT',
         },
       ])
       setProductCode('IPSC-WT-001')
@@ -108,6 +132,7 @@ export function CreateBatchDialog({
     setSeedBatchNo('')
     setSeedPassage('')
     setPlannedEndDate('')
+    setOrderNo('')
     setError('')
   }
 
@@ -127,16 +152,22 @@ export function CreateBatchDialog({
 
     setSubmitting(true)
     try {
+      const body: Record<string, unknown> = {
+        productCode,
+        plannedQuantity: plannedQuantity ? Number(plannedQuantity) : null,
+        seedBatchNo: seedBatchNo || null,
+        seedPassage: seedPassage || null,
+        plannedEndDate: plannedEndDate || null,
+      }
+      // Add orderNo for SERVICE products
+      if (isServiceProduct && orderNo.trim()) {
+        body.orderNo = orderNo.trim()
+      }
+
       const res = await authFetch('/api/batches', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          productCode,
-          plannedQuantity: plannedQuantity ? Number(plannedQuantity) : null,
-          seedBatchNo: seedBatchNo || null,
-          seedPassage: seedPassage || null,
-          plannedEndDate: plannedEndDate || null,
-        }),
+        body: JSON.stringify(body),
       })
 
       const data = await res.json()
@@ -164,6 +195,17 @@ export function CreateBatchDialog({
     onOpenChange(open)
   }
 
+  // Group products by product line
+  const groupedProducts = (() => {
+    const groups: Record<string, Product[]> = {}
+    for (const p of products) {
+      const line = p.productLine || 'CELL_PRODUCT'
+      if (!groups[line]) groups[line] = []
+      groups[line].push(p)
+    }
+    return groups
+  })()
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-md">
@@ -178,7 +220,7 @@ export function CreateBatchDialog({
         </DialogHeader>
 
         <div className="space-y-4 py-2">
-          {/* Product Select */}
+          {/* Product Select — Grouped by Product Line */}
           <div className="space-y-2">
             <Label htmlFor="product">
               产品选择 <span className="text-destructive">*</span>
@@ -191,24 +233,72 @@ export function CreateBatchDialog({
                   <SelectValue placeholder="请选择产品" />
                 </SelectTrigger>
                 <SelectContent>
-                  {products.map((p) => (
-                    <SelectItem key={p.id} value={p.productCode}>
-                      <span className="font-medium">{p.productName}</span>
-                      <span className="ml-2 text-xs text-muted-foreground">
-                        ({p.productCode})
-                      </span>
-                    </SelectItem>
-                  ))}
+                  {PRODUCT_LINE_ORDER.filter((line) => groupedProducts[line]?.length).map(
+                    (line, lineIdx) => (
+                      <SelectGroup key={line}>
+                        <SelectLabel className="font-semibold text-foreground">
+                          {PRODUCT_LINE_LABELS[line] || line}
+                        </SelectLabel>
+                        {groupedProducts[line].map((p) => (
+                          <SelectItem key={p.id} value={p.productCode}>
+                            <span className="font-medium">{p.productName}</span>
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              ({p.productCode})
+                            </span>
+                          </SelectItem>
+                        ))}
+                        {lineIdx < PRODUCT_LINE_ORDER.length - 1 && (
+                          <div className="my-1 border-b" />
+                        )}
+                      </SelectGroup>
+                    ),
+                  )}
                 </SelectContent>
               </Select>
             )}
-            {productCode && (
+            {selectedProduct && (
               <p className="text-xs text-muted-foreground">
-                规格：{products.find((p) => p.productCode === productCode)?.specification || '-'}，
-                单位：{products.find((p) => p.productCode === productCode)?.unit || '-'}
+                规格：{selectedProduct.specification || '-'}，
+                单位：{selectedProduct.unit || '-'}
+                {selectedProduct.productLine && (
+                  <span className="ml-1">
+                    · {PRODUCT_LINE_LABELS[selectedProduct.productLine] || selectedProduct.productLine}
+                  </span>
+                )}
               </p>
             )}
           </div>
+
+          {/* Batch No Preview */}
+          {batchNoPreview && (
+            <div className="rounded-md bg-muted/50 px-3 py-2">
+              <p className="text-xs text-muted-foreground">
+                批次编号预览：<span className="font-mono font-medium text-foreground">{batchNoPreview}</span>
+              </p>
+              <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                前缀 {batchNoPrefix}- 由产品线自动确定
+              </p>
+            </div>
+          )}
+
+          {/* Order No — Only for SERVICE products */}
+          {isServiceProduct && (
+            <div className="space-y-2">
+              <Label htmlFor="orderNo" className="flex items-center gap-1.5">
+                <ShoppingCart className="h-3.5 w-3.5" />
+                订单号
+                <span className="text-xs text-muted-foreground font-normal">（可选，服务项目关联订单）</span>
+              </Label>
+              <Input
+                id="orderNo"
+                placeholder="如 ORD-2026-0001"
+                value={orderNo}
+                onChange={(e) => setOrderNo(e.target.value)}
+              />
+            </div>
+          )}
+
+          <Separator />
 
           {/* Planned Quantity */}
           <div className="space-y-2">
@@ -217,7 +307,7 @@ export function CreateBatchDialog({
               id="quantity"
               type="number"
               min={1}
-              placeholder="请输入计划数量（支）"
+              placeholder="请输入计划数量"
               value={plannedQuantity}
               onChange={(e) => setPlannedQuantity(e.target.value)}
             />
@@ -243,11 +333,6 @@ export function CreateBatchDialog({
               value={seedPassage}
               onChange={(e) => setSeedPassage(e.target.value)}
             />
-            {batchNoPreview && (
-              <p className="text-xs text-muted-foreground">
-                批次编号预览：<span className="font-mono font-medium">{batchNoPreview}</span>
-              </p>
-            )}
           </div>
 
           {/* Planned End Date */}
@@ -268,7 +353,7 @@ export function CreateBatchDialog({
 
           {/* Creator Info */}
           <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
-            创建人：{user?.name || '-'} · {user?.role || '-'}
+            创建人：{user?.name || '-'} · {user?.roles?.length ? user.roles.join(' / ') : user?.role || '-'}
           </div>
         </div>
 

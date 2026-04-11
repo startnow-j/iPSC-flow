@@ -44,6 +44,7 @@ import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
 import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
+import { ProductLineBadge } from '@/components/shared/product-line-badge'
 
 // ============================================
 // Types
@@ -57,6 +58,8 @@ interface BatchDetail {
   specification: string
   unit: string
   status: string
+  productLine?: string
+  orderNo?: string
   plannedQuantity: number | null
   actualQuantity: number | null
   seedBatchNo: string | null
@@ -648,9 +651,14 @@ export default function BatchDetailPage({
                 {getStatusLabel(batch.status)}
               </Badge>
             </div>
-            <p className="text-sm text-muted-foreground mt-1">
-              {batch.productName} · {batch.productCode}
-            </p>
+            <div className="flex items-center gap-2 mt-1 flex-wrap">
+              <p className="text-sm text-muted-foreground">
+                {batch.productName} · {batch.productCode}
+              </p>
+              {batch.productLine && (
+                <ProductLineBadge productLine={batch.productLine} />
+              )}
+            </div>
           </div>
         </div>
 
@@ -731,6 +739,13 @@ export default function BatchDetailPage({
                   label="规格"
                   value={`${batch.specification} / ${batch.unit}`}
                 />
+                {batch.orderNo && (
+                  <InfoRow
+                    icon={Hash}
+                    label="订单号"
+                    value={batch.orderNo}
+                  />
+                )}
                 <Separator className="my-1" />
                 <InfoRow
                   icon={Package}

@@ -3,10 +3,11 @@ import { db } from '@/lib/db'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { validateBatchCreation } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
-import type { BatchStatus } from '@prisma/client'
+import { BATCH_NO_PREFIXES } from '@/lib/roles'
+import type { BatchStatus, ProductLine } from '@prisma/client'
 
 // ============================================
-// GET /api/batches — 批次列表（分页 + 筛选）
+// GET /api/batches — 批次列表（分页 + 筛选 + 产品线过滤）
 // ============================================
 export async function GET(request: NextRequest) {
   try {
@@ -26,6 +27,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get('status') as BatchStatus | null
     const search = searchParams.get('search')
     const assignee = searchParams.get('assignee')
+    const productLine = searchParams.get('productLine') as ProductLine | null
     const page = Math.max(1, Number(searchParams.get('page')) || 1)
     const pageSize = Math.min(100, Math.max(1, Number(searchParams.get('pageSize')) || 20))
 
@@ -41,6 +43,9 @@ export async function GET(request: NextRequest) {
     if (assignee) {
       where.createdBy = assignee
     }
+    if (productLine) {
+      where.productLine = productLine
+    }
 
     // 并行查询：列表 + 总数 + 各状态计数
     const [batches, total, statusCounts] = await Promise.all([
@@ -54,8 +59,10 @@ export async function GET(request: NextRequest) {
           batchNo: true,
           productCode: true,
           productName: true,
+          productLine: true,
           specification: true,
           unit: true,
+          orderNo: true,
           status: true,
           plannedQuantity: true,
           actualQuantity: true,
@@ -101,7 +108,7 @@ export async function GET(request: NextRequest) {
 }
 
 // ============================================
-// POST /api/batches — 创建批次
+// POST /api/batches — 创建批次（多产品线支持）
 // ============================================
 export async function POST(request: NextRequest) {
   try {
@@ -118,11 +125,13 @@ export async function POST(request: NextRequest) {
     // 解析请求体
     const body = await request.json()
     const {
+      productId,
       productCode,
       plannedQuantity,
       plannedEndDate,
       seedBatchNo,
       seedPassage,
+      orderNo,
     } = body
 
     // 校验
@@ -138,26 +147,39 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 查询产品信息
-    const product = await db.product.findUnique({
-      where: { productCode: productCode.trim() },
-    })
+    // 查询产品信息（优先使用 productId，回退到 productCode）
+    let product
+    if (productId) {
+      product = await db.product.findUnique({
+        where: { id: productId },
+      })
+    } else if (productCode) {
+      product = await db.product.findUnique({
+        where: { productCode: productCode.trim() },
+      })
+    }
+
     if (!product) {
       return NextResponse.json(
-        { error: `产品 ${productCode} 不存在` },
+        { error: `产品不存在` },
         { status: 400 }
       )
     }
 
-    // 生成批次编号：IPSC-YYMMDD-序号-P{passage}
+    // 获取产品线前缀
+    const productLineKey = product.productLine as string
+    const prefix = BATCH_NO_PREFIXES[productLineKey] || 'BATCH'
+
+    // 生成批次编号：{PREFIX}-YYMMDD-序号
     const now = new Date()
     const dateStr =
       String(now.getFullYear()).slice(-2) +
       String(now.getMonth() + 1).padStart(2, '0') +
       String(now.getDate()).padStart(2, '0')
 
-    // 查询今天已有批次的最大序号
-    const batchNoPrefix = `IPSC-${dateStr}-`
+    const batchNoPrefix = `${prefix}-${dateStr}-`
+
+    // 查询今天已有同产品线批次的最大序号
     const todayBatches = await db.batch.findMany({
       where: { batchNo: { startsWith: batchNoPrefix } },
       select: { batchNo: true },
@@ -166,7 +188,7 @@ export async function POST(request: NextRequest) {
 
     let nextSeq = 1
     if (todayBatches.length > 0) {
-      // 从 batchNo 中提取序号部分（格式：IPSC-YYMMDD-XXX-Pn）
+      // 从 batchNo 中提取序号部分（格式：PREFIX-YYMMDD-XXX）
       for (const b of todayBatches) {
         const parts = b.batchNo.split('-')
         if (parts.length >= 3) {
@@ -187,6 +209,7 @@ export async function POST(request: NextRequest) {
         productCode: product.productCode,
         productName: product.productName,
         productId: product.id,
+        productLine: product.productLine,
         specification: product.specification,
         unit: product.unit,
         status: 'NEW',
@@ -195,6 +218,7 @@ export async function POST(request: NextRequest) {
         seedPassage: seedPassage || null,
         currentPassage: seedPassage || null,
         plannedEndDate: plannedEndDate ? new Date(plannedEndDate) : null,
+        orderNo: orderNo || null,
         createdBy: payload.userId,
         createdByName: payload.name,
       },
@@ -211,7 +235,9 @@ export async function POST(request: NextRequest) {
       dataAfter: {
         batchNo: batch.batchNo,
         productCode: batch.productCode,
+        productLine: batch.productLine,
         plannedQuantity: batch.plannedQuantity,
+        orderNo: batch.orderNo,
         seedBatchNo: batch.seedBatchNo,
         seedPassage: batch.seedPassage,
       },

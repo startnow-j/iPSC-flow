@@ -30,6 +30,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '@/components/ui/collapsible'
 import { hasAnyRole } from '@/lib/roles'
 import { ROLE_LABELS, ROLE_COLORS } from '@/lib/roles'
 import {
@@ -39,6 +44,8 @@ import {
   UserCheck,
   Trash2,
   ShieldAlert,
+  ChevronDown,
+  Package,
 } from 'lucide-react'
 
 interface UserItem {
@@ -51,6 +58,13 @@ interface UserItem {
   active: boolean
   createdAt: string
   updatedAt: string
+  productRoles?: ProductRoleAssignment[]
+}
+
+interface ProductRoleAssignment {
+  productCode: string
+  productName: string
+  roles: string[]
 }
 
 interface UserListProps {
@@ -61,6 +75,7 @@ interface UserListProps {
 export function UserList({ onEdit, onRefresh }: UserListProps) {
   const [users, setUsers] = useState<UserItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
   const [confirmAction, setConfirmAction] = useState<{
     type: 'disable' | 'enable'
     user: UserItem
@@ -87,6 +102,18 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
   useEffect(() => {
     fetchUsers()
   }, [fetchUsers])
+
+  const toggleExpanded = (userId: string) => {
+    setExpandedUsers((prev) => {
+      const next = new Set(prev)
+      if (next.has(userId)) {
+        next.delete(userId)
+      } else {
+        next.add(userId)
+      }
+      return next
+    })
+  }
 
   const handleToggleActive = async () => {
     if (!confirmAction) return
@@ -180,76 +207,119 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
           </TableHeader>
           <TableBody>
             {users.map((user) => (
-              <TableRow key={user.id} className={!user.active ? 'opacity-50' : ''}>
-                <TableCell>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{user.name}</span>
-                    {!user.active && (
-                      <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground">
-                        已禁用
-                      </Badge>
-                    )}
-                  </div>
-                </TableCell>
-                <TableCell className="text-sm text-muted-foreground">
-                  {user.email}
-                </TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-1 flex-wrap">
-                    {(user.roles || [user.role]).map((r) => (
-                      <Badge
-                        key={r}
-                        variant="secondary"
-                        className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
-                      >
-                        {ROLE_LABELS[r] || r}
-                      </Badge>
-                    ))}
-                  </div>
-                </TableCell>
-                <TableCell className="hidden sm:table-cell text-sm">
-                  {user.department || '-'}
-                </TableCell>
-                <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
-                  {formatDate(user.createdAt)}
-                </TableCell>
-                <TableCell>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <MoreHorizontal className="h-4 w-4" />
-                        <span className="sr-only">操作</span>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => onEdit(user)}>
-                        <Pencil className="mr-2 h-4 w-4" />
-                        编辑
-                      </DropdownMenuItem>
-                      {user.active ? (
-                        <DropdownMenuItem
-                          className="text-destructive focus:text-destructive"
-                          onClick={() =>
-                            setConfirmAction({ type: 'disable', user })
-                          }
-                        >
-                          <UserX className="mr-2 h-4 w-4" />
-                          禁用
-                        </DropdownMenuItem>
-                      ) : (
-                        <DropdownMenuItem
-                          onClick={() =>
-                            setConfirmAction({ type: 'enable', user })
-                          }
-                        >
-                          <UserCheck className="mr-2 h-4 w-4" />
-                          启用
-                        </DropdownMenuItem>
+              <>
+                <TableRow key={user.id} className={!user.active ? 'opacity-50' : ''}>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{user.name}</span>
+                      {!user.active && (
+                        <Badge variant="secondary" className="text-[10px] bg-muted text-muted-foreground">
+                          已禁用
+                        </Badge>
                       )}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
+                    </div>
+                  </TableCell>
+                  <TableCell className="text-sm text-muted-foreground">
+                    {user.email}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(user.roles || [user.role]).map((r) => (
+                        <Badge
+                          key={r}
+                          variant="secondary"
+                          className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                        >
+                          {ROLE_LABELS[r] || r}
+                        </Badge>
+                      ))}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden sm:table-cell text-sm">
+                    {user.department || '-'}
+                  </TableCell>
+                  <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
+                    {formatDate(user.createdAt)}
+                  </TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">操作</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => onEdit(user)}>
+                          <Pencil className="mr-2 h-4 w-4" />
+                          编辑
+                        </DropdownMenuItem>
+                        {user.active ? (
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() =>
+                              setConfirmAction({ type: 'disable', user })
+                            }
+                          >
+                            <UserX className="mr-2 h-4 w-4" />
+                            禁用
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            onClick={() =>
+                              setConfirmAction({ type: 'enable', user })
+                            }
+                          >
+                            <UserCheck className="mr-2 h-4 w-4" />
+                            启用
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
+                {/* Product Roles Expandable Row */}
+                {user.productRoles && user.productRoles.length > 0 && (
+                  <TableRow key={`${user.id}-roles`} className={!user.active ? 'opacity-50' : ''}>
+                    <TableCell colSpan={6} className="p-0">
+                      <Collapsible
+                        open={expandedUsers.has(user.id)}
+                        onOpenChange={() => toggleExpanded(user.id)}
+                      >
+                        <CollapsibleTrigger className="w-full flex items-center gap-2 px-4 py-1.5 text-xs text-muted-foreground hover:bg-muted/50 transition-colors">
+                          <ChevronDown className={`h-3 w-3 transition-transform ${expandedUsers.has(user.id) ? 'rotate-0' : '-rotate-90'}`} />
+                          <Package className="h-3 w-3" />
+                          <span>产品权限 ({user.productRoles.length})</span>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="px-4 pb-3 pt-1">
+                            <div className="flex flex-wrap gap-2">
+                              {user.productRoles.map((pr) => (
+                                <div key={pr.productCode} className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1.5">
+                                  <Badge variant="secondary" className="text-[10px] font-mono bg-primary/10 text-primary">
+                                    {pr.productCode}
+                                  </Badge>
+                                  <span className="text-xs text-muted-foreground">{pr.productName}</span>
+                                  <span className="text-muted-foreground/40">:</span>
+                                  {pr.roles.map((r) => (
+                                    <Badge
+                                      key={r}
+                                      variant="secondary"
+                                      className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                                    >
+                                      {ROLE_LABELS[r] || r}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </>
             ))}
             {users.length === 0 && (
               <TableRow>

@@ -5,6 +5,8 @@ import { authFetch } from '@/lib/auth-fetch'
 import { useRouter, usePathname } from 'next/navigation'
 import { useAuthStore } from '@/stores/auth-store'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
+import { PRODUCT_LINE_LABELS, PRODUCT_LINE_COLORS } from '@/lib/roles'
+import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -32,6 +34,8 @@ interface BatchItem {
   specification: string
   unit: string
   status: string
+  productLine?: string
+  orderNo?: string
   plannedQuantity: number | null
   actualQuantity: number | null
   seedBatchNo: string | null
@@ -73,6 +77,17 @@ const STATUS_FILTERS = [
 ]
 
 // ============================================
+// Product Line Filter Tabs
+// ============================================
+
+const PRODUCT_LINE_FILTERS = [
+  { key: '', label: '全部' },
+  { key: 'CELL_PRODUCT', label: '细胞产品' },
+  { key: 'SERVICE', label: '服务项目' },
+  { key: 'KIT', label: '试剂盒' },
+]
+
+// ============================================
 // Batch List Page Component
 // ============================================
 
@@ -92,6 +107,7 @@ export default function BatchListPage() {
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState('')
+  const [productLineFilter, setProductLineFilter] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -104,6 +120,7 @@ export default function BatchListPage() {
       params.set('page', String(page))
       params.set('pageSize', String(pageSize))
       if (statusFilter) params.set('status', statusFilter)
+      if (productLineFilter) params.set('productLine', productLineFilter)
       if (searchQuery) params.set('search', searchQuery)
       if (viewMode === 'my' && user?.id) params.set('assignee', user.id)
 
@@ -120,7 +137,7 @@ export default function BatchListPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, statusFilter, searchQuery, viewMode, user?.id])
+  }, [page, pageSize, statusFilter, productLineFilter, searchQuery, viewMode, user?.id])
 
   useEffect(() => {
     fetchBatches()
@@ -129,7 +146,7 @@ export default function BatchListPage() {
   // Reset page when filter/search changes
   useEffect(() => {
     setPage(1)
-  }, [statusFilter, searchQuery])
+  }, [statusFilter, searchQuery, productLineFilter])
 
   // Search debounce
   const handleSearch = () => {
@@ -173,7 +190,7 @@ export default function BatchListPage() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div className="space-y-3">
         {/* Status Filter Chips */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
           {STATUS_FILTERS.map((filter) => (
@@ -191,25 +208,47 @@ export default function BatchListPage() {
           ))}
         </div>
 
-        {/* Search */}
-        <div className="flex gap-2">
-          <div className="relative flex-1 sm:w-60">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              placeholder="搜索批次号..."
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-              className="pl-9"
-            />
+        {/* Product Line Filter + Search Row */}
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          {/* Product Line Filter Tabs */}
+          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+            {PRODUCT_LINE_FILTERS.map((filter) => (
+              <button
+                key={filter.key}
+                onClick={() => setProductLineFilter(filter.key)}
+                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  productLineFilter === filter.key
+                    ? filter.key
+                      ? `${PRODUCT_LINE_COLORS[filter.key] || ''} shadow-sm font-semibold`
+                      : 'bg-primary text-primary-foreground shadow-sm'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                {filter.label}
+              </button>
+            ))}
           </div>
-          <Button
-            variant="outline"
-            size="default"
-            onClick={handleSearch}
-          >
-            搜索
-          </Button>
+
+          {/* Search */}
+          <div className="flex gap-2">
+            <div className="relative flex-1 sm:w-60">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="搜索批次号..."
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+                className="pl-9"
+              />
+            </div>
+            <Button
+              variant="outline"
+              size="default"
+              onClick={handleSearch}
+            >
+              搜索
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -238,7 +277,7 @@ export default function BatchListPage() {
             </div>
             <h3 className="text-base font-medium mb-1">暂无批次数据</h3>
             <p className="text-sm text-muted-foreground text-center max-w-sm">
-              {searchQuery || statusFilter
+              {searchQuery || statusFilter || productLineFilter
                 ? '没有匹配的批次，请调整筛选条件'
                 : '点击上方「新建批次」按钮创建第一个生产批次'}
             </p>
@@ -261,7 +300,7 @@ export default function BatchListPage() {
                         <FlaskConical className="h-4 w-4 text-primary" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="font-semibold text-sm truncate">
                             {batch.batchNo}
                           </span>
@@ -271,9 +310,15 @@ export default function BatchListPage() {
                           >
                             {getStatusLabel(batch.status)}
                           </Badge>
+                          {batch.productLine && (
+                            <ProductLineBadge productLine={batch.productLine} />
+                          )}
                         </div>
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
                           {batch.productName}
+                          {batch.orderNo && (
+                            <span className="ml-2 font-mono">订单: {batch.orderNo}</span>
+                          )}
                         </p>
                       </div>
                     </div>

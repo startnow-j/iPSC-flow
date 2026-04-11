@@ -892,3 +892,127 @@ Stage Summary:
 - 修改文件：`src/components/qc/qc-form.tsx`, `src/components/coa/coa-detail.tsx`
 - 新提交的 QC 记录：细胞形态显示"正常"/"异常"，支原体检测显示"阴性"/"阳性"
 - 历史已提交的 QC 记录（无 resultValue）：fallback 显示"合格"/"不合格"
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: 阶段1-产品线+产品基础架构规划讨论
+
+Work Log:
+- 回顾PRD v2.0 MVP文档、生产管理流程规划方案、多产品线生产实现方案
+- 对比已实现功能 vs 实际业务需求，识别关键缺失
+- 讨论并确认分4阶段扩展方案
+- 确认用户-产品线关联粒度为"用户+具体产品+角色"
+
+Stage Summary:
+- 决策：采用4阶段扩展（产品线基础→多流程状态机→UI适配→AI对话）
+- 决策：用户权限粒度为 user+product+roles（最细粒度，一次到位）
+- 待实现产品：服务(重编程建系/基因编辑)、细胞产品(iPSC/NPC)、试剂盒(神经分化/心肌分化)
+- 下一步：实施阶段1数据库改造+种子数据+权限基础设施
+
+---
+Task ID: 7-a
+Agent: Backend Infrastructure Developer
+Task: Backend multi-product-line permission infrastructure
+
+Work Log:
+- 读取 worklog.md 和 prisma/schema.prisma，了解现有数据模型和项目历史
+- 读取 src/lib/roles.ts、src/lib/auth.ts、src/stores/auth-store.ts 了解现有角色系统
+- 读取 src/app/api/auth/me/route.ts、src/app/api/auth/login/route.ts、src/app/api/products/route.ts、src/app/api/batches/route.ts 了解现有 API 实现
+
+**1. 更新 src/lib/roles.ts — 产品线常量和 getProductRoles 函数**
+- 新增 PRODUCT_LINE_LABELS：SERVICE(服务项目)、CELL_PRODUCT(细胞产品)、KIT(试剂盒)
+- 新增 PRODUCT_LINE_COLORS：SERVICE(violet)、CELL_PRODUCT(emerald)、KIT(amber)，含 dark mode 样式
+- 新增 CATEGORY_LABELS：IPSC/NPC/REPROGRAM/EDIT/DIFF_SERVICE/DIFF_KIT/MEDIUM 中文映射
+- 新增 BATCH_NO_PREFIXES：SERVICE(SRV)、CELL_PRODUCT(IPSC)、KIT(KIT)
+- 新增 getProductRoles() 函数：合并用户全局角色和产品特定角色（并集/去重）
+
+**2. 更新 /api/auth/me — 返回 productRoles**
+- 查询时 include user.productRoles，关联 product 信息（productCode/productName/productLine）
+- 过滤仅活跃产品（product.active = true）
+- 解析 JSON roles 字段，返回 productRoles 数组
+- 响应格式：{ user: { ..., productRoles: [{ productId, productCode, productName, productLine, roles }] } }
+
+**3. 更新 /api/auth/login — 返回 productRoles**
+- 查询用户时 include productRoles + product 信息
+- 与 /api/auth/me 相同的 productRoles 解析逻辑
+- 登录响应包含 productRoles 数组
+
+**4. 更新 /api/products — 返回 productLine 和 groupedByLine**
+- select 新增 productLine 字段
+- 新增 groupedByLine 计算：按 productLine 分组产品列表
+- 响应格式：{ products: [...], groupedByLine: { CELL_PRODUCT: [...], SERVICE: [...], KIT: [...] } }
+
+**5. 更新 /api/batches POST — 多产品线批次创建**
+- 支持 productId（优先）和 productCode（回退）两种查找方式
+- 从 product 获取 productLine、productCode、productName、specification、unit
+- 使用 BATCH_NO_PREFIXES[productLine] 生成批次前缀（IPSC/SRV/KIT）
+- 按产品线前缀统计当天序号（不再硬编码 IPSC 前缀）
+- 存储 productLine 和 orderNo（服务项目订单号）到批次记录
+- 审计日志包含 productLine 和 orderNo
+
+**6. 更新 /api/batches GET — productLine 过滤**
+- 新增 productLine 查询参数（ProductLine 枚举类型）
+- 添加到 where 条件：where.productLine = productLine
+- select 新增 productLine 和 orderNo 字段
+
+**7. 更新 src/stores/auth-store.ts — ProductRoleAssignment 接口**
+- 新增 ProductRoleAssignment 接口：productId/productCode/productName/productLine/roles
+- UserInfo 接口新增 productRoles: ProductRoleAssignment[]
+
+- Lint 检查通过：仅剩预存 generate-plan.js 2 个 error，本任务零新增
+- Dev server 正常编译运行，无编译错误
+
+Stage Summary:
+- 修改文件：src/lib/roles.ts（4个常量 + getProductRoles 函数）
+- 修改文件：src/app/api/auth/me/route.ts（productRoles 查询与返回）
+- 修改文件：src/app/api/auth/login/route.ts（productRoles 查询与返回）
+- 修改文件：src/app/api/products/route.ts（productLine + groupedByLine）
+- 修改文件：src/app/api/batches/route.ts（多产品线批次创建 + productLine 过滤）
+- 修改文件：src/stores/auth-store.ts（ProductRoleAssignment 接口）
+- 批次编号生成：根据产品线前缀动态生成（IPSC-YYMMDD-NNN / SRV-YYMMDD-NNN / KIT-YYMMDD-NNN）
+- 产品角色合并策略：全局角色 ∪ 产品特定角色（并集去重）
+- API 响应格式已统一扩展：auth/user 包含 productRoles，products 包含 groupedByLine，batches 支持 productLine 过滤
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: 7-a
+Agent: Backend Infrastructure Developer
+Task: Backend multi-product-line permission infrastructure
+
+Work Log:
+- Updated src/lib/roles.ts with product-line constants (PRODUCT_LINE_LABELS, PRODUCT_LINE_COLORS, CATEGORY_LABELS, BATCH_NO_PREFIXES)
+- Added getProductRoles() function: merges product-specific roles with global roles (union semantics)
+- Updated /api/auth/me: queries UserProductRole table, returns productRoles array with product details
+- Updated /api/auth/login: same productRoles response as /api/auth/me
+- Updated /api/products: returns productLine field + groupedByLine in response
+- Updated /api/batches POST: supports productLine-specific batch number generation (SRV-/IPSC-/KIT-), stores orderNo for SERVICE
+- Updated /api/batches GET: added productLine query parameter for filtering
+- Updated src/stores/auth-store.ts: added ProductRoleAssignment interface, productRoles to UserInfo
+
+Stage Summary:
+- roles.ts: 6 new exports (PRODUCT_LINE_LABELS/COLORS, CATEGORY_LABELS, BATCH_NO_PREFIXES, getProductRoles)
+- Auth APIs: /api/auth/me and /api/auth/login now return user.productRoles array
+- Products API: /api/products returns { products, groupedByLine: { CELL_PRODUCT: [...], SERVICE: [...], KIT: [...] } }
+- Batch API: dynamic batch number prefixes per product line, orderNo support for SERVICE
+- Zero new lint errors
+
+---
+Task ID: 7-b
+Agent: Main Agent
+Task: Frontend multi-product-line UI adaptation
+
+Work Log:
+- Created src/components/shared/product-line-badge.tsx: reusable ProductLineBadge component with color by product line
+- Updated src/components/batches/create-batch-dialog.tsx: products grouped by product line in Select, orderNo field for SERVICE, batch number prefix preview
+- Updated src/app/batches/page.tsx: product line filter tabs (全部/细胞产品/服务项目/试剂盒), productLine badge on each batch card
+- Updated src/app/batches/[id]/page.tsx: productLine badge in header, orderNo display in overview
+- Updated src/components/dashboard/recent-batches.tsx: productLine badge on recent batch items
+- Batch list supports both status + productLine filters simultaneously
+
+Stage Summary:
+- ProductLineBadge shared component with dark mode support
+- Create batch dialog: 3 product line groups, SERVICE shows orderNo input
+- Batch list: product line filter row with colored active state
+- All batch cards/headers show productLine badge
+- Zero new lint errors
