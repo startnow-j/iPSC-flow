@@ -1762,3 +1762,26 @@ Stage Summary:
 - Eliminates Radix UI `usePresence` infinite loop bug
 - All three dialog pages (users, products, batches) reverted to clean original patterns
 - Lint passes, dev server compiles cleanly
+
+---
+Task ID: 3b
+Agent: Main
+Task: Fix persistent Radix UI usePresence infinite loop in Dialog components
+
+Work Log:
+- Previous attempts (removing CSS animation classes, forceMount props) failed because the Turbopack dev server caches compiled Radix UI chunks that include the usePresence hook
+- Created `src/components/ui/simple-dialog.tsx` — a lightweight custom modal that does NOT use Radix UI's usePresence system at all
+  - Implements overlay click-to-close, Escape key handler, body scroll lock
+  - No animation, no presence tracking, no ref callback loops
+  - Exports: Dialog, DialogHeader, DialogFooter, DialogTitle, DialogDescription
+- Updated all three dialog components to use SimpleDialog instead of Radix Dialog:
+  - `src/components/users/create-user-dialog.tsx`
+  - `src/components/products/create-product-dialog.tsx`
+  - `src/components/batches/create-batch-dialog.tsx`
+- Cleared `.next/dev/static/chunks` Turbopack cache
+
+Stage Summary:
+- Complete bypass of Radix UI usePresence system for all form dialogs
+- Product line selection checkboxes in CreateUserDialog no longer trigger infinite loop
+- All three dialog pages compile and render correctly
+- Lint passes (only pre-existing generate-plan.js errors)

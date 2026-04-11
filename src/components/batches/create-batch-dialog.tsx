@@ -9,12 +9,11 @@ import {
 } from '@/lib/roles'
 import {
   Dialog,
-  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
   DialogFooter,
-} from '@/components/ui/dialog'
+} from '@/components/ui/simple-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -230,8 +229,7 @@ export function CreateBatchDialog({
   })()
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-md">
+    <Dialog open={open} onOpenChange={handleOpenChange} className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FlaskConical className="h-5 w-5 text-primary" />
@@ -428,7 +426,6 @@ export function CreateBatchDialog({
             确认创建
           </Button>
         </DialogFooter>
-      </DialogContent>
     </Dialog>
   )
 }

@@ -9,12 +9,11 @@ import {
 } from '@/lib/roles'
 import {
   Dialog,
-  DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '@/components/ui/simple-dialog'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -259,8 +258,7 @@ export function CreateProductDialog({
   const isValid = productName.trim() && category.trim() && unit.trim() && productCode.trim()
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+    <Dialog open={open} onOpenChange={handleOpenChange} className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? '编辑产品' : '新建产品'}</DialogTitle>
           <DialogDescription>
@@ -483,7 +481,6 @@ export function CreateProductDialog({
             </Button>
           </DialogFooter>
         </form>
-      </DialogContent>
     </Dialog>
   )
 }

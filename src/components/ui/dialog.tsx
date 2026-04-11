@@ -37,8 +37,9 @@ function DialogOverlay({
   return (
     <DialogPrimitive.Overlay
       data-slot="dialog-overlay"
+      forceMount
       className={cn(
-        "fixed inset-0 z-50 bg-black/50 transition-opacity",
+        "fixed inset-0 z-50 bg-black/50",
         className
       )}
       {...props}
@@ -55,10 +56,11 @@ function DialogContent({
   showCloseButton?: boolean
 }) {
   return (
-    <DialogPortal data-slot="dialog-portal">
+    <DialogPortal forceMount>
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        forceMount
         className={cn(
           "bg-background fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg sm:max-w-lg",
           className
