@@ -29,6 +29,9 @@ import {
   Eye,
   EyeOff,
   PackageMinus,
+  FlaskConical,
+  GitBranch,
+  PenLine,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasRole } from '@/lib/roles'
@@ -258,8 +261,18 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
                   <InfoItem label="种子代次" value={coa.content.seedPassage} />
                   <InfoItem label="当前代次" value={coa.content.currentPassage} />
                   <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} 支` : null} />
-                  <InfoItem label="实际数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 支` : null} />
+                  <InfoItem label="生产数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 支` : null} />
                   <InfoItem label="存储位置" value={coa.content.storageLocation} />
+                  <InfoItem
+                    label="质检消耗"
+                    value={coa.content.totalConsumedVials != null && coa.content.totalConsumedVials > 0
+                      ? `${coa.content.totalConsumedVials} 支`
+                      : '0 支'}
+                  />
+                  <InfoItem
+                    label="可发放数量"
+                    value={coa.content.releaseQuantity != null ? `${coa.content.releaseQuantity} 支` : null}
+                  />
                 </div>
               </div>
 
@@ -267,19 +280,17 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
             </>
           )}
 
-          {/* Release Quantity — only in customer view */}
-          {isCustomerView && coa.content.releaseQuantity != null && (
+          {/* Passage Information — only in customer view */}
+          {isCustomerView && (
             <>
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
-                  <PackageMinus className="h-4 w-4 text-primary" />
-                  发放数量
+                  <GitBranch className="h-4 w-4 text-primary" />
+                  代次信息
                 </h3>
                 <div className="grid gap-3 sm:grid-cols-2 text-sm">
-                  <InfoItem label="发放数量" value={`${coa.content.releaseQuantity} 支`} />
-                  {coa.content.totalConsumedVials != null && coa.content.totalConsumedVials > 0 && (
-                    <InfoItem label="质检消耗" value={`${coa.content.totalConsumedVials} 支`} />
-                  )}
+                  <InfoItem label="种子代次" value={coa.content.seedPassage} />
+                  <InfoItem label="最终代次" value={coa.content.currentPassage} />
                 </div>
               </div>
 
@@ -363,7 +374,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
 
           <Separator />
 
-          {/* Review History — only in internal view */}
+          {/* Review History — internal view shows full history */}
           {!isCustomerView && (
             <div>
               <h3 className="text-sm font-semibold mb-3">审核记录</h3>
@@ -384,6 +395,20 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
                 {coa.approvedByName && (
                   <InfoItem label="批准人" value={coa.approvedByName} extra={coa.approvedAt ? formatDate(coa.approvedAt) : ''} />
                 )}
+              </div>
+            </div>
+          )}
+
+          {/* Approval Signature — only in customer view (final review) */}
+          {isCustomerView && (
+            <div>
+              <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                <PenLine className="h-4 w-4 text-primary" />
+                审核签字
+              </h3>
+              <div className="space-y-2 text-sm">
+                <InfoItem label="审核批准人" value={coa.approvedByName} />
+                <InfoItem label="批准日期" value={coa.approvedAt ? formatDate(coa.approvedAt) : null} />
               </div>
             </div>
           )}

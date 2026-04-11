@@ -835,3 +835,45 @@ Stage Summary:
 - 数据模型：actualQuantity 保持原始生产数量不变，剩余数量动态计算
 - QC 消耗的复苏支数存储在 qcRecord.sampleQuantity 中
 - 代码零新增 ESLint error/warning
+- 添加内部视图/客户视图切换按钮（ViewMode toggle）
+- 内部视图：显示完整生产信息 + 审核记录
+- 客户视图：隐藏生产信息，仅显示发放数量 + 水印提示
+- 更新 lucide-react 图标导入（FlaskConical, GitBranch, PenLine）
+
+**2. CoA 双视图字段调整（本次修改）**
+- 内部视图修改：
+  - "实际数量" → 重命名为 "生产数量"
+  - 新增 "质检消耗" 字段（totalConsumedVials，显示各轮质检复苏总支数）
+  - 新增 "可发放数量" 字段（releaseQuantity，生产数量 - 质检消耗）
+- 客户视图修改：
+  - 移除整个 "发放数量" 区块（原显示 releaseQuantity 和 totalConsumedVials）
+  - 新增 "代次信息" 区块（种子代次 + 最终代次，GitBranch 图标）
+  - 新增 "审核签字" 区块（审核批准人 + 批准日期，PenLine 图标）
+  - 保留客户版本水印提示
+
+Stage Summary:
+- 修改文件：`src/components/coa/coa-detail.tsx`
+- 内部视图完整字段：种子批号/种子代次/当前代次/计划数量/生产数量/存储位置/质检消耗/可发放数量
+- 客户视图完整字段：产品信息 + 代次信息（种子代次/最终代次）+ 质检结果 + 审核签字（批准人/日期）
+- 后端无需修改，CoA content 中的 releaseQuantity/totalConsumedVials 已在 CoA 生成时计算好
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: 4-c
+Agent: Main Agent
+Task: CoA 双视图字段精细化调整
+
+Work Log:
+- 分析用户反馈：内部视图需要展示质检消耗和可发放数量，客户版本不需要发放数量但需要代次信息和审核签字
+- 读取 coa-detail.tsx 完整代码（571行）
+- 确认状态机中 CoA 生成逻辑已包含 releaseQuantity 和 totalConsumedVials 字段
+- 修改内部视图：重命名"实际数量"为"生产数量"，新增"质检消耗"和"可发放数量"
+- 修改客户视图：移除发放数量区块，新增代次信息区块和审核签字区块
+- 添加新图标导入：GitBranch、PenLine
+- Dev server 编译成功，lint 通过
+
+Stage Summary:
+- 修改文件：`src/components/coa/coa-detail.tsx`
+- 内部视图（8个字段）：种子批号、种子代次、当前代次、计划数量、生产数量、存储位置、质检消耗、可发放数量
+- 客户视图（4个区块）：产品信息、代次信息（种子代次+最终代次）、质检结果+综合判定、审核签字（批准人+日期）
+- 数据来源：CoaContent JSON（状态机生成）+ CoaRecord 审核字段（审批API写入）
