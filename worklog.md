@@ -1519,3 +1519,25 @@ Stage Summary:
 - 修复 bug：产品编辑对话框现在正确回显当前值
 - 分析结论：参考文档作为 Phase 3.5 模板配置引擎的蓝本，不替代当前 Phase 2-3 的硬编码方案
 - 已有设计决策记录在 docs/plans/多产品线扩展计划-v1.0.md（§2.6 权限体系 + §2.7 导航架构）
+---
+Task ID: 1
+Agent: Main Agent
+Task: §2.6 权限体系设计 v2.0 — QA/QC 分离 + 产品线归属 + 四眼原则
+
+Work Log:
+- 分析了现有四角色体系（ADMIN/SUPERVISOR/OPERATOR/QA）中 QA 角色语义模糊的问题
+- 与用户讨论确认采用"思路一：QA+QC 分离"方案
+- 确认 QA 为管理类角色（产品线级），QC 为操作类角色（产品级）
+- 确认产品线归属（UserProductLine）由 ADMIN 配置
+- 确认 SUPERVISOR 在自己产品线内分配具体产品操作权限
+- 确认四眼原则：同一人不能在同一批次中既做生产又做质检
+- 确认 OPERATOR/QC 可以在权限总览页面查看自己的权限（只读）
+- 确认 QA 也需要指定产品线（与 SUPERVISOR 同理）
+- 更新了 prisma schema：Role 枚举增加 QC，新增 UserProductLine 表，UserProductLine 注释更新
+- 执行 db:push 成功
+- 重写了 §2.6 设计文档（v1.0 → v2.0），包含 11 个子章节
+
+Stage Summary:
+- prisma schema 已更新：新增 QC 枚举值，新增 UserProductLine 模型
+- 数据库已同步
+- §2.6 设计文档已完整重写（v2.0），涵盖角色体系、三级数据模型、双轨验证、四眼原则、配置职责、权限总览页面

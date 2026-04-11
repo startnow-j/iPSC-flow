@@ -19,11 +19,14 @@ datasource db {
 // ============================================
 
 /// 用户角色
+/// 管理类: ADMIN(全局), SUPERVISOR(产品线级), QA(产品线级)
+/// 操作类: QC(产品级), OPERATOR(产品级)
 enum Role {
-  ADMIN      // 管理员
-  SUPERVISOR // 生产主管
-  OPERATOR   // 生产操作员
-  QA         // QA
+  ADMIN       // 管理员 — 全局，天然全通
+  SUPERVISOR  // 生产主管 — 产品线级，需指定产品线
+  QA          // 质量保证 — 产品线级，需指定产品线
+  QC          // 质量控制 — 产品级，需具体产品授权
+  OPERATOR    // 生产操作员 — 产品级，需具体产品授权
 }
 
 /// 批次状态（15种，状态机驱动，按产品线分组）
@@ -95,6 +98,7 @@ model User {
   auditLogs         AuditLog[]
   conversations     Conversation[]
   productRoles      UserProductRole[]
+  productLines      UserProductLine[]
 
   @@map("user")
 }
@@ -406,15 +410,37 @@ model ConversationMessage {
 }
 
 // ============================================
+// 用户-产品线归属表
+// ADMIN 配置：决定用户的活动范围
+// 例: 张三属于 [CELL_PRODUCT, KIT] 两条产品线
+// SUPERVISOR/QA 必须被分配到产品线才能管理该线
+// ============================================
+model UserProductLine {
+  id          String   @id @default(cuid())
+  userId      String
+  productLine String   // "SERVICE" | "CELL_PRODUCT" | "KIT"
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, productLine])
+  @@map("user_product_line")
+}
+
+// ============================================
 // 用户-产品角色关联表
-// 粒度: 用户 + 具体产品 + 角色列表
-// 例: 张三在 IPSC-WT-001 上是 ["OPERATOR"]，在 NPC-001 上是 ["OPERATOR","QA"]
+// SUPERVISOR 配置：在自己产品线内给成员分配操作类角色
+// 粒度: 用户 + 具体产品 + 操作类角色列表
+// 只存操作类角色: ["OPERATOR"] 或 ["QC"] 或 ["OPERATOR","QC"]
+// 例: 张三在 IPSC-WT-001 上是 ["OPERATOR"]，在 NPC-001 上是 ["QC"]
 // ============================================
 model UserProductRole {
   id        String   @id @default(cuid())
   userId    String
   productId String
-  roles     String   @default("[]")  // JSON数组: ["OPERATOR","QA"]
+  roles     String   @default("[]")  // JSON数组: 只存操作类角色 ["OPERATOR","QC"]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
