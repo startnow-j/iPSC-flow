@@ -1807,3 +1807,23 @@ Stage Summary:
 - dialog.tsx 恢复标准 shadcn/ui 状态（含动画类），仅用于 command.tsx
 - 三个 create-*-dialog 组件已成功迁移到 SimpleDialog（纯 React 实现，无 Radix UI 依赖）
 - 所有页面编译正常，API 响应 200 OK
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: 修复 CheckboxIndicator usePresence 无限循环 — 替换 Radix Checkbox/Switch
+
+Work Log:
+- 分析错误堆栈，定位到 `CheckboxIndicator` 组件（来自 @radix-ui/react-checkbox）使用了 Radix 的 `usePresence` hook
+- `usePresence` 在 Checkbox 状态变化时触发 ref 回调导致 setState 无限循环
+- 重建 `src/components/ui/checkbox.tsx`：纯 React 实现，使用 `<button role="checkbox">` + 条件渲染 CheckIcon，不依赖 Radix UI
+- 保持完全相同的 API（checked, onCheckedChange, disabled, className）和视觉效果（CSS 类完全一致）
+- 重建 `src/components/ui/switch.tsx`：同理替换 Radix Switch 为纯 React 实现（预防性修复）
+- 清除 Turbopack 缓存并重启开发服务器
+- 验证 /users 页面编译成功（200 OK），无报错
+
+Stage Summary:
+- 根本原因：Radix UI CheckboxPrimitive.Indicator 的 usePresence hook 在对话框内状态快速变化时触发无限循环
+- 修复：用纯 React 实现替代 Radix Checkbox 和 Switch，完全消除 usePresence 依赖
+- 影响范围：CreateUserDialog（角色选择、产品线选择）、CreateBatchDialog（鉴定项目）、settings/product-roles（角色分配）
+- dev server 正常运行，所有页面编译通过
