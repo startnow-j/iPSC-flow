@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import { getRoleDisplay } from '@/lib/roles'
@@ -44,7 +45,7 @@ const STAT_DEFS: {
   { key: 'COA_SUBMITTED', title: '待审核', icon: FileCheck, color: 'text-teal-600 dark:text-teal-400', dotColor: 'bg-teal-400', href: '/batches/all?status=COA_SUBMITTED' },
   { key: 'COA_APPROVED', title: '已批准', icon: ShieldCheck, color: 'text-cyan-600 dark:text-cyan-400', dotColor: 'bg-cyan-400', href: '/batches/all?status=COA_APPROVED' },
   { key: 'RELEASED', title: '已放行', icon: CheckCircle2, color: 'text-emerald-600 dark:text-emerald-400', dotColor: 'bg-emerald-400', href: '/batches/all?status=RELEASED' },
-  { key: 'SCRAPPED', title: '已报废', icon: Trash2, color: 'text-stone-600 dark:text-stone-400', dotColor: 'bg-stone-400', href: '/batches/all?status=SCRAPPED' },
+  { key: 'SCRAPPED', title: '已报废', icon: Trash2, color: 'text-stone-500 dark:text-stone-400', dotColor: 'bg-stone-400', href: '/batches/all?status=SCRAPPED' },
 ]
 
 export default function HomePage() {
@@ -89,9 +90,8 @@ export default function HomePage() {
 
   return (
     <div className="space-y-4">
-      {/* Welcome Banner + Compact Stats */}
+      {/* Welcome Banner */}
       <div className="rounded-xl bg-gradient-to-r from-teal-500 to-emerald-600 p-5 text-white shadow-lg shadow-teal-500/20">
-        {/* Row 1: Greeting + Date */}
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-xl font-bold">
@@ -112,18 +112,20 @@ export default function HomePage() {
             </span>
           </div>
         </div>
+      </div>
 
-        {/* Row 2: Compact Stats */}
-        <div className="mt-4 flex items-center gap-2 flex-wrap">
-          {/* Scope Toggle */}
-          <div className="flex items-center gap-0.5 rounded-md bg-white/15 p-0.5 mr-1">
+      {/* Compact Stats Bar */}
+      <div className="rounded-xl border bg-card shadow-sm">
+        <div className="flex items-center justify-between px-4 pt-3 pb-1">
+          <h2 className="text-sm font-semibold">批次概览</h2>
+          <div className="flex items-center gap-1 rounded-md bg-muted p-0.5">
             <button
               onClick={() => setScope('global')}
               className={cn(
                 'flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-all',
                 scope === 'global'
-                  ? 'bg-white text-teal-700'
-                  : 'text-white/80 hover:text-white',
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <Globe className="h-3 w-3" />
@@ -134,35 +136,37 @@ export default function HomePage() {
               className={cn(
                 'flex items-center gap-1 rounded px-2 py-1 text-[11px] font-medium transition-all',
                 scope === 'mine'
-                  ? 'bg-white text-teal-700'
-                  : 'text-white/80 hover:text-white',
+                  ? 'bg-background text-foreground shadow-sm'
+                  : 'text-muted-foreground hover:text-foreground',
               )}
             >
               <User className="h-3 w-3" />
               我的
             </button>
           </div>
-
-          {/* Stats Pills */}
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {STAT_DEFS.map((def) => {
-              const count = currentCounts[def.key] || 0
-              return (
-                <button
-                  key={def.key}
-                  onClick={() => router.push(def.href)}
-                  className={cn(
-                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-medium transition-all hover:bg-white/20',
-                    count > 0 ? 'bg-white/20 text-white' : 'bg-white/10 text-white/60',
-                  )}
-                >
-                  <span className={cn('h-1.5 w-1.5 rounded-full', def.dotColor)} />
+        </div>
+        <div className="grid grid-cols-3 sm:grid-cols-6 divide-x divide-border px-0 pb-1">
+          {STAT_DEFS.map((def) => {
+            const count = loading ? '-' : (currentCounts[def.key] || 0)
+            const isActive = !loading && count > 0
+            return (
+              <button
+                key={def.key}
+                onClick={() => router.push(def.href)}
+                className="flex flex-col items-center gap-0.5 py-3 px-2 hover:bg-muted/40 transition-colors cursor-pointer"
+              >
+                <span className={cn('text-xs text-muted-foreground', isActive && 'text-foreground/70')}>
                   {def.title}
-                  <span className="font-bold tabular-nums">{count}</span>
-                </button>
-              )
-            })}
-          </div>
+                </span>
+                <span className={cn(
+                  'text-xl font-bold tabular-nums leading-none',
+                  isActive ? def.color : 'text-muted-foreground/50',
+                )}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -176,6 +180,3 @@ export default function HomePage() {
     </div>
   )
 }
-
-// Need to import useRouter since we use it
-import { useRouter } from 'next/navigation'
