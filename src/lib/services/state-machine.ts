@@ -86,7 +86,7 @@ export const BATCH_TRANSITIONS: Record<string, TransitionRule[]> = {
     { to: 'REJECTED', action: 'reject_coa', roles: ['SUPERVISOR', 'QA'], label: '退回' },
   ],
   COA_APPROVED: [
-    { to: 'RELEASED', action: 'release', roles: ['SUPERVISOR'], label: '放行' },
+    { to: 'RELEASED', action: 'release', roles: ['SUPERVISOR', 'ADMIN'], label: '放行' },
   ],
   REJECTED: [
     { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '重新提交' },
