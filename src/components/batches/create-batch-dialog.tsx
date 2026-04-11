@@ -29,7 +29,9 @@ import {
 } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
-import { FlaskConical, Loader2, ShoppingCart } from 'lucide-react'
+import { Checkbox } from '@/components/ui/checkbox'
+import { IDENTIFICATION_OPTIONS, DEFAULT_IDENTIFICATION_REQUIREMENTS } from '@/lib/services/task-templates'
+import { FlaskConical, Loader2, ShoppingCart, ClipboardCheck } from 'lucide-react'
 
 interface Product {
   id: string
@@ -68,6 +70,7 @@ export function CreateBatchDialog({
   const [seedPassage, setSeedPassage] = useState('')
   const [plannedEndDate, setPlannedEndDate] = useState('')
   const [orderNo, setOrderNo] = useState('') // 订单号（仅服务项目）
+  const [identificationRequirements, setIdentificationRequirements] = useState<string[]>([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
 
   // Derive selected product
   const selectedProduct = products.find((p) => p.productCode === productCode)
@@ -133,6 +136,7 @@ export function CreateBatchDialog({
     setSeedPassage('')
     setPlannedEndDate('')
     setOrderNo('')
+    setIdentificationRequirements([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
     setError('')
   }
 
@@ -162,6 +166,10 @@ export function CreateBatchDialog({
       // Add orderNo for SERVICE products
       if (isServiceProduct && orderNo.trim()) {
         body.orderNo = orderNo.trim()
+      }
+      // Add identificationRequirements for SERVICE products
+      if (isServiceProduct) {
+        body.identificationRequirements = identificationRequirements
       }
 
       const res = await authFetch('/api/batches', {
@@ -295,6 +303,45 @@ export function CreateBatchDialog({
                 value={orderNo}
                 onChange={(e) => setOrderNo(e.target.value)}
               />
+            </div>
+          )}
+
+          {/* Identification Requirements — Only for SERVICE products */}
+          {isServiceProduct && (
+            <div className="space-y-3">
+              <Label className="flex items-center gap-1.5">
+                <ClipboardCheck className="h-3.5 w-3.5" />
+                鉴定项目
+                <span className="text-xs text-muted-foreground font-normal">（选择需要进行的鉴定检测）</span>
+              </Label>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-md border border-border p-3">
+                {IDENTIFICATION_OPTIONS.map((opt) => {
+                  const checked = identificationRequirements.includes(opt.value)
+                  return (
+                    <label
+                      key={opt.value}
+                      className="flex items-center gap-2 cursor-pointer select-none"
+                    >
+                      <Checkbox
+                        checked={checked}
+                        onCheckedChange={(checked) => {
+                          setIdentificationRequirements((prev) =>
+                            checked
+                              ? [...prev, opt.value]
+                              : prev.filter((v) => v !== opt.value)
+                          )
+                        }}
+                      />
+                      <span className="text-sm">{opt.label}</span>
+                    </label>
+                  )
+                })}
+              </div>
+              {identificationRequirements.length === 0 && (
+                <p className="text-xs text-muted-foreground">
+                  提示：建议至少选择多能性鉴定和支原体检测作为基础鉴定项目
+                </p>
+              )}
             </div>
           )}
 

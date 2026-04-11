@@ -14,6 +14,7 @@ import {
   User,
   Users,
   FileText,
+  Package,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { getRoleDisplay, hasAnyRole } from '@/lib/roles'
@@ -66,6 +67,12 @@ const mainNavItems = [
 
 // Admin-only navigation items
 const adminNavItems = [
+  {
+    title: '产品管理',
+    href: '/products',
+    icon: Package,
+    roles: ['ADMIN', 'SUPERVISOR'],
+  },
   {
     title: '用户管理',
     href: '/users',

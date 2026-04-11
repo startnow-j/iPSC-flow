@@ -28,6 +28,7 @@ const pageTitles: Record<string, string> = {
   '/batches/all': '所有批次',
   '/batches/new': '新建批次',
   '/todos': '待办事项',
+  '/products': '产品管理',
   '/users': '用户管理',
   '/audit': '审计日志',
 }

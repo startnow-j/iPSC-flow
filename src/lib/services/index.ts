@@ -46,3 +46,13 @@ export type {
   AuditLogPageResult,
   TimelineEntry,
 } from './audit-log'
+
+// 任务模板服务
+export {
+  TASK_TEMPLATES,
+  IDENTIFICATION_TASK_DEFS,
+  IDENTIFICATION_OPTIONS,
+  DEFAULT_IDENTIFICATION_REQUIREMENTS,
+} from './task-templates'
+
+export type { TaskTemplate } from './task-templates'

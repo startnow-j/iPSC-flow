@@ -38,9 +38,11 @@ import {
   AlertCircle,
   RotateCcw,
   PlayCircle,
+  CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
+import { GenericTaskList } from '@/components/ebpr/generic-task-list'
 import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
@@ -866,11 +868,19 @@ export default function BatchDetailPage({
 
         {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
-          <EbprStepGuide
-            batchId={id}
-            batch={batch}
-            onBatchUpdated={handleProductionUpdate}
-          />
+          {batch.productLine === 'CELL_PRODUCT' ? (
+            <EbprStepGuide
+              batchId={id}
+              batch={batch}
+              onBatchUpdated={handleProductionUpdate}
+            />
+          ) : (
+            <GenericTaskList
+              batchId={id}
+              productLine={batch.productLine || 'CELL_PRODUCT'}
+              onBatchUpdated={handleProductionUpdate}
+            />
+          )}
         </TabsContent>
 
         {/* ============================================ */}
@@ -879,11 +889,63 @@ export default function BatchDetailPage({
         <TabsContent value="qc" className="mt-4">
           {/* SERVICE product line: no independent QC flow */}
           {batch.productLine === 'SERVICE' && (
-            <PlaceholderCard
-              icon={ClipboardCheck}
-              title="服务项目"
-              description="服务项目无独立质检流程，质检信息将在鉴定和报告中体现。"
-            />
+            <>
+              {/* IDENTIFICATION status */}
+              {batch.status === 'IDENTIFICATION' && (
+                <Card className="border-violet/20 bg-violet/5">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-violet/10 mb-4">
+                      <ClipboardCheck className="h-7 w-7 text-violet-600 dark:text-violet-400" />
+                    </div>
+                    <h3 className="text-base font-medium mb-2">鉴定进行中</h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      鉴定进行中，鉴定结果即质检数据。请前往「生产记录」标签页查看鉴定任务进展。
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* REPORT_PENDING status */}
+              {batch.status === 'REPORT_PENDING' && (
+                <Card className="border-purple/20 bg-purple/5">
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-purple/10 mb-4">
+                      <FileText className="h-7 w-7 text-purple-600 dark:text-purple-400" />
+                    </div>
+                    <h3 className="text-base font-medium mb-2">鉴定已完成，请生成实验报告</h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      鉴定已完成，请生成实验报告并提交审核。报告和CoA将一同提交。
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Post-report statuses: show CoA info */}
+              {(batch.status === 'COA_SUBMITTED' || batch.status === 'RELEASED') && (
+                <Card>
+                  <CardContent className="flex flex-col items-center justify-center py-12">
+                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-emerald/10 mb-4">
+                      <CheckCircle2 className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <h3 className="text-base font-medium mb-2">报告已提交</h3>
+                    <p className="text-sm text-muted-foreground text-center max-w-xs">
+                      {batch.status === 'RELEASED'
+                        ? '服务项目已交付，请前往「CoA」标签页查看分析证书。'
+                        : '报告和CoA已提交审核，请等待主管审批。前往「CoA」标签页查看详情。'}
+                    </p>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Other statuses: no QC yet */}
+              {!['IDENTIFICATION', 'REPORT_PENDING', 'COA_SUBMITTED', 'RELEASED'].includes(batch.status) && (
+                <PlaceholderCard
+                  icon={ClipboardCheck}
+                  title="服务项目"
+                  description="服务项目无独立质检流程，质检信息将在鉴定和报告中体现。"
+                />
+              )}
+            </>
           )}
 
           {/* CELL_PRODUCT / KIT: standard QC flow */}

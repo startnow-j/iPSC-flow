@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
+import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS } from '@/lib/services/task-templates'
+import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
 // ============================================
@@ -83,76 +85,124 @@ export async function POST(
     }
 
     // ============================================
-    // 开始生产时自动创建 3 个生产任务
+    // 基于任务模板的自动任务创建
+    // 支持 start_production / start_material_prep / start_identification
+    // 根据产品线 (productLine) 和动作 (action) 查找对应模板
     // ============================================
-    if (action === 'start_production') {
+    if (action === 'start_production' || action === 'start_material_prep' || action === 'start_identification') {
       const batch = await db.batch.findUnique({
         where: { id },
         include: { tasks: true },
       })
 
-      if (batch && batch.tasks.length === 0) {
-        // 创建默认的 3 个生产任务
-        const now = new Date()
-        const tasksData = [
-          {
-            batchId: id,
-            batchNo: batch.batchNo,
-            taskCode: 'SEED_PREP',
-            taskName: '种子复苏',
-            sequenceNo: 1,
-            stepGroup: null,
-            status: 'IN_PROGRESS' as const,
-            assigneeId: payload.userId,
-            assigneeName: payload.name,
-            actualStart: now,
-          },
-          {
-            batchId: id,
-            batchNo: batch.batchNo,
-            taskCode: 'EXPANSION',
-            taskName: '扩增培养',
-            sequenceNo: 2,
-            stepGroup: null,
-            status: 'PENDING' as const,
-            assigneeId: null,
-            assigneeName: null,
-          },
-          {
-            batchId: id,
-            batchNo: batch.batchNo,
-            taskCode: 'HARVEST',
-            taskName: '收获冻存',
-            sequenceNo: 3,
-            stepGroup: null,
-            status: 'PENDING' as const,
-            assigneeId: null,
-            assigneeName: null,
-          },
-        ]
+      if (batch) {
+        const productLine = batch.productLine as string
+        const templates = TASK_TEMPLATES[productLine]?.[action]
 
-        await db.productionTask.createMany({
-          data: tasksData,
-        })
-
-        // 记录审计日志：自动创建生产任务
-        await createAuditLog({
-          eventType: 'BATCH_STATUS_CHANGED',
-          targetType: 'BATCH',
-          targetId: id,
-          targetBatchNo: batch.batchNo,
-          operatorId: payload.userId,
-          operatorName: payload.name,
-          dataAfter: {
-            action: 'start_production_auto_tasks',
-            tasks: tasksData.map(t => ({
+        if (templates && templates.length > 0) {
+          // 仅在没有任务时创建（防重复）
+          if (batch.tasks.length === 0) {
+            const now = new Date()
+            const tasksData = templates.map((t: TaskTemplate, idx: number) => ({
+              batchId: id,
+              batchNo: batch.batchNo,
               taskCode: t.taskCode,
               taskName: t.taskName,
               sequenceNo: t.sequenceNo,
-              status: t.status,
-            })),
-          },
-        })
+              stepGroup: t.stepGroup || null,
+              status: idx === 0 ? 'IN_PROGRESS' as const : 'PENDING' as const,
+              assigneeId: idx === 0 ? payload.userId : null,
+              assigneeName: idx === 0 ? payload.name : null,
+              actualStart: idx === 0 ? now : null,
+            }))
+
+            await db.productionTask.createMany({ data: tasksData })
+
+            // 记录审计日志：自动创建生产任务
+            await createAuditLog({
+              eventType: 'BATCH_STATUS_CHANGED',
+              targetType: 'BATCH',
+              targetId: id,
+              targetBatchNo: batch.batchNo,
+              operatorId: payload.userId,
+              operatorName: payload.name,
+              dataAfter: {
+                action: `${action}_auto_tasks`,
+                productLine,
+                tasks: tasksData.map(t => ({
+                  taskCode: t.taskCode,
+                  taskName: t.taskName,
+                  sequenceNo: t.sequenceNo,
+                  status: t.status,
+                })),
+              },
+            })
+          }
+        }
+
+        // ============================================
+        // SERVICE 产品线 start_identification：动态创建鉴定任务
+        // 根据 batch.identificationRequirements (JSON 数组) 生成鉴定任务
+        // ============================================
+        if (action === 'start_identification' && productLine === 'SERVICE') {
+          // 检查是否已有鉴定任务（taskCode 前缀 ID_）
+          const hasIdTasks = batch.tasks.some((t) => t.taskCode.startsWith('ID_'))
+
+          if (!hasIdTasks) {
+            let requirements: string[] = []
+            try {
+              requirements = JSON.parse(batch.identificationRequirements || '[]')
+            } catch {
+              requirements = []
+            }
+
+            if (requirements.length > 0) {
+              // 获取已有任务的最大 sequenceNo
+              const maxSeq = batch.tasks.reduce((max: number, t) => Math.max(max, t.sequenceNo || 0), 0)
+
+              const idTasksData = requirements
+                .filter((req) => IDENTIFICATION_TASK_DEFS[req])
+                .map((req, idx) => {
+                  const def = IDENTIFICATION_TASK_DEFS[req]!
+                  return {
+                    batchId: id,
+                    batchNo: batch.batchNo,
+                    taskCode: def.taskCode,
+                    taskName: def.taskName,
+                    sequenceNo: maxSeq + idx + 1,
+                    stepGroup: 'IDENTIFICATION' as const,
+                    status: 'PENDING' as const,
+                    assigneeId: null as null,
+                    assigneeName: null as null,
+                  }
+                })
+
+              if (idTasksData.length > 0) {
+                await db.productionTask.createMany({ data: idTasksData })
+
+                // 记录审计日志：自动创建鉴定任务
+                await createAuditLog({
+                  eventType: 'BATCH_STATUS_CHANGED',
+                  targetType: 'BATCH',
+                  targetId: id,
+                  targetBatchNo: batch.batchNo,
+                  operatorId: payload.userId,
+                  operatorName: payload.name,
+                  dataAfter: {
+                    action: 'start_identification_auto_tasks',
+                    requirements,
+                    tasks: idTasksData.map(t => ({
+                      taskCode: t.taskCode,
+                      taskName: t.taskName,
+                      sequenceNo: t.sequenceNo,
+                      status: t.status,
+                    })),
+                  },
+                })
+              }
+            }
+          }
+        }
       }
     }
 

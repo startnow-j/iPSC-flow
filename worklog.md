@@ -1186,3 +1186,310 @@ Stage Summary:
 - Phase 2 core implementation complete: 3 transition templates, 15 batch statuses, all API routes updated
 - Key files changed: schema.prisma, state-machine.ts, transition/route.ts, coa/[coaId]/route.ts, batches/route.ts, batch-status-overview.tsx, batches/[id]/page.tsx, coa-detail.tsx
 - Plan document updated: docs/plans/多产品线扩展计划-v1.0.md v1.1
+
+---
+Task ID: p2-3 + p2-4
+Agent: Main Agent
+Task: 任务模板系统 + 服务项目鉴定需求 — transition route 模板化 + 新建批次对话框鉴定选项
+
+Work Log:
+- 读取 worklog.md、transition route、create-batch-dialog、batches API route 了解现有实现
+- 确认批次创建 API 已支持 identificationRequirements 字段的存储（JSON.stringify）
+- 确认 Prisma schema 中 Batch.identificationRequirements 字段已存在（String @default("[]")）
+
+**Task A: 任务模板系统 (p2-4)**
+
+创建 `src/lib/services/task-templates.ts`：
+- TaskTemplate 接口定义（taskCode/taskName/sequenceNo/stepGroup）
+- TASK_TEMPLATES 常量：3 条产品线 × 多个动作的模板映射
+  - CELL_PRODUCT.start_production → SEED_PREP/EXPANSION/HARVEST
+  - SERVICE.start_production → REPROGRAM/SERVICE_EXPANSION
+  - KIT.start_material_prep → MATERIAL_PREP
+  - KIT.start_production → PREPARATION/DISPENSING
+- IDENTIFICATION_TASK_DEFS 常量：7 种鉴定检测项定义（INTEGRATION/KARYOTYPE/PLURI_CHECK/STR/POTENCY/MYCOPLASMA/MUTATION_SEQ）
+- IDENTIFICATION_OPTIONS：前端复选框选项列表
+- DEFAULT_IDENTIFICATION_REQUIREMENTS：默认勾选项 [PLURI_CHECK, MYCOPLASMA]
+
+更新 `src/lib/services/index.ts`：导出新增的任务模板常量和类型
+
+重构 `src/app/api/batches/[id]/transition/route.ts`：
+- 移除硬编码的 start_production 3 任务创建逻辑
+- 新增通用模板化任务创建：支持 start_production/start_material_prep/start_identification 三种动作
+- 根据批次 productLine 查找对应模板，第一个任务自动设为 IN_PROGRESS 并分配当前用户
+- 新增 SERVICE start_identification 特殊处理：
+  - 检查是否已有 ID_ 前缀的鉴定任务（防重复）
+  - 解析 batch.identificationRequirements JSON 数组
+  - 按 IDENTIFICATION_TASK_DEFS 动态生成鉴定任务（PENDING 状态，stepGroup=IDENTIFICATION）
+  - sequenceNo 在已有任务最大值基础上递增
+  - 记录审计日志（包含 requirements 列表和创建的任务详情）
+
+**Task B: 新建批次鉴定需求 (p2-3)**
+
+修改 `src/components/batches/create-batch-dialog.tsx`：
+- 导入 Checkbox 组件、IDENTIFICATION_OPTIONS、DEFAULT_IDENTIFICATION_REQUIREMENTS
+- 新增 identificationRequirements 表单状态（默认 PLURI_CHECK + MYCOPLASMA）
+- 仅当选择 SERVICE 产品时显示鉴定项目复选框组
+- 2 列网格布局，边框包裹，6 个复选框选项
+- 未勾选任何项目时显示提示文案
+- 提交时将 identificationRequirements 数组包含在 POST body 中
+- resetForm 时重置为默认值
+
+- Lint 检查通过：仅剩预存 generate-plan.js 2 个 error，本任务零新增
+
+Stage Summary:
+- 新增文件：src/lib/services/task-templates.ts
+- 修改文件：src/lib/services/index.ts（导出任务模板）
+- 修改文件：src/app/api/batches/[id]/transition/route.ts（模板化任务创建 + 鉴定任务动态生成）
+- 修改文件：src/components/batches/create-batch-dialog.tsx（SERVICE 鉴定项目复选框）
+- 任务模板：3 条产品线 × 4 种动作，7 种鉴定检测项
+- Transition Route：支持 start_production/start_material_prep/start_identification 三种动作的自动任务创建
+- SERVICE 鉴定流程：创建批次时选择鉴定项 → start_identification 时自动生成对应鉴定任务
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: p2-5
+Agent: Main Agent
+Task: Batch Detail Page — Multi Product Line Production Tab Adaptation
+
+Work Log:
+- 读取 worklog.md、批次详情页、EbprStepGuide、TaskSummary、state-machine、ProductLineBadge 等相关文件
+- 分析当前批次详情页结构：5个标签页，生产记录标签页仅渲染 EbprStepGuide（CELL_PRODUCT 专用）
+
+**1. 创建 GenericTaskList 组件 (src/components/ebpr/generic-task-list.tsx)**
+- Props: batchId、productLine、onBatchUpdated
+- 从 /api/batches/{id}/tasks 获取任务列表
+- ProgressSummary 组件：显示完成进度条和 X/Y 任务完成数
+- TaskCard 组件：每个任务显示 taskName、状态 Badge（PENDING=gray、IN_PROGRESS=blue、COMPLETED=green、SKIPPED=stone）、assignee、dates、notes
+- TaskStatusBadge 组件：任务状态彩色徽标
+- TaskIcon 组件：根据 taskCode 显示不同图标（MATERIAL_PREP/PREPARATION/DISPENSING/ID_* 等）
+- SERVICE 产品线分组：将 taskCode 以 ID_ 开头的任务分组到「鉴定任务」区域
+- KIT 产品线：显示为「配制任务」区域
+- IN_PROGRESS 任务显示 Phase 3 占位提示
+- 空状态：无任务时显示"开始生产后，系统将自动创建生产任务"
+- 加载状态：Skeleton 骨架屏
+
+**2. 修改批次详情页生产记录标签页 (src/app/batches/[id]/page.tsx)**
+- 引入 GenericTaskList 组件
+- 生产记录标签页按产品线分支渲染：
+  - CELL_PRODUCT → EbprStepGuide（保持原有行为）
+  - SERVICE/KIT → GenericTaskList
+- 添加 CheckCircle2 图标导入（用于 QC 标签页）
+
+**3. 更新质检标签页 — SERVICE 产品线适配**
+- IDENTIFICATION 状态 → 紫色提示卡片："鉴定进行中，鉴定结果即质检数据"
+- REPORT_PENDING 状态 → 紫色提示卡片："鉴定已完成，请生成实验报告"
+- COA_SUBMITTED/RELEASED 状态 → 绿色提示卡片："报告已提交"
+- 其他状态 → 保留原有 PlaceholderCard
+
+**4. 更新批次列表页状态筛选 (src/app/batches/page.tsx)**
+- STATUS_FILTERS 从 9 个扩展为 14 个状态筛选：
+  - 新增：SAMPLE_RECEIVED(样本接收)、HANDOVER(交接中)、IDENTIFICATION(鉴定中)、REPORT_PENDING(待报告)、COA_SUBMITTED(已提交)、COA_APPROVED(已批准)
+  - 移除：QC_FAIL（瞬态状态，用户筛选无意义）
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，本任务零新增）
+
+Stage Summary:
+- 新增文件：src/components/ebpr/generic-task-list.tsx
+- 修改文件：src/app/batches/[id]/page.tsx（生产标签页分支 + QC标签页SERVICE适配 + CheckCircle2导入）
+- 修改文件：src/app/batches/page.tsx（STATUS_FILTERS 扩展为14个状态）
+- 生产记录标签页：CELL_PRODUCT 使用 EbprStepGuide，SERVICE/KIT 使用 GenericTaskList
+- GenericTaskList 功能：任务进度条、任务卡片列表、SERVICE鉴定任务分组、KIT配制任务、Phase 3占位提示
+- 质检标签页：SERVICE 产品线按状态（IDENTIFICATION/REPORT_PENDING/COA_SUBMITTED/RELEASED）显示不同提示
+- 状态筛选：新增 6 个多产品线状态（SAMPLE_RECEIVED/HANDOVER/IDENTIFICATION/REPORT_PENDING/COA_SUBMITTED/COA_APPROVED），移除 QC_FAIL
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: p2-2
+Agent: Product Management Developer
+Task: 产品管理页面 + CRUD API + 侧边栏更新
+
+Work Log:
+- 读取了 worklog.md、Prisma schema、现有 API 路由、auth.ts、roles.ts、auth-fetch.ts、sidebar.tsx、header.tsx、product-line-badge.tsx、users/page.tsx、create-user-dialog.tsx 等参考文件
+- 分析了现有认证模式（getTokenFromRequest + verifyToken + isAdmin）和前端模式（authFetch + useAuthStore + hasAnyRole）
+- 确认产品线枚举值：SERVICE、CELL_PRODUCT、KIT
+- 确认 6 个种子产品已存在于数据库中
+
+**1. Products CRUD API (route.ts)**
+- 扩展 GET /api/products：新增 `productLine` 和 `search` 查询参数过滤
+- 新增 POST /api/products：创建产品（ADMIN only）
+  - 验证：productName 必填、productLine 有效枚举、productCode 唯一
+  - 自动生成产品编码：{line_prefix}-{seq}（如 CP-007）
+  - 返回完整产品信息
+
+**2. PATCH /api/products/[id] (route.ts)**
+- GET：获取单个产品详情
+- PATCH：更新产品字段（ADMIN only）
+  - 支持：productCode/productName/productLine/category/cellType/specification/storageCondition/shelfLife/unit/description/active
+  - productCode 变更时检查唯一性
+  - 白名单字段更新
+
+**3. CreateProductDialog 组件**
+- 支持 create 和 edit 两种模式
+- 表单字段：产品编码（自动生成+可编辑）、产品名称、产品线、分类（按产品线联动）、细胞类型（仅 SERVICE/CELL_PRODUCT）、规格、单位、存储条件、保质期、描述
+- 编辑模式额外显示：Active 启用状态 Switch
+- 产品编码自动生成：切换产品线时自动从 API 获取最大序号+1
+
+**4. Products Page**
+- 权限控制：ADMIN/SUPERVISOR 可访问，非权限显示"无权限"页面
+- 产品线筛选标签页（全部/细胞产品/服务项目/试剂盒），带计数徽标
+- 搜索功能：按产品编码或名称搜索
+- 产品卡片按产品线分组显示，每张卡片包含：
+  - 产品编码（mono 字体）+ ProductLineBadge + 产品名称
+  - 分类、规格/单位、细胞类型、存储条件、保质期
+  - 编辑按钮（ADMIN only）+ Active Switch（ADMIN only）
+  - 已停用状态标记
+- 新建产品按钮（ADMIN only）
+- 加载骨架屏 + 空状态提示
+
+**5. Sidebar 更新**
+- 新增 "产品管理" 导航项到 adminNavItems（Package 图标，ADMIN + SUPERVISOR）
+
+**6. Header 更新**
+- 新增 '/products': '产品管理' 到 pageTitles 映射
+
+- Lint 检查通过（仅剩预存 generate-plan.js 2 个 error）
+- 代码零新增 ESLint error/warning
+
+Stage Summary:
+- 新增文件：src/app/api/products/[id]/route.ts
+- 新增文件：src/components/products/create-product-dialog.tsx
+- 新增文件：src/app/products/page.tsx
+- 修改文件：src/app/api/products/route.ts（扩展 GET + 新增 POST）
+- 修改文件：src/components/layout/sidebar.tsx（新增产品管理导航）
+- 修改文件：src/components/layout/header.tsx（新增产品管理标题映射）
+- API 完整度：GET 列表(含筛选) + POST 创建 + GET 详情 + PATCH 更新
+- 前端功能：产品线筛选标签页 + 搜索 + 产品卡片分组展示 + 创建/编辑对话框 + 启用/停用切换
+- 代码零新增 ESLint error/warning
+---
+Task ID: p2-2
+Agent: Product Management Developer
+Task: 产品管理前端 — 产品列表页 + 创建/编辑产品对话框 + 产品 CRUD API + 侧边栏导航
+
+Work Log:
+- Read worklog.md and understood project architecture (Next.js 16 + Prisma + shadcn/ui)
+- Analyzed existing products API (GET only) and product schema
+
+**1. Products CRUD API**
+- Extended GET /api/products with productLine and search query parameters
+- Added POST /api/products for product creation (ADMIN only)
+  - Auto-generates productCode based on product line prefix (IPSC/SRV/KIT + sequence)
+  - Validates productCode uniqueness, productLine enum, required fields
+- Created PATCH /api/products/[id]/route.ts for product updates
+  - Supports updating all fields, toggling active status
+  - ADMIN only, with uniqueness checks
+
+**2. Create/Edit Product Dialog (src/components/products/create-product-dialog.tsx)**
+- Full form with: productCode, productName, productLine, category, cellType, specification, storageCondition, shelfLife, unit, description
+- Product line → category cascade (CELL_PRODUCT: IPSC/NPC/CM; SERVICE: REPROGRAM/EDIT/DIFF_SERVICE; KIT: DIFF_KIT/MEDIUM)
+- Cell type field only shown for SERVICE/CELL_PRODUCT products
+- Active toggle in edit mode
+- Auto-generates product code on creation
+
+**3. Products Page (src/app/products/page.tsx)**
+- Product line filter tabs (全部/细胞产品/服务项目/试剂盒) with count badges
+- Search by product code/name
+- Products grouped by product line
+- Each card shows: code, name, productLine badge, category, specification, unit, active status
+- Create product button and edit button per card
+- Active status toggle (inline)
+- Permission-gated: ADMIN/SUPERVISOR only
+
+**4. Sidebar Update (src/components/layout/sidebar.tsx)**
+- Added "产品管理" to adminNavItems with Package icon
+- Visible to ADMIN and SUPERVISOR roles
+
+**5. Header Update (src/components/layout/header.tsx)**
+- Added /products to page title map
+
+Stage Summary:
+- New files: src/app/api/products/[id]/route.ts, src/components/products/create-product-dialog.tsx, src/app/products/page.tsx
+- Modified files: src/app/api/products/route.ts, src/components/layout/sidebar.tsx, src/components/layout/header.tsx
+- Full product CRUD: GET with filters, POST create, GET by ID, PATCH update
+- Product management page with line filter, search, grouped cards, inline active toggle
+- Lint: Zero new errors
+
+---
+Task ID: p2-3+p2-4
+Agent: Task Templates & Batch Dialog Developer
+Task: 任务模板系统 + 批次创建对话框鉴定要求
+
+Work Log:
+- Read worklog.md and analyzed transition route and create-batch-dialog
+- Analyzed existing hardcoded CELL_PRODUCT task creation logic
+
+**A. Task Templates (src/lib/services/task-templates.ts)**
+- Created TASK_TEMPLATES constant mapping productLine + action → TaskTemplate[]
+- CELL_PRODUCT.start_production → SEED_PREP, EXPANSION, HARVEST
+- SERVICE.start_production → REPROGRAM, SERVICE_EXPANSION
+- KIT.start_material_prep → MATERIAL_PREP
+- KIT.start_production → PREPARATION, DISPENSING
+- Created IDENTIFICATION_TASK_DEFS: 7 identification test types (INTEGRATION, KARYOTYPE, PLURI_CHECK, STR, POTENCY, MYCOPLASMA, MUTATION_SEQ)
+- Created IDENTIFICATION_OPTIONS for frontend checkbox display
+- Created DEFAULT_IDENTIFICATION_REQUIREMENTS = [PLURI_CHECK, MYCOPLASMA]
+
+**B. Transition Route Refactoring (src/app/api/batches/[id]/transition/route.ts)**
+- Replaced hardcoded 3-task creation with generic template lookup
+- Supports start_production, start_material_prep, start_identification actions
+- First task auto-set to IN_PROGRESS with operator assignment
+- For SERVICE start_identification: dynamically creates identification tasks from batch.identificationRequirements JSON
+- Checks for existing ID_ prefix tasks to prevent duplicates
+- Sets stepGroup='IDENTIFICATION' for identification tasks
+
+**C. Batch Creation Dialog Enhancement (src/components/batches/create-batch-dialog.tsx)**
+- Added identification requirements state (JSON array)
+- Shows checkbox group only when SERVICE product is selected
+- 6 identification options in 2-column grid layout
+- Default pre-checked: PLURI_CHECK and MYCOPLASMA
+- Warning hint when no items selected
+- Submits identificationRequirements in POST body
+
+Stage Summary:
+- New file: src/lib/services/task-templates.ts (task template system)
+- Modified: src/app/api/batches/[id]/transition/route.ts (generic task auto-creation)
+- Modified: src/components/batches/create-batch-dialog.tsx (identification requirements)
+- Lint: Zero new errors
+
+---
+Task ID: p2-5
+Agent: Batch Detail Multi-Product-Line Adapter
+Task: 批次详情页多产品线适配 — 生产记录标签页 + 质检标签页 + 状态筛选
+
+Work Log:
+- Read worklog.md and analyzed batch detail page, batches list page
+- Analyzed EbprStepGuide component (CELL_PRODUCT only)
+
+**1. GenericTaskList Component (src/components/ebpr/generic-task-list.tsx)**
+- TaskStatusBadge: PENDING(gray)/IN_PROGRESS(blue)/COMPLETED(green)/SKIPPED(stone)
+- TaskIcon: Maps taskCode to appropriate Lucide icon
+- TaskCard: Full task card with name, status badge, assignee, dates, notes, stepGroup badge
+  - Completed tasks have emerald border/background
+  - IN_PROGRESS tasks show "表单开发中" Phase 3 placeholder
+  - Identification tasks (ID_*) get violet "鉴定" badge
+- ProgressSummary: Completed/total count with progress bar and percentage
+- Main component: GenericTaskList
+  - Fetches tasks from API
+  - Groups SERVICE tasks: regular tasks + identification tasks (ID_*) sections
+  - Sorts by sequenceNo then createdAt
+  - Shows empty state when no tasks
+
+**2. Batch Detail Page Production Tab (src/app/batches/[id]/page.tsx)**
+- Production tab now branches by productLine:
+  - CELL_PRODUCT → EbprStepGuide (unchanged)
+  - SERVICE/KIT → GenericTaskList
+
+**3. Batch Detail Page QC Tab (src/app/batches/[id]/page.tsx)**
+- Added SERVICE-specific QC status handling:
+  - IDENTIFICATION → "鉴定进行中，鉴定结果即质检数据" (violet card)
+  - REPORT_PENDING → "鉴定已完成，请生成实验报告" (purple card)
+  - COA_SUBMITTED/RELEASED → "报告已提交" (green card)
+
+**4. Batch List Page Status Filters (src/app/batches/page.tsx)**
+- Expanded STATUS_FILTERS from 9 to 14:
+  - Added: SAMPLE_RECEIVED, HANDOVER, IDENTIFICATION, REPORT_PENDING, COA_SUBMITTED, COA_APPROVED
+  - Removed: QC_FAIL (transient status, not useful for filtering)
+
+Stage Summary:
+- New file: src/components/ebpr/generic-task-list.tsx
+- Modified: src/app/batches/[id]/page.tsx (production + QC tab adaptation)
+- Modified: src/app/batches/page.tsx (expanded status filters)
+- Lint: Zero new errors
