@@ -1876,3 +1876,66 @@ Stage Summary:
 - 侧边栏状态概览改为可折叠的产品线分组，每组仅显示有数据的状态
 - 首页仪表盘改为三个产品线独立卡片，点击状态数字可跳转到对应产品线的筛选页面
 - 每个产品线的状态定义基于 state-machine.ts 中的状态转换模板
+---
+Task ID: 7
+Agent: Task Assignment Feature Developer
+Task: 任务指派功能 — eBPR步骤引导增加指派UI + 权限控制
+
+Work Log:
+- Modified EbprStepGuide component to add onAssignTask callback prop
+- Added AssignTaskRequest interface for task assignment requests
+- Imported useAuthStore and hasAnyRole for permission checks
+- Added UserPlus, ShieldCheck, User, Clock icons from lucide-react
+- Moved ExpansionForm import to top of file
+- Added getRepresentativeTask() helper to find active/pending task for each step
+- Enhanced StepProgressBar to show assignee name and "等待指派" status under step circles
+- Created TaskWithAssignment wrapper component for SEED_PREP/HARVEST tasks with:
+  - "等待指派" amber card with assign button for PENDING tasks without assignee (ADMIN/SUPERVISOR only)
+  - "非指派人员" card for users who are not the assignee and lack permission
+  - Assignee info header (operator + reviewer) for assigned in-progress tasks
+  - Normal TaskFormWrapper for completed/reviewed tasks or admin override
+- Created ExpansionTaskWithAssignment wrapper component for EXPANSION tasks with same logic
+- Updated Expansion section to check pending tasks before showing the form
+- Connected EbprStepGuide to AssignTaskDialog in batch detail page via onAssignTask prop
+- Lint passed (only pre-existing generate-plan.js errors)
+- Dev server compiled successfully
+
+Stage Summary:
+- Modified files: src/components/ebpr/ebpr-step-guide.tsx, src/app/batches/[id]/page.tsx
+- SUPERVISOR/ADMIN can now assign operators to CELL_PRODUCT tasks via step guide
+- Non-assigned operators cannot access task forms - shown "非指派人员" message
+- PENDING tasks without assignee show "等待指派" card with assign button for authorized users
+- Assignee info displayed in step progress bar (name tag under step circles)
+- Expansion tasks properly handle assignment state before showing form
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: 任务指派功能 — eBPR步骤引导增加指派UI + 权限控制
+
+Work Log:
+- 读取现有代码确认：数据库已有 assigneeId/reviewerId 字段，后端 PATCH API 已支持指派，AssignTaskDialog 组件已存在
+- 发现问题：CELL_PRODUCT 产品线使用 EbprStepGuide 组件，完全没有指派功能；任何操作员可直接填写表单
+- 修改 EbprStepGuide 组件 (src/components/ebpr/ebpr-step-guide.tsx)：
+  - 新增 onAssignTask 回调 prop，与 GenericTaskList 保持一致
+  - 新增 useAuthStore + hasAnyRole 权限检查，ADMIN/SUPERVISOR 可指派
+  - 步骤进度条：为每个步骤显示指派人姓名（如有），未指派显示"等待指派"警告
+  - 新增 getRepresentativeTask() 辅助函数获取每步的代表任务
+  - 新增 TaskWithAssignment 包装组件（SEED_PREP/HARVEST）：
+    - PENDING 无指派人 → 琥珀色"等待指派"卡片 + 指派按钮（ADMIN/SUPERVISOR可见）
+    - 有指派人但非当前用户 + 无管理权限 → 灰色"非指派人员"卡片
+    - 有指派人 → 显示操作员/复核人/开始时间信息头 + 正常表单
+  - 新增 ExpansionTaskWithAssignment 包装组件（EXPANSION），同样的逻辑
+  - 扩增步骤智能渲染：有待处理的任务时显示指派卡片，无待处理时显示正常表单
+- 修改批次详情页 (src/app/batches/[id]/page.tsx)：
+  - 为 EbprStepGuide 传递 onAssignTask 回调，连接到已有的 AssignTaskDialog
+- 运行 prisma generate + db push 确保客户端同步
+- Lint 通过（仅预存 generate-plan.js 错误，无新增）
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：src/components/ebpr/ebpr-step-guide.tsx, src/app/batches/[id]/page.tsx
+- SUPERVISOR/ADMIN 现在可以为细胞产品线的每个步骤指派操作员和复核人
+- 未指派的任务显示"等待指派"状态，非指派人员无法操作已指派的任务
+- 步骤进度条显示每个步骤的指派人信息
+- 三条产品线（细胞产品、服务项目、试剂盒）均支持任务指派

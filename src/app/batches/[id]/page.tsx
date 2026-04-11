@@ -883,6 +883,12 @@ export default function BatchDetailPage({
               batchId={id}
               batch={batch}
               onBatchUpdated={handleProductionUpdate}
+              onAssignTask={(req) => setAssignDialog({
+                open: true,
+                taskId: req.taskId,
+                taskName: req.taskName,
+                productId: req.productId || batch.productCode || '',
+              })}
             />
           ) : (
             <GenericTaskList

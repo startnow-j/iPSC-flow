@@ -2,11 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
+import { useAuthStore } from '@/stores/auth-store'
+import { hasAnyRole } from '@/lib/roles'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TaskFormWrapper, TaskFormSkeleton } from './task-form-wrapper'
+import { ExpansionForm } from './expansion-form'
 import {
   FlaskConical,
   ArrowUpDown,
@@ -14,6 +17,10 @@ import {
   CheckCircle2,
   Send,
   Loader2,
+  UserPlus,
+  ShieldCheck,
+  User,
+  Clock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -53,10 +60,17 @@ interface BatchInfo {
   status: string
 }
 
+interface AssignTaskRequest {
+  taskId: string
+  taskName: string
+  productId: string
+}
+
 interface EbprStepGuideProps {
   batchId: string
   batch: BatchInfo
   onBatchUpdated: () => void
+  onAssignTask?: (request: AssignTaskRequest) => void
 }
 
 // ============================================
@@ -157,6 +171,27 @@ function StepProgressIcon({ code, large }: { code: StepCode; large: boolean }) {
 // Step Progress Component
 // ============================================
 
+/**
+ * Get the representative task for a step - the active/pending task,
+ * or the most recent task for the step.
+ */
+function getRepresentativeTask(
+  stepCode: StepCode,
+  tasks: ProductionTask[]
+): ProductionTask | null {
+  const stepTasks = tasks.filter((t) => t.taskCode === stepCode)
+  if (stepTasks.length === 0) return null
+
+  // Prefer IN_PROGRESS or PENDING task
+  const active = stepTasks.find(
+    (t) => t.status === 'IN_PROGRESS' || t.status === 'PENDING'
+  )
+  if (active) return active
+
+  // Fall back to the last task
+  return stepTasks[stepTasks.length - 1]
+}
+
 function StepProgressBar({
   steps,
   tasks,
@@ -175,6 +210,7 @@ function StepProgressBar({
         const isActive = activeStep === step.code
         const completedCount = getStepCompletedCount(step.code, tasks)
         const showCount = step.code === 'EXPANSION' && completedCount > 0
+        const repTask = getRepresentativeTask(step.code, tasks)
         return (
           <div key={step.code} className="flex items-center">
             {/* Step circle + label */}
@@ -222,6 +258,18 @@ function StepProgressBar({
                   </Badge>
                 )}
               </div>
+              {/* Assignee info under step name */}
+              {repTask?.assigneeName && (
+                <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
+                  <User className="h-2.5 w-2.5" />
+                  {repTask.assigneeName}
+                </span>
+              )}
+              {repTask && !repTask.assigneeId && (repTask.status === 'PENDING' || repTask.status === 'IN_PROGRESS') && status !== 'completed' && (
+                <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                  等待指派
+                </span>
+              )}
             </button>
 
             {/* Connector line */}
@@ -247,7 +295,11 @@ export function EbprStepGuide({
   batchId,
   batch,
   onBatchUpdated,
+  onAssignTask,
 }: EbprStepGuideProps) {
+  const { user } = useAuthStore()
+  const canAssign = hasAnyRole(user?.roles || [], ['ADMIN', 'SUPERVISOR'])
+
   const [tasks, setTasks] = useState<ProductionTask[]>([])
   const [loading, setLoading] = useState(true)
   const [activeStep, setActiveStep] = useState<StepCode | null>(null)
@@ -384,6 +436,12 @@ export function EbprStepGuide({
     getStepStatus('EXPANSION', tasks) === 'completed' &&
     harvestCompleted
 
+  // Compute pending expansion tasks for assignment check
+  const pendingExpansionTasks = tasks.filter(
+    (t) => t.taskCode === 'EXPANSION' && (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+  )
+  const showExpansionForm = pendingExpansionTasks.length === 0 && getStepStatus('EXPANSION', tasks) !== 'completed'
+
   // Check if already submitted for QC
   const isQcSubmitted = batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS'
 
@@ -405,7 +463,6 @@ export function EbprStepGuide({
 
       {/* Active Step Content */}
       {activeStep === 'EXPANSION' ? (
-        // For expansion, show completed summaries + the form
         <div className="space-y-3">
           {/* Completed expansion summaries */}
           {tasks
@@ -421,22 +478,40 @@ export function EbprStepGuide({
               </div>
             ))}
 
-          {/* Expansion form (for adding new passage) */}
-          {getStepStatus('EXPANSION', tasks) !== 'completed' && (
+          {/* Expansion: show form or assignment cards */}
+          {showExpansionForm ? (
             <ExpansionSection
               batch={batch}
               allTasks={tasks}
               onTaskUpdated={handleTaskUpdated}
             />
+          ) : (
+            pendingExpansionTasks.map((expTask) => (
+              <ExpansionTaskWithAssignment
+                key={expTask.id}
+                task={expTask}
+                batch={batch}
+                allTasks={tasks}
+                canAssign={canAssign}
+                currentUserId={user?.id}
+                onTaskUpdated={handleTaskUpdated}
+                onAssignTask={onAssignTask}
+                productCode={batch.id}
+              />
+            ))
           )}
         </div>
       ) : (
         activeTask && (
-          <TaskFormWrapper
+          <TaskWithAssignment
             task={activeTask}
             batch={batch}
             allTasks={tasks}
+            canAssign={canAssign}
+            currentUserId={user?.id}
             onTaskUpdated={handleTaskUpdated}
+            onAssignTask={onAssignTask}
+            productCode={batch.id}
           />
         )
       )}
@@ -492,10 +567,266 @@ export function EbprStepGuide({
 }
 
 // ============================================
-// Expansion Section (for inline rendering)
+// Task Assignment Wrapper - for SEED_PREP & HARVEST
 // ============================================
 
-import { ExpansionForm } from './expansion-form'
+function TaskWithAssignment({
+  task,
+  batch,
+  allTasks,
+  canAssign,
+  currentUserId,
+  onTaskUpdated,
+  onAssignTask,
+  productCode,
+}: {
+  task: ProductionTask
+  batch: BatchInfo
+  allTasks: ProductionTask[]
+  canAssign: boolean
+  currentUserId?: string
+  onTaskUpdated: () => void
+  onAssignTask?: (request: AssignTaskRequest) => void
+  productCode: string
+}) {
+  const needsAssignment = task.status === 'PENDING' && !task.assigneeId
+  const isLockedOut = task.assigneeId && task.assigneeId !== currentUserId && !canAssign
+
+  // Task is waiting for assignment
+  if (needsAssignment) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+            <UserPlus className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h3 className="text-base font-medium mb-1">等待指派</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            {task.taskName} 尚未指派操作员，请先指派后再开始操作。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-3">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+          {canAssign && onAssignTask && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 gap-1.5"
+              onClick={() => onAssignTask({
+                taskId: task.id,
+                taskName: task.taskName,
+                productId: productCode,
+              })}
+            >
+              <UserPlus className="h-4 w-4" />
+              指派操作员
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // User is not the assignee and cannot assign
+  if (isLockedOut) {
+    return (
+      <Card className="border-muted-foreground/20 bg-muted/30">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+            <ShieldCheck className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-base font-medium mb-1">非指派人员</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            该任务已指派给 <span className="font-medium text-foreground">{task.assigneeName}</span>，仅被指派人员可以操作。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show assignee info header for assigned tasks that are still pending/in-progress
+  if (task.assigneeName && task.status !== 'COMPLETED' && task.status !== 'REVIEWED') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
+          {task.assigneeName && (
+            <span className="flex items-center gap-1">
+              <User className="h-3 w-3" />
+              操作员: {task.assigneeName}
+            </span>
+          )}
+          {task.reviewerName && (
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </span>
+          )}
+          {task.actualStart && (
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              开始: {new Date(task.actualStart).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+            </span>
+          )}
+        </div>
+        <TaskFormWrapper
+          task={task}
+          batch={batch}
+          allTasks={allTasks}
+          onTaskUpdated={onTaskUpdated}
+        />
+      </div>
+    )
+  }
+
+  // Default: show normal task form (completed/reviewed tasks, or admin override)
+  return (
+    <TaskFormWrapper
+      task={task}
+      batch={batch}
+      allTasks={allTasks}
+      onTaskUpdated={onTaskUpdated}
+    />
+  )
+}
+
+// ============================================
+// Expansion Task Assignment Wrapper
+// ============================================
+
+function ExpansionTaskWithAssignment({
+  task,
+  batch,
+  allTasks,
+  canAssign,
+  currentUserId,
+  onTaskUpdated,
+  onAssignTask,
+  productCode,
+}: {
+  task: ProductionTask
+  batch: BatchInfo
+  allTasks: ProductionTask[]
+  canAssign: boolean
+  currentUserId?: string
+  onTaskUpdated: () => void
+  onAssignTask?: (request: AssignTaskRequest) => void
+  productCode: string
+}) {
+  const needsAssignment = task.status === 'PENDING' && !task.assigneeId
+  const isLockedOut = task.assigneeId && task.assigneeId !== currentUserId && !canAssign
+
+  // Task is waiting for assignment
+  if (needsAssignment) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+            <UserPlus className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h3 className="text-base font-medium mb-1">等待指派</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            {task.taskName}{task.stepGroup ? ` (${task.stepGroup})` : ''} 尚未指派操作员。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-3">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+          {canAssign && onAssignTask && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 gap-1.5"
+              onClick={() => onAssignTask({
+                taskId: task.id,
+                taskName: task.taskName,
+                productId: productCode,
+              })}
+            >
+              <UserPlus className="h-4 w-4" />
+              指派操作员
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // User is not the assignee and cannot assign
+  if (isLockedOut) {
+    return (
+      <Card className="border-muted-foreground/20 bg-muted/30">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+            <ShieldCheck className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-base font-medium mb-1">非指派人员</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            该任务已指派给 <span className="font-medium text-foreground">{task.assigneeName}</span>，仅被指派人员可以操作。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show assignee info header for assigned tasks
+  if (task.assigneeName && task.status !== 'COMPLETED' && task.status !== 'REVIEWED') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
+          {task.assigneeName && (
+            <span className="flex items-center gap-1">
+              <User className="h-3 w-3" />
+              操作员: {task.assigneeName}
+            </span>
+          )}
+          {task.reviewerName && (
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </span>
+          )}
+        </div>
+        <TaskFormWrapper
+          task={task}
+          batch={batch}
+          allTasks={allTasks}
+          onTaskUpdated={onTaskUpdated}
+        />
+      </div>
+    )
+  }
+
+  // Default: show normal task form
+  return (
+    <TaskFormWrapper
+      task={task}
+      batch={batch}
+      allTasks={allTasks}
+      onTaskUpdated={onTaskUpdated}
+    />
+  )
+}
+
+// ============================================
+// Expansion Section (for inline rendering)
+// ============================================
 
 function ExpansionSection({
   batch,
