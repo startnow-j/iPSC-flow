@@ -1681,3 +1681,63 @@ Stage Summary:
 - 权限总览：所有用户可查看权限配置，三级访问控制（ADMIN 全看/SUPERVISOR 看自己线/操作员看自己）
 - 响应式设计：桌面端使用 Table，移动端使用卡片列表
 - 代码零新增 ESLint error/warning
+---
+Task ID: Phase 1
+Agent: Main Agent (coordinated 3 sub-agents)
+Task: Phase 1 — 导航架构重构 + 双轨权限体系 + 产品权限管理
+
+Work Log:
+- 审计现有代码，确认 Phase 0 已完成（canManage/canOperate、QC 角色分离、状态机 QC 修正）
+- 识别 Phase 1 剩余 6 项工作：导航架构、用户管理增强、产品权限 API、权限页面、双轨权限接入
+- 并行启动 3 个开发子代理
+
+**A1: 导航架构 (§2.7)**
+- 重构 BatchListPage → 导出 BatchListContent，支持 defaultProductLine + hideProductLineFilter + viewMode props
+- 创建 3 个产品线路由: /batches/cell-product, /batches/service, /batches/kit
+- 更新 CreateBatchDialog: 支持 defaultProductLine 锁定产品选择
+- 批次卡片动态图标: CELL_PRODUCT→FlaskConical, SERVICE→Microscope, KIT→TestTubes
+- 侧边栏重构: 三产品线入口(生产管理组) + 全部批次移入系统管理区
+- 移除侧边栏"新建批次"按钮（各产品线页面自带）
+
+**B1: 用户管理后端增强**
+- GET /api/users: include productLines + roles
+- POST /api/users: 接受 productLines 数组，事务创建用户+UserProductLine
+- PATCH /api/users/[id]: 事务删除重建 UserProductLine
+- DELETE /api/users/[id]: 清理 UserProductLine + UserProductRole
+
+**B2: 产品权限 API**
+- 新增 GET/POST /api/product-roles: SUPERVISOR 产品级 OPERATOR/QC 分配
+- 新增 GET/PATCH/DELETE /api/product-roles/[userId]/[productId]: 单条 CRUD
+- 权限校验: 产品角色不超出全局资质 + 产品线归属 + ADMIN 天然通过
+
+**B3: 用户对话框增强**
+- 创建/编辑用户对话框: 新增产品线归属三卡片选择 (细胞产品/服务项目/试剂盒)
+- 仅 ADMIN 可见，支持创建和编辑模式
+- 用户列表: 新增产品线列，显示 ProductLineBadge
+
+**C1: 权限管理页面**
+- 产品权限配置页 /settings/product-roles: SUPERVISOR 操作入口
+  - 产品线切换标签、用户下拉、OPERATOR/QC 表格
+  - 全局资质约束 (无 QC 全局角色则 QC checkbox 禁用)
+- 权限总览页 /settings/permissions: 分级查看
+  - ADMIN 全部、SUPERVISOR 自己产品线、OPERATOR/QC 仅自己
+  - 产品线标签 + 搜索 + 桌面表格/移动卡片双布局
+
+**C3: 双轨权限校验接入**
+- POST /api/batches: canManage(产品线归属检查)
+- POST /api/batches/[id]/transition: 管理类→canManage + 操作类→canOperate
+- PATCH /api/batches/[id]/tasks/[taskId]: canOperate(OPERATOR)
+- POST /api/batches/[id]/qc: canOperate(QC)
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 正常编译运行
+- Git commit + push 完成
+
+Stage Summary:
+- 新增文件: 8 个（3 产品线路由 + 2 产品权限 API + 2 权限页面 + 1 batch-list 重构）
+- 修改文件: 15 个（侧边栏/头/用户对话框/用户列表/API 路由/批次列表/创建对话框）
+- 导航架构: §2.7 完整实现，三产品线独立入口
+- 权限体系: §2.6 v2.0 双轨验证全面接入后端 API
+- 权限管理: ADMIN 配置产品线归属 + SUPERVISOR 配置产品操作权限
+- 权限可视化: 权限配置页 + 权限总览页
+- 代码零新增 ESLint error/warning
