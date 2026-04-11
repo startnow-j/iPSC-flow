@@ -520,7 +520,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>确认退回 CoA</AlertDialogTitle>
             <AlertDialogDescription>
-              确认退回 CoA ({coa.coaNo})？退回后需要重新提交审核。
+              确认退回 CoA ({coa.coaNo})？退回后 CoA 将变为草稿状态，需要修改后重新提交审核。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-2">

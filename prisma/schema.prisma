@@ -26,8 +26,9 @@ enum Role {
   QA         // QA
 }
 
-/// 批次状态（11种，状态机驱动）
+/// 批次状态（15种，状态机驱动，按产品线分组）
 enum BatchStatus {
+  // === 通用状态 ===
   NEW              // 新建
   IN_PRODUCTION    // 生产中
   QC_PENDING       // 待质检
@@ -39,6 +40,15 @@ enum BatchStatus {
   COA_APPROVED     // CoA已批准
   RELEASED         // 已放行
   SCRAPPED         // 已报废
+
+  // === 服务项目特有 ===
+  SAMPLE_RECEIVED  // 样本已接收
+  HANDOVER         // 交接中
+  IDENTIFICATION   // 鉴定中
+  REPORT_PENDING   // 待生成报告
+
+  // === 试剂盒特有 ===
+  MATERIAL_PREP    // 物料准备中
 }
 
 /// 生产任务状态
@@ -51,10 +61,10 @@ enum TaskStatus {
 
 /// CoA状态
 enum CoaStatus {
-  DRAFT      // 草稿（质检通过自动生成）
+  DRAFT      // 草稿（质检通过自动生成 / CoA退回后重置为此状态）
   SUBMITTED  // 已提交审核
   APPROVED   // 已批准
-  REJECTED   // 已退回
+  REJECTED   // 已退回（文件层面退回，不影响批次状态）
 }
 
 /// 产品线
@@ -130,6 +140,10 @@ model Batch {
 
   // 订单信息（服务项目关联）
   orderNo         String?                            // 服务订单号
+
+  // 鉴定/质检要求配置（JSON数组，服务项目和试剂盒使用）
+  // 示例: ["INTEGRATION", "KARYOTYPE", "PLURI_CHECK", "STR", "POTENCY"]
+  identificationRequirements  String  @default("[]")  // JSON
 
   // 状态
   status          BatchStatus @default(NEW)

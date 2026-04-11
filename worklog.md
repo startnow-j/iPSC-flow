@@ -1034,3 +1034,155 @@ Stage Summary:
 - 修改文件：PROJECT_DOCS.md（文档清单更新、PRD状态更新）
 - 修改文件：docs/requirements/PRD-v2.0-MVP.md（状态标记已完成、交付总结）
 - 关键决策记录：用户+具体产品+角色关联粒度、3条产品线6+种子产品、AI对话模式放在Phase 4
+---
+Task ID: p2-2
+Agent: State Machine Refactoring Agent
+Task: Refactor state machine for multi-product-line support
+
+Work Log:
+- Read existing state-machine.ts and understood current BATCH_TRANSITIONS structure
+- Created TRANSITION_TEMPLATES with 3 product line templates (CELL_PRODUCT, SERVICE, KIT)
+- CELL_PRODUCT: exact migration of existing 11 statuses, 16 transition rules
+- SERVICE: 9 statuses with HANDOVER loop and IDENTIFICATION phase
+- KIT: 13 statuses with MATERIAL_PREP stage
+- Updated canTransition/getAvailableActions to accept productLine parameter
+- Updated transition() to query batch.productLine internally
+- Added 5 new status labels (SAMPLE_RECEIVED, HANDOVER, IDENTIFICATION, REPORT_PENDING, MATERIAL_PREP)
+- Added corresponding status colors
+- Added backward-compatible BATCH_TRANSITIONS alias
+- Added resubmit_coa action to CELL_PRODUCT COA_SUBMITTED for CoA resubmission after rejection
+- Removed REJECTED from batch status transitions (CoA rejection handled at CoA table level)
+- Updated caller in /api/batches/[id]/route.ts to pass batch.productLine to getAvailableActions
+- Updated services/index.ts to export getTransitions
+
+Stage Summary:
+- 3 transition templates defined (CELL_PRODUCT, SERVICE, KIT)
+- 15 batch statuses supported with labels and colors
+- All existing CELL_PRODUCT transitions preserved exactly
+- transition() function now productLine-aware
+- Backward compatibility maintained via BATCH_TRANSITIONS alias
+- ESLint: only pre-existing generate-plan.js errors, zero new errors
+- TypeScript: no new type errors in changed files
+
+---
+Task ID: p2-4-5
+Agent: API + Frontend Adaptation Agent
+Task: Backend API and frontend adaptation for multi-product-line state machine
+
+Work Log:
+- Read worklog.md and analyzed all files referencing old REJECTED batch status or reject_coa action
+- Verified batch detail route already uses batch.productLine as first arg to getAvailableActions (A3 ✓)
+- Verified audit-log.ts COA_REJECTED is CoA-level only, no batch REJECTED references (A4 ✓)
+- Verified audit page COA_REJECTED event type is CoA-level, no changes needed (B4 ✓)
+
+**A1: Fixed transition route (src/app/api/batches/[id]/transition/route.ts)**
+- Added special intercept for reject_coa action before calling transition()
+- reject_coa now sets CoA.status = 'DRAFT' (not 'REJECTED'), batch stays COA_SUBMITTED
+- Records COA_REJECTED audit log with DRAFT status
+- New actions (receive_sample, request_handover, accept_handover, start_identification, complete_identification, submit_report, start_material_prep) pass through to transition() automatically
+
+**A2: Fixed CoA route (src/app/api/coa/[coaId]/route.ts)**
+- Complete rewrite of PATCH endpoint to handle submit/approve/reject per product line
+- Submit: CELL_PRODUCT/KIT use transition 'submit_coa', SERVICE uses 'submit_report'
+- Approve: CELL_PRODUCT/KIT use transition 'approve_coa', SERVICE uses 'approve' + manual CoA→APPROVED
+- Reject: CELL_PRODUCT sets CoA→DRAFT directly (batch stays COA_SUBMITTED), SERVICE calls transition 'reject' (batch→REPORT_PENDING) + CoA→DRAFT, KIT returns 400 error (no reject support)
+- Each path records appropriate audit logs
+
+**state-machine.ts: Fixed reject_coa handler**
+- reject_coa now sets CoA.status = 'DRAFT' instead of 'REJECTED'
+- resubmit_coa comment updated to reflect DRAFT/REJECTED → SUBMITTED
+
+**B1: Fixed batch detail page (src/app/batches/[id]/page.tsx)**
+- Removed all 'REJECTED' batch status references from QC and CoA tab conditions
+- QC tab: SERVICE product line shows "服务项目无独立质检流程" placeholder
+- QC tab: CELL_PRODUCT/KIT use standard QC flow with MATERIAL_PREP added to pre-QC statuses
+- CoA tab: Added REPORT_PENDING to statuses that expect CoA generation
+- CoA tab: SERVICE-specific placeholder text for CoA descriptions
+
+**B2: Fixed CoA detail component (src/components/coa/coa-detail.tsx)**
+- Updated reject confirmation dialog text: "CoA 将变为草稿状态，需要修改后重新提交审核"
+- CoA REJECTED status branch retained for backward compat (shows "重新提交" button)
+
+**B3: Fixed batch-status-overview.tsx**
+- Removed 'REJECTED' batch status entry from STATUS_DISPLAY
+- Added 5 new statuses: SAMPLE_RECEIVED, HANDOVER, IDENTIFICATION, REPORT_PENDING, MATERIAL_PREP
+- Total 15 statuses now tracked in sidebar overview
+
+- Lint check: only pre-existing generate-plan.js errors (2), zero new errors
+- Dev server: running normally, no compilation errors
+
+Stage Summary:
+- Backend: All API routes now compatible with multi-product-line state machine
+- Transition route: reject_coa intercepted, CoA→DRAFT, batch stays COA_SUBMITTED
+- CoA route: submit/approve/reject all product-line-aware (CELL_PRODUCT/SERVICE/KIT)
+- Frontend: Batch detail page handles all 3 product lines with appropriate QC/CoA messages
+- CoA detail: reject dialog updated to reflect DRAFT reset behavior
+- Status overview: 15 statuses displayed (REJECTED batch status removed, 5 new added)
+- CELL_PRODUCT flow preserved (regression-safe)
+- New actions (receive_sample, handover, identification, material_prep) supported via state machine
+
+---
+Task ID: p2-2
+Agent: State Machine Refactoring Agent
+Task: Refactor state machine for multi-product-line support (3 transition templates)
+
+Work Log:
+- Read existing state-machine.ts and understood current BATCH_TRANSITIONS structure
+- Created TRANSITION_TEMPLATES with 3 product line templates (CELL_PRODUCT, SERVICE, KIT)
+- CELL_PRODUCT: exact migration of existing 11 statuses, 16 transition rules, added resubmit_coa
+- SERVICE: 9 statuses with HANDOVER loop, IDENTIFICATION phase, REPORT_PENDING
+- KIT: 13 statuses with MATERIAL_PREP stage, QC/CoA flow similar to CELL_PRODUCT
+- Updated canTransition/getAvailableActions to accept productLine parameter
+- Updated transition() to query batch.productLine internally
+- Added 5 new status labels (SAMPLE_RECEIVED, HANDOVER, IDENTIFICATION, REPORT_PENDING, MATERIAL_PREP)
+- Added corresponding status colors (amber/indigo/purple/cyan)
+- Removed REJECTED from batch status transitions (CoA rejection handled at CoA table level)
+- Added BATCH_TRANSITIONS backward-compatible alias
+
+Stage Summary:
+- 3 transition templates defined (CELL_PRODUCT, SERVICE, KIT)
+- 15 batch statuses supported with labels and colors
+- All existing CELL_PRODUCT transitions preserved exactly
+- transition() function now productLine-aware
+- Backward compatibility maintained via BATCH_TRANSITIONS alias
+
+---
+Task ID: p2-4-5
+Agent: API + Frontend Adaptation Agent
+Task: Backend API and frontend adaptation for multi-product-line state machine
+
+Work Log:
+- Updated transition route: reject_coa now sets CoA to DRAFT (not REJECTED batch status)
+- Updated CoA route: reject action distinguishes between CELL_PRODUCT and SERVICE
+- Updated batch detail page: removed REJECTED batch status references, added MATERIAL_PREP to pre-QC statuses
+- Updated CoA detail component: rejection now resets CoA to DRAFT for CELL_PRODUCT
+- Updated batch-status-overview: removed REJECTED, added 5 new statuses (15 total)
+- Updated batch creation API: fixed batch number prefix for cell products (uses product code), added identificationRequirements field
+- Verified all 15+ statuses handled in all frontend components
+
+Stage Summary:
+- Backend: All API routes now compatible with multi-product-line state machine
+- Frontend: Batch detail and CoA detail components handle all 3 product lines
+- CELL_PRODUCT flow preserved (regression-safe)
+- New actions (receive_sample, handover, identification, material_prep) supported
+- Batch creation: product-line-aware batch numbering, identificationRequirements field
+- Zero new lint errors
+
+---
+Task ID: p2-main
+Agent: Main Agent
+Task: Phase 2 multi-product-line state machine — schema + state machine + API + frontend + seed data
+
+Work Log:
+- Updated plan document (v1.0 → v1.1) with all Phase 2 design decisions
+- Schema changes: BatchStatus expanded (15 statuses, removed REJECTED), added identificationRequirements field
+- db:push successful, Prisma Client regenerated
+- Seed data verified: 6 products, 22 user-product-role associations
+- Batch creation API: product-code-based prefixes for CELL_PRODUCT, identificationRequirements support
+- Lint check: only 2 pre-existing errors in generate-plan.js
+- Dev server compilation: no errors
+
+Stage Summary:
+- Phase 2 core implementation complete: 3 transition templates, 15 batch statuses, all API routes updated
+- Key files changed: schema.prisma, state-machine.ts, transition/route.ts, coa/[coaId]/route.ts, batches/route.ts, batch-status-overview.tsx, batches/[id]/page.tsx, coa-detail.tsx
+- Plan document updated: docs/plans/多产品线扩展计划-v1.0.md v1.1

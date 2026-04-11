@@ -31,6 +31,58 @@ export async function POST(
     }
 
     // ============================================
+    // Special: reject_coa — CoA 退回
+    // REJECTED batch status 已移除。CoA 退回现在在 CoA 表层面处理（status → DRAFT），
+    // 批次状态保持 COA_SUBMITTED 不变。
+    // ============================================
+    if (action === 'reject_coa') {
+      const batch = await db.batch.findUnique({ where: { id } })
+      if (!batch) {
+        return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+      }
+
+      const coa = await db.coa.findUnique({ where: { batchId: id } })
+      if (!coa) {
+        return NextResponse.json({ error: 'CoA不存在' }, { status: 404 })
+      }
+
+      // Update CoA status to DRAFT (not REJECTED)
+      await db.coa.update({
+        where: { batchId: id },
+        data: {
+          status: 'DRAFT',
+          reviewedBy: payload.userId,
+          reviewedByName: payload.name,
+          reviewComment: reason ?? '',
+          reviewedAt: new Date(),
+        },
+      })
+
+      // Record audit log
+      await createAuditLog({
+        eventType: 'COA_REJECTED',
+        targetType: 'COA',
+        targetId: coa.id,
+        targetBatchNo: batch.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataBefore: { coaStatus: 'SUBMITTED' },
+        dataAfter: {
+          coaStatus: 'DRAFT',
+          reviewComment: reason ?? '',
+          note: 'CoA退回为草稿，批次状态保持COA_SUBMITTED',
+        },
+      })
+
+      return NextResponse.json({
+        success: true,
+        message: `CoA已退回为草稿，批次状态保持 ${getStatusLabel(batch.status)}`,
+        previousState: batch.status,
+        newState: batch.status,
+      })
+    }
+
+    // ============================================
     // 开始生产时自动创建 3 个生产任务
     // ============================================
     if (action === 'start_production') {
@@ -84,8 +136,6 @@ export async function POST(
         })
 
         // 记录审计日志：自动创建生产任务
-        // 跳过逐条 task 审计日志（外键约束要求 task 必须已存在），
-        // 仅记录一条汇总日志
         await createAuditLog({
           eventType: 'BATCH_STATUS_CHANGED',
           targetType: 'BATCH',
@@ -106,7 +156,8 @@ export async function POST(
       }
     }
 
-    // 执行状态转换
+    // 执行状态转换（包括新动作: receive_sample, request_handover, accept_handover,
+    // start_identification, complete_identification, submit_report, start_material_prep）
     const result = await transition(
       id,
       action,

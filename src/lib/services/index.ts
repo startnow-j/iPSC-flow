@@ -7,6 +7,7 @@ export {
   BATCH_TRANSITIONS,
   canTransition,
   getAvailableActions,
+  getTransitions,
   transition,
   getStatusLabel,
   getStatusColor,

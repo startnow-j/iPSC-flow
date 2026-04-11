@@ -33,6 +33,7 @@ export async function GET(
 
     // 获取当前用户可执行的操作
     const availableActions = getAvailableActions(
+      batch.productLine as import('@prisma/client').ProductLine,
       batch.status as string,
       getRolesFromPayload(payload)
     )

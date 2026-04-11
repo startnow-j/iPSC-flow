@@ -132,6 +132,7 @@ export async function POST(request: NextRequest) {
       seedBatchNo,
       seedPassage,
       orderNo,
+      identificationRequirements,
     } = body
 
     // 校验
@@ -166,9 +167,17 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 获取产品线前缀
-    const productLineKey = product.productLine as string
-    const prefix = BATCH_NO_PREFIXES[productLineKey] || 'BATCH'
+    // 获取批次编号前缀
+    // 细胞产品线使用产品代码作为前缀（如 IPSC-260620-001, NPC-260620-001）
+    // 服务项目/试剂盒使用固定前缀（SRV-, KIT-）
+    let prefix: string
+    if (product.productLine === 'CELL_PRODUCT') {
+      // 提取产品代码的基础前缀（取第一个 - 之前的部分）
+      // IPSC-WT-001 → IPSC, NPC-001 → NPC
+      prefix = product.productCode.split('-')[0] || 'BATCH'
+    } else {
+      prefix = BATCH_NO_PREFIXES[product.productLine as string] || 'BATCH'
+    }
 
     // 生成批次编号：{PREFIX}-YYMMDD-序号
     const now = new Date()
@@ -219,6 +228,9 @@ export async function POST(request: NextRequest) {
         currentPassage: seedPassage || null,
         plannedEndDate: plannedEndDate ? new Date(plannedEndDate) : null,
         orderNo: orderNo || null,
+        identificationRequirements: identificationRequirements
+          ? JSON.stringify(identificationRequirements)
+          : '[]',
         createdBy: payload.userId,
         createdByName: payload.name,
       },

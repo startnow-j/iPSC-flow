@@ -20,8 +20,14 @@ const STATUS_DISPLAY = [
   { key: 'COA_APPROVED', label: 'CoA已批准', dotClass: 'bg-teal-400' },
   { key: 'RELEASED', label: '已放行', dotClass: 'bg-green-500' },
   { key: 'QC_FAIL', label: '不合格', dotClass: 'bg-red-400' },
-  { key: 'REJECTED', label: '已退回', dotClass: 'bg-rose-400' },
   { key: 'SCRAPPED', label: '已报废', dotClass: 'bg-gray-400' },
+  // Service-specific
+  { key: 'SAMPLE_RECEIVED', label: '样本已接收', dotClass: 'bg-blue-400' },
+  { key: 'HANDOVER', label: '交接中', dotClass: 'bg-amber-300' },
+  { key: 'IDENTIFICATION', label: '鉴定中', dotClass: 'bg-indigo-400' },
+  { key: 'REPORT_PENDING', label: '待生成报告', dotClass: 'bg-purple-400' },
+  // KIT-specific
+  { key: 'MATERIAL_PREP', label: '物料准备中', dotClass: 'bg-cyan-400' },
 ]
 
 interface BatchStatusOverviewProps {
