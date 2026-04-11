@@ -206,7 +206,39 @@ export async function PATCH(
     }
 
     if (status === 'COMPLETED' && task.taskCode === 'HARVEST') {
-      // 收获冻存完成 → 不自动触发 QC_PENDING，由前端用户确认后触发
+      // 收获冻存完成 → 将实际数量和存储位置同步到 batch 表
+      const finalFormData = formData ?? (task.formData ? JSON.parse(task.formData) : null)
+      const batchUpdateData: Record<string, unknown> = {}
+
+      if (finalFormData?.total_vials != null) {
+        batchUpdateData.actualQuantity = Number(finalFormData.total_vials)
+      }
+      if (finalFormData?.storage_location) {
+        batchUpdateData.storageLocation = String(finalFormData.storage_location)
+      }
+
+      if (Object.keys(batchUpdateData).length > 0) {
+        const dataBefore = {}
+        if (batchUpdateData.actualQuantity !== undefined) (dataBefore as any).actualQuantity = batch.actualQuantity
+        if (batchUpdateData.storageLocation !== undefined) (dataBefore as any).storageLocation = batch.storageLocation
+
+        await db.batch.update({
+          where: { id },
+          data: batchUpdateData,
+        })
+
+        await createAuditLog({
+          eventType: 'BATCH_UPDATED',
+          targetType: 'BATCH',
+          targetId: id,
+          targetBatchNo: batch.batchNo,
+          operatorId: payload.userId,
+          operatorName: payload.name,
+          dataBefore,
+          dataAfter: batchUpdateData,
+        })
+      }
+
       batchTransitioned = true
     }
 

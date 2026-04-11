@@ -727,3 +727,25 @@ Stage Summary:
 - 新增文件：`src/app/batches/all/page.tsx`
 - 所有指向 `/batches/all` 的链接现在都能正确渲染"所有批次"页面
 - QA 用户可以通过"待质检批次"快捷操作正常查看和操作质检批次
+---
+Task ID: 3
+Agent: Main Agent
+Task: 修复生产中填写的数量和存储位置不显示的问题
+
+Work Log:
+- 用户报告生产过程中填写的数量和存储位置在批次概览中不显示
+- 分析数据流：HarvestForm 提交 → PATCH /api/batches/[id]/tasks/[taskId] → 更新 production_task.formData
+- 发现 formData 中的 `total_vials` 和 `storage_location` 只保存在任务的 JSON 字段中
+- 批次概览页读取的是 `batch.actualQuantity` 和 `batch.storageLocation` 两个独立字段
+- **根因**：HARVEST 任务完成时没有将 formData 中的实际数量和存储位置同步回 batch 表
+- 修改 `src/app/api/batches/[id]/tasks/[taskId]/route.ts`：在 HARVEST 任务完成时
+  - 提取 `formData.total_vials` → 写入 `batch.actualQuantity`
+  - 提取 `formData.storage_location` → 写入 `batch.storageLocation`
+  - 同时记录 BATCH_UPDATED 审计日志
+- 手动修复历史数据：将已有批次的 actualQuantity=24、storageLocation='液氮罐4#C架 盒子1' 更新到 batch 表
+
+Stage Summary:
+- 修复文件：`src/app/api/batches/[id]/tasks/[taskId]/route.ts`
+- 新增逻辑：HARVEST 任务完成时自动同步实际数量和存储位置到 batch 表
+- 历史数据已通过 SQL 修复
+- 后续所有收获冻存操作都会自动回写批次信息
