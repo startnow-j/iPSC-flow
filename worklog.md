@@ -1016,3 +1016,21 @@ Stage Summary:
 - Batch list: product line filter row with colored active state
 - All batch cards/headers show productLine badge
 - Zero new lint errors
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: 多产品线扩展文档更新 — 按照 PROJECT_DOCS.md 规范管理文档
+
+Work Log:
+- 阅读全部项目文档：PROJECT_DOCS.md、PRD v2.0 MVP、多产品线实现方案、生产管理流程规划方案、架构设计文档、worklog、prisma schema、state-machine.ts
+- 分析当前文档体系状态：MVP已完成但文档状态未更新，缺少多产品线扩展计划文档
+- 创建 docs/plans/多产品线扩展计划-v1.0.md（4阶段详细设计文档）
+- 更新 PROJECT_DOCS.md：新增扩展计划文档条目、更新PRD状态为已完成、更新最后更新日期
+- 更新 PRD-v2.0-MVP.md：状态从"待评审"改为"✅ MVP 已完成"，新增交付总结章节
+
+Stage Summary:
+- 新增文件：docs/plans/多产品线扩展计划-v1.0.md（4阶段扩展计划：产品线架构→状态机→UI适配→AI对话）
+- 修改文件：PROJECT_DOCS.md（文档清单更新、PRD状态更新）
+- 修改文件：docs/requirements/PRD-v2.0-MVP.md（状态标记已完成、交付总结）
+- 关键决策记录：用户+具体产品+角色关联粒度、3条产品线6+种子产品、AI对话模式放在Phase 4
