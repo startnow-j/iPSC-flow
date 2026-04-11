@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, Suspense } from 'react'
+import { useState, useRef, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
   Card,
@@ -27,12 +27,12 @@ function LoginForm() {
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const formRef = useRef<HTMLFormElement>(null)
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const doLogin = async (loginEmail: string, loginPassword: string) => {
     setError('')
 
-    if (!email || !password) {
+    if (!loginEmail || !loginPassword) {
       setError('请输入邮箱和密码')
       return
     }
@@ -43,7 +43,7 @@ function LoginForm() {
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email: loginEmail, password: loginPassword }),
       })
 
       const data = await res.json()
@@ -52,6 +52,10 @@ function LoginForm() {
         setError(data.error || '登录失败，请检查邮箱和密码')
         return
       }
+
+      // Update form fields to reflect the logged-in account
+      setEmail(loginEmail)
+      setPassword(loginPassword)
 
       // Store user info AND token in Zustand (persists to localStorage)
       setUser(data.user, data.token)
@@ -69,8 +73,17 @@ function LoginForm() {
     }
   }
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    await doLogin(email, password)
+  }
+
+  const handleDemoLogin = (demoEmail: string) => {
+    doLogin(demoEmail, '123456')
+  }
+
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form ref={formRef} onSubmit={handleSubmit} className="space-y-4">
       {/* Error Message */}
       {error && (
         <div className="rounded-lg bg-red-50 border border-red-200 dark:bg-red-950/50 dark:border-red-800/50 p-3 text-sm text-red-600 dark:text-red-400">
@@ -131,14 +144,12 @@ function LoginForm() {
             <button
               key={account.email}
               type="button"
-              onClick={() => {
-                setEmail(account.email)
-                setPassword('123456')
-              }}
-              className="text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left truncate"
+              disabled={loading}
+              onClick={() => handleDemoLogin(account.email)}
+              className="text-xs text-gray-500 dark:text-gray-400 hover:text-teal-600 dark:hover:text-teal-400 transition-colors px-2 py-1.5 rounded-md hover:bg-teal-50 dark:hover:bg-teal-900/20 text-left truncate disabled:opacity-50 disabled:cursor-not-allowed"
               title={`${account.email} / 123456`}
             >
-              {account.label}
+              {loading ? '登录中...' : account.label}
             </button>
           ))}
         </div>

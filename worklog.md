@@ -688,3 +688,23 @@ Stage Summary:
 - 权限模型：any-match 语义（拥有任一所需角色即有权限）
 - UI 变化：用户列表多角色 Badge、创建/编辑用户 Checkbox 多选
 - 种子数据示例：2 个用户拥有多角色（主管+操作员、操作员+QA）
+---
+Task ID: 1
+Agent: Main Agent
+Task: 修复登录界面演示账号不能点击登录的问题
+
+Work Log:
+- 检查开发服务器日志，无编译错误
+- 分析登录页面代码 `src/app/login/page.tsx`
+- 发现问题：演示账号按钮的 onClick 仅调用 `setEmail()` + `setPassword()` 填充表单字段，不会自动提交登录
+- 用户需要手动再点击"登录"按钮才能完成登录，体验不佳
+- 重构登录逻辑：抽取 `doLogin(email, password)` 核心函数
+- `handleSubmit` 调用 `doLogin(email, password)` 处理表单提交
+- `handleDemoLogin` 直接调用 `doLogin(demoEmail, '123456')` 实现一键登录
+- 为演示按钮添加 `disabled` 和 loading 状态，防止重复点击
+- 登录 API 和 auth-me API 验证均正常返回 200
+
+Stage Summary:
+- 修复文件：`src/app/login/page.tsx`
+- 演示账号按钮现在支持一键登录（点击即自动调用登录 API）
+- 添加了 loading 状态防止重复提交
