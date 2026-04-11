@@ -36,11 +36,6 @@ export default function UsersPage() {
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open)
-    // Delay clearing editUser to avoid re-rendering during Radix dialog close animation
-    // (Radix usePresence ref loop would otherwise cause infinite update depth)
-    if (!open) {
-      setTimeout(() => setEditUser(null), 250)
-    }
   }
 
   // Access control: only ADMIN
@@ -86,13 +81,15 @@ export default function UsersPage() {
         onRefresh={handleRefresh}
       />
 
-      {/* Create/Edit Dialog */}
-      <CreateUserDialog
-        open={dialogOpen}
-        onOpenChange={handleDialogClose}
-        onSuccess={handleRefresh}
-        editUser={editUser}
-      />
+      {/* Create/Edit Dialog — conditionally rendered to avoid Radix usePresence infinite loop */}
+      {dialogOpen && (
+        <CreateUserDialog
+          open={dialogOpen}
+          onOpenChange={handleDialogClose}
+          onSuccess={handleRefresh}
+          editUser={editUser}
+        />
+      )}
     </div>
   )
 }

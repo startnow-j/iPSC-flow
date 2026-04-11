@@ -90,10 +90,6 @@ export default function ProductsPage() {
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open)
-    // Delay clearing editProduct to avoid re-rendering during Radix dialog close animation
-    if (!open) {
-      setTimeout(() => setEditProduct(null), 250)
-    }
   }
 
   const handleToggleActive = async (product: ProductItem) => {
@@ -355,13 +351,15 @@ export default function ProductsPage() {
         })
       )}
 
-      {/* Create/Edit Dialog */}
-      <CreateProductDialog
-        open={dialogOpen}
-        onOpenChange={handleDialogClose}
-        onSuccess={fetchProducts}
-        editProduct={editProduct}
-      />
+      {/* Create/Edit Dialog — conditionally rendered to avoid Radix usePresence infinite loop */}
+      {dialogOpen && (
+        <CreateProductDialog
+          open={dialogOpen}
+          onOpenChange={handleDialogClose}
+          onSuccess={fetchProducts}
+          editProduct={editProduct}
+        />
+      )}
     </div>
   )
 }
