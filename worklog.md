@@ -1858,3 +1858,21 @@ Stage Summary:
   - SUPERVISOR: 看全部用户 + 全部产品权限（与管理员相同）
   - QA/QC/OPERATOR: 仅看自己的权限信息
 - 后端和前端同步修改，API 负责数据过滤，前端负责展示
+---
+Task ID: 1
+Agent: Main Agent
+Task: 按产品线分离批次状态显示
+
+Work Log:
+- 分析当前状态显示架构：侧边栏 BatchStatusOverview 和首页仪表盘的"批次概览"将所有产品线状态合并展示
+- 修改 `/api/batches/status-stats` API，新增 `byProductLine` 字段，使用 `GROUP BY productLine, status` SQL 查询按产品线分组统计
+- 重写侧边栏 `BatchStatusOverview` 组件：按产品线分组（可折叠），每个产品线仅显示其相关状态（如服务项目显示"样本已接收"、"鉴定中"等，试剂盒显示"物料准备中"等）
+- 重写首页仪表盘 `page.tsx`：将原来合并的6个统计卡片改为3个产品线独立的统计区域，每个区域显示该产品线的专属状态
+- 修复 `byProductLine` SQL 查询使用 `db.$queryRaw` 获取原始分组数据
+- Lint 检查通过（仅有不相关的 generate-plan.js 警告）
+
+Stage Summary:
+- API 新增 `byProductLine: Record<string, Record<string, number>>` 返回格式
+- 侧边栏状态概览改为可折叠的产品线分组，每组仅显示有数据的状态
+- 首页仪表盘改为三个产品线独立卡片，点击状态数字可跳转到对应产品线的筛选页面
+- 每个产品线的状态定义基于 state-machine.ts 中的状态转换模板

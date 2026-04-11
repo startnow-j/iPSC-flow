@@ -4,7 +4,10 @@ import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 
 // ============================================
 // GET /api/batches/status-stats — 首页仪表盘统计
-// 返回全局 + 与当前用户相关 两套统计
+// 返回：
+//   global          — 所有产品线合计
+//   mine            — 与当前用户相关
+//   byProductLine   — 按产品线分组
 // 时间范围：最近 90 天
 // ============================================
 export async function GET(request: NextRequest) {
@@ -24,8 +27,8 @@ export async function GET(request: NextRequest) {
 
     const timeFilter = { createdAt: { gte: since } }
 
-    // 并行查询：全局 + 我的
-    const [globalCounts, myCounts] = await Promise.all([
+    // 并行查询：全局 + 我的 + 按产品线
+    const [globalCounts, myCounts, byProductLineCounts] = await Promise.all([
       // 全局：最近 90 天所有批次
       db.batch.groupBy({
         by: ['status'],
@@ -43,6 +46,15 @@ export async function GET(request: NextRequest) {
           AND (b.createdBy = ${payload.userId} OR t.assigneeId = ${payload.userId})
         GROUP BY b.status
       `,
+      // 按产品线分组统计
+      db.$queryRaw<
+        { productLine: string; status: string; count: bigint }[]
+      >`
+        SELECT productLine, status, COUNT(*) as count
+        FROM batch
+        WHERE createdAt >= ${since}
+        GROUP BY productLine, status
+      `,
     ])
 
     const formatCounts = (items: { status: string; _count?: { status: number }; count?: bigint }[]) => {
@@ -53,9 +65,20 @@ export async function GET(request: NextRequest) {
       return map
     }
 
+    // 按产品线组织数据
+    const byProductLine: Record<string, Record<string, number>> = {}
+    for (const row of byProductLineCounts) {
+      const pl = row.productLine || 'UNKNOWN'
+      if (!byProductLine[pl]) {
+        byProductLine[pl] = {}
+      }
+      byProductLine[pl][row.status] = Number(row.count)
+    }
+
     return NextResponse.json({
       global: formatCounts(globalCounts),
       mine: formatCounts(myCounts),
+      byProductLine,
       since: since.toISOString(),
     })
   } catch (error) {
