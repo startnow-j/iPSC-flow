@@ -89,10 +89,12 @@ export default function ProductRolesPage() {
   const [saving, setSaving] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
 
-  // Determine which product lines the user can see
-  const visibleProductLines = isCurrentUserAdmin
-    ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
-    : (currentUser?.productLines || [])
+  // Determine which product lines the user can see (memoized)
+  const visibleProductLines = useMemo(() => {
+    return isCurrentUserAdmin
+      ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
+      : (currentUser?.productLines || [])
+  }, [isCurrentUserAdmin, currentUser?.productLines])
 
   // Fetch products
   const fetchProducts = useCallback(async (line: string) => {

@@ -100,10 +100,12 @@ export default function PermissionsOverviewPage() {
   const hasManagementRole = (roles: string[]) =>
     roles.some((r) => MANAGEMENT_ROLES.includes(r))
 
-  // Determine visible product lines for filtering
-  const visibleProductLines = isCurrentUserAdmin
-    ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
-    : (currentUser?.productLines || [])
+  // Determine visible product lines for filtering (memoized to prevent infinite loop)
+  const visibleProductLines = useMemo(() => {
+    return isCurrentUserAdmin
+      ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
+      : (currentUser?.productLines || [])
+  }, [isCurrentUserAdmin, currentUser?.productLines])
 
   // Fetch all data
   const fetchData = useCallback(async () => {
@@ -118,9 +120,6 @@ export default function PermissionsOverviewPage() {
       if (usersRes.ok) {
         const data = await usersRes.json()
         fetchedUsers = data.users || []
-      } else {
-        // For non-admin users who can't access /api/users, return empty
-        // They'll only see their own data from product-roles
       }
 
       let fetchedRoles: ProductRoleItem[] = []
@@ -130,17 +129,19 @@ export default function PermissionsOverviewPage() {
       }
 
       // Access control filtering
-      if (isOperationalOnly) {
+      const currentUserId = currentUser?.id
+      if (isOperationalOnly && currentUserId) {
         // Only show own row
-        fetchedUsers = fetchedUsers.filter((u) => u.id === currentUser?.id)
-        fetchedRoles = fetchedRoles.filter((r) => r.userId === currentUser?.id)
+        fetchedUsers = fetchedUsers.filter((u) => u.id === currentUserId)
+        fetchedRoles = fetchedRoles.filter((r) => r.userId === currentUserId)
       } else if (isSupervisor) {
         // Only show users in their product lines
+        const lines = visibleProductLines
         fetchedUsers = fetchedUsers.filter((u) =>
-          u.productLines?.some((pl) => visibleProductLines.includes(pl))
+          u.productLines?.some((pl) => lines.includes(pl))
         )
         fetchedRoles = fetchedRoles.filter((r) =>
-          visibleProductLines.includes(r.productLine)
+          lines.includes(r.productLine)
         )
       }
 
@@ -152,7 +153,7 @@ export default function PermissionsOverviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [isCurrentUserAdmin, isSupervisor, isOperationalOnly, visibleProductLines, currentUser])
+  }, [isOperationalOnly, isSupervisor, currentUser?.id, visibleProductLines])
 
   useEffect(() => {
     if (!authLoading) {
