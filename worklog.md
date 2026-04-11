@@ -1785,3 +1785,25 @@ Stage Summary:
 - Product line selection checkboxes in CreateUserDialog no longer trigger infinite loop
 - All three dialog pages compile and render correctly
 - Lint passes (only pre-existing generate-plan.js errors)
+
+---
+Task ID: 1
+Agent: Main Agent
+Task: 修复预览界面白板问题 — 诊断并恢复开发服务器
+
+Work Log:
+- 检查 dev.log 发现开发服务器未运行（进程已终止）
+- 检查所有 dialog 组件文件（create-user-dialog, create-product-dialog, create-batch-dialog）均存在于正确路径
+- 验证 SimpleDialog 导入导出完全匹配（Dialog, DialogHeader, DialogFooter, DialogTitle, DialogDescription）
+- 确认仅 command.tsx 仍使用 Radix UI Dialog（预期行为）
+- 确认 settings/product-roles/page.tsx 中 selectedUser TDZ 修复仍然有效
+- 重启开发服务器（npx next dev -p 3000）
+- 恢复 dialog.tsx 到标准 shadcn/ui 状态（移除 forceMount 调试残留，恢复动画 CSS 类）
+- 验证所有页面编译成功（200 OK），无 TypeScript 错误
+
+Stage Summary:
+- 根本原因：开发服务器进程已终止，导致预览界面无法连接
+- 修复：重启开发服务器，清理调试残留代码
+- dialog.tsx 恢复标准 shadcn/ui 状态（含动画类），仅用于 command.tsx
+- 三个 create-*-dialog 组件已成功迁移到 SimpleDialog（纯 React 实现，无 Radix UI 依赖）
+- 所有页面编译正常，API 响应 200 OK
