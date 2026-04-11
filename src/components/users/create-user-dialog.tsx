@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { toast } from 'sonner'
 import {
@@ -59,8 +59,8 @@ export function CreateUserDialog({
   const { user: currentUser } = useAuthStore()
   const isCurrentUserAdmin = currentUser ? isAdmin(currentUser.roles) : true
 
-  // Reset form when dialog opens
-  const handleOpenChange = (open: boolean) => {
+  // Reset form when dialog opens (useEffect because SimpleDialog doesn't call onOpenChange on programmatic open)
+  useEffect(() => {
     if (open) {
       setName(editUser?.name || '')
       setEmail(editUser?.email || '')
@@ -71,6 +71,9 @@ export function CreateUserDialog({
       setDepartment(editUser?.department || '')
       setProductLines(editUser?.productLines || [])
     }
+  }, [open, editUser])
+
+  const handleOpenChange = (open: boolean) => {
     onOpenChange(open)
   }
 

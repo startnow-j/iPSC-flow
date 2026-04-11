@@ -1939,3 +1939,19 @@ Stage Summary:
 - 未指派的任务显示"等待指派"状态，非指派人员无法操作已指派的任务
 - 步骤进度条显示每个步骤的指派人信息
 - 三条产品线（细胞产品、服务项目、试剂盒）均支持任务指派
+---
+Task ID: 1
+Agent: Main
+Task: 修复用户管理编辑对话框不预填现有用户信息的问题
+
+Work Log:
+- 分析问题根因：CreateUserDialog 组件使用 useState 初始化表单字段，但 useState 只在首次挂载时使用初始值
+- 发现 SimpleDialog 组件不会在 open prop 变化时调用 onOpenChange，导致 handleOpenChange 中的重置逻辑不会触发
+- 将表单重置逻辑从 handleOpenChange 移到 useEffect 中，监听 open 和 editUser 的变化
+- 添加 useEffect import
+- 验证开发服务器编译成功，无相关 lint 错误
+
+Stage Summary:
+- 修复文件: src/components/users/create-user-dialog.tsx
+- 修复方式: 添加 useEffect 监听 open/editUser 变化，在对话框打开时重置所有表单字段
+- 验证: 编译通过，lint 无新增错误
