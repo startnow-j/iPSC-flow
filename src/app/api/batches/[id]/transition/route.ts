@@ -84,22 +84,25 @@ export async function POST(
         })
 
         // 记录审计日志：自动创建生产任务
-        for (const t of tasksData) {
-          await createAuditLog({
-            eventType: 'TASK_CREATED',
-            targetType: 'TASK',
-            targetId: 'pending', // will be updated after creation, but for batch tasks this is acceptable
-            targetBatchNo: batch.batchNo,
-            operatorId: payload.userId,
-            operatorName: payload.name,
-            dataAfter: {
+        // 跳过逐条 task 审计日志（外键约束要求 task 必须已存在），
+        // 仅记录一条汇总日志
+        await createAuditLog({
+          eventType: 'BATCH_STATUS_CHANGED',
+          targetType: 'BATCH',
+          targetId: id,
+          targetBatchNo: batch.batchNo,
+          operatorId: payload.userId,
+          operatorName: payload.name,
+          dataAfter: {
+            action: 'start_production_auto_tasks',
+            tasks: tasksData.map(t => ({
               taskCode: t.taskCode,
               taskName: t.taskName,
               sequenceNo: t.sequenceNo,
               status: t.status,
-            },
-          })
-        }
+            })),
+          },
+        })
       }
     }
 
@@ -117,11 +120,13 @@ export async function POST(
     }
 
     // 记录审计日志
+    // 查询批次编号用于 targetBatchNo
+    const batchForLog = await db.batch.findUnique({ where: { id }, select: { batchNo: true } })
     await createAuditLog({
       eventType: 'BATCH_STATUS_CHANGED',
       targetType: 'BATCH',
       targetId: id,
-      targetBatchNo: undefined,
+      targetBatchNo: batchForLog?.batchNo,
       operatorId: payload.userId,
       operatorName: payload.name,
       dataBefore: { status: result.previousState },

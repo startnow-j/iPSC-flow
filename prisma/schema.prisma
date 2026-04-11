@@ -198,7 +198,6 @@ model ProductionTask {
 
   batch           Batch      @relation(fields: [batchId], references: [id])
   assignee        User?      @relation(fields: [assigneeId], references: [id])
-  auditLogs       AuditLog[]
 
   @@map("production_task")
 }
@@ -320,8 +319,10 @@ model AuditLog {
   createdAt       DateTime @default(now())
 
   batch           Batch?          @relation(fields: [targetBatchNo], references: [batchNo])
-  task            ProductionTask? @relation(fields: [targetId], references: [id])
   user            User?           @relation(fields: [operatorId], references: [id])
+
+  // 注意: targetId 是多态字段（可指向 BATCH/TASK/QC/COA/USER），
+  // 因此不添加 task 外键，避免外键约束冲突
 
   @@map("audit_log")
 }
