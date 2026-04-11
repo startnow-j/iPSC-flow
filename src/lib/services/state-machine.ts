@@ -178,6 +178,9 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
     ],
     COA_SUBMITTED: [
       { to: 'COA_APPROVED', action: 'approve_coa', roles: ['SUPERVISOR', 'QA'], label: '批准' },
+      // NOTE: CoA 退回在 CoA 表层面处理（status → DRAFT）
+      // 重新提交：批次状态保持 COA_SUBMITTED（自环），CoA 状态从 REJECTED → SUBMITTED
+      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '重新提交' },
     ],
     COA_APPROVED: [
       { to: 'RELEASED', action: 'release', roles: ['SUPERVISOR', 'ADMIN'], label: '放行' },
@@ -290,6 +293,63 @@ export function getAvailableActions(productLine: ProductLine, currentStatus: str
 }
 
 /**
+ * 为批次创建 CoA 草稿（如果尚未存在）
+ * 被多个转换场景复用：generate_coa, submit_report
+ */
+async function createCoaIfNeeded(
+  batch: { batchNo: string; productCode: string; productName: string; specification: string | null; seedBatchNo: string | null; seedPassage: string | null; currentPassage: string | null; plannedQuantity: number | null; actualQuantity: number | null; storageLocation: string | null },
+  batchId: string,
+  operatorId: string,
+  operatorName: string,
+) {
+  const existingCoa = await db.coa.findUnique({ where: { batchId } })
+  if (existingCoa) return
+
+  const coaNo = `COA-${batch.batchNo}`
+
+  const latestQc = await db.qcRecord.findFirst({
+    where: { batchId },
+    orderBy: { createdAt: 'desc' },
+  })
+
+  const qcRecords = await db.qcRecord.findMany({
+    where: { batchId },
+    select: { sampleQuantity: true },
+  })
+  const totalConsumed = qcRecords.reduce((sum, r) => sum + (r.sampleQuantity || 0), 0)
+  const releaseQuantity = (batch.actualQuantity || 0) - totalConsumed
+
+  const coaContent = JSON.stringify({
+    productCode: batch.productCode,
+    productName: batch.productName,
+    batchNo: batch.batchNo,
+    specification: batch.specification,
+    seedBatchNo: batch.seedBatchNo,
+    seedPassage: batch.seedPassage,
+    currentPassage: batch.currentPassage,
+    plannedQuantity: batch.plannedQuantity,
+    actualQuantity: batch.actualQuantity,
+    storageLocation: batch.storageLocation,
+    testResults: latestQc ? JSON.parse(latestQc.testResults) : [],
+    overallJudgment: latestQc?.overallJudgment ?? '',
+    releaseQuantity,
+    totalConsumedVials: totalConsumed,
+  })
+
+  await db.coa.create({
+    data: {
+      batchId,
+      batchNo: batch.batchNo,
+      coaNo,
+      content: coaContent,
+      status: 'DRAFT',
+      createdBy: operatorId,
+      createdByName: operatorName,
+    },
+  })
+}
+
+/**
  * 执行批次状态转换（核心函数）
  *
  * 完整流程:
@@ -378,59 +438,24 @@ export async function transition(
   try {
     // 4a. 处理 QC_PASS → COA_PENDING 自动创建 CoA 草稿
     if (action === 'generate_coa' && newState === 'COA_PENDING') {
-      // 检查是否已存在 CoA
-      const existingCoa = await db.coa.findUnique({
-        where: { batchId },
-      })
+      await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
+    }
 
+    // 4a2. 处理 SERVICE submit_report → COA_SUBMITTED 自动创建 CoA
+    if (action === 'submit_report' && newState === 'COA_SUBMITTED') {
+      const existingCoa = await db.coa.findUnique({ where: { batchId } })
       if (!existingCoa) {
-        // 生成 CoA 编号
-        const coaNo = `COA-${batch.batchNo}`
-
-        // 获取最新的质检记录
-        const latestQc = await db.qcRecord.findFirst({
-          where: { batchId },
-          orderBy: { createdAt: 'desc' },
-        })
-
-        // 计算质检消耗总量（用于客户版本发放数量）
-        const qcRecords = await db.qcRecord.findMany({
-          where: { batchId },
-          select: { sampleQuantity: true },
-        })
-        const totalConsumed = qcRecords.reduce((sum, r) => sum + (r.sampleQuantity || 0), 0)
-        const releaseQuantity = (batch.actualQuantity || 0) - totalConsumed
-
-        // 构建 CoA 内容
-        const coaContent = JSON.stringify({
-          productCode: batch.productCode,
-          productName: batch.productName,
-          batchNo: batch.batchNo,
-          specification: batch.specification,
-          seedBatchNo: batch.seedBatchNo,
-          seedPassage: batch.seedPassage,
-          currentPassage: batch.currentPassage,
-          plannedQuantity: batch.plannedQuantity,
-          actualQuantity: batch.actualQuantity,
-          storageLocation: batch.storageLocation,
-          testResults: latestQc ? JSON.parse(latestQc.testResults) : [],
-          overallJudgment: latestQc?.overallJudgment ?? '',
-          releaseQuantity,
-          totalConsumedVials: totalConsumed,
-        })
-
-        await db.coa.create({
-          data: {
-            batchId,
-            batchNo: batch.batchNo,
-            coaNo,
-            content: coaContent,
-            status: 'DRAFT',
-            createdBy: operatorId,
-            createdByName: operatorName,
-          },
-        })
+        await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
       }
+      // 创建后直接提交
+      await db.coa.update({
+        where: { batchId },
+        data: {
+          status: 'SUBMITTED',
+          submittedBy: operatorId,
+          submittedAt: new Date(),
+        },
+      })
     }
 
     // 4b. 处理开始生产时设置 actualStartDate
