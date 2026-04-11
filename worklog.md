@@ -1493,3 +1493,29 @@ Stage Summary:
 - Modified: src/app/batches/[id]/page.tsx (production + QC tab adaptation)
 - Modified: src/app/batches/page.tsx (expanded status filters)
 - Lint: Zero new errors
+
+---
+Task ID: design-1
+Agent: Main Agent
+Task: 设计讨论 — Phase 2 准备阶段（权限体系、导航架构、参考文档分析、bug修复）
+
+Work Log:
+- 分析参考文档 archive/AI模板生成模块设计文档-Phase3参考.md
+- 修复产品编辑对话框不回显当前值的 bug（CreateProductDialog）
+- 对比参考文档与当前计划，提出整合策略
+
+**Bug 修复 — 产品编辑对话框不回显**
+- 根因：resetForm() 只在 handleOpenChange 中调用，但 Radix Dialog 的 onOpenChange 不在 open prop 程序化变更时触发
+- 修复：新增 useEffect(() => { if (open) resetForm() }, [open, editProduct])
+- 修改文件：src/components/products/create-product-dialog.tsx
+
+**参考文档分析**
+- 文档质量高，涵盖产品定义/配方BOM/生产流程/表单字段/质检模板/CoA模板6类配置对象
+- 核心理念"约定优于配置+外部AI生成+系统直接识别"非常务实
+- 建议：Phase 2-3 先用硬编码方式验证业务流程，Phase 3.5 引入模板配置引擎
+- 参考文档的 §4 表单定义模板（12种字段类型）和 §8 数据模型可直接作为 Phase 3.5 基础
+
+Stage Summary:
+- 修复 bug：产品编辑对话框现在正确回显当前值
+- 分析结论：参考文档作为 Phase 3.5 模板配置引擎的蓝本，不替代当前 Phase 2-3 的硬编码方案
+- 已有设计决策记录在 docs/plans/多产品线扩展计划-v1.0.md（§2.6 权限体系 + §2.7 导航架构）

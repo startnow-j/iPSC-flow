@@ -133,10 +133,14 @@ export function CreateProductDialog({
     }
   }
 
-  const handleOpenChange = (open: boolean) => {
+  // Reset form when dialog opens (covers both programmatic open via prop and user interaction)
+  useEffect(() => {
     if (open) {
       resetForm()
     }
+  }, [open, editProduct])
+
+  const handleOpenChange = (open: boolean) => {
     onOpenChange(open)
   }
 
@@ -145,7 +149,7 @@ export function CreateProductDialog({
     if (!isEdit && open && !productCode) {
       generateProductCode()
     }
-  }, [productLine, open]) // isEdit and productCode are intentionally omitted
+  }, [productLine, open]) // isEdit and productCode intentionally omitted
 
   const generateProductCode = async () => {
     setGeneratingCode(true)
