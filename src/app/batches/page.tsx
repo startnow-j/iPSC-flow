@@ -64,10 +64,10 @@ interface BatchesResponse {
 }
 
 // ============================================
-// Status Filter Chips
+// Status Filter Chips — 按产品线定义
 // ============================================
 
-const STATUS_FILTERS = [
+const STATUS_FILTERS_ALL = [
   { key: '', label: '全部' },
   { key: 'NEW', label: '新建' },
   { key: 'SAMPLE_RECEIVED', label: '样本接收' },
@@ -80,11 +80,56 @@ const STATUS_FILTERS = [
   { key: 'QC_IN_PROGRESS', label: '质检中' },
   { key: 'QC_PASS', label: '合格' },
   { key: 'QC_FAIL', label: '不合格' },
+  { key: 'COA_PENDING', label: '待生成CoA' },
   { key: 'COA_SUBMITTED', label: '已提交' },
   { key: 'COA_APPROVED', label: '已批准' },
   { key: 'RELEASED', label: '已放行' },
   { key: 'SCRAPPED', label: '已报废' },
 ]
+
+const STATUS_FILTERS_BY_PRODUCT_LINE: Record<string, { key: string; label: string }[]> = {
+  CELL_PRODUCT: [
+    { key: '', label: '全部' },
+    { key: 'NEW', label: '新建' },
+    { key: 'IN_PRODUCTION', label: '生产中' },
+    { key: 'QC_PENDING', label: '待质检' },
+    { key: 'QC_IN_PROGRESS', label: '质检中' },
+    { key: 'QC_PASS', label: '合格' },
+    { key: 'QC_FAIL', label: '不合格' },
+    { key: 'COA_PENDING', label: '待生成CoA' },
+    { key: 'COA_SUBMITTED', label: '已提交' },
+    { key: 'COA_APPROVED', label: '已批准' },
+    { key: 'RELEASED', label: '已放行' },
+    { key: 'SCRAPPED', label: '已报废' },
+  ],
+  SERVICE: [
+    { key: '', label: '全部' },
+    { key: 'NEW', label: '新建' },
+    { key: 'SAMPLE_RECEIVED', label: '样本接收' },
+    { key: 'IN_PRODUCTION', label: '生产中' },
+    { key: 'HANDOVER', label: '交接中' },
+    { key: 'IDENTIFICATION', label: '鉴定中' },
+    { key: 'REPORT_PENDING', label: '待报告' },
+    { key: 'COA_SUBMITTED', label: '已提交' },
+    { key: 'RELEASED', label: '已放行' },
+    { key: 'SCRAPPED', label: '已报废' },
+  ],
+  KIT: [
+    { key: '', label: '全部' },
+    { key: 'NEW', label: '新建' },
+    { key: 'MATERIAL_PREP', label: '物料准备' },
+    { key: 'IN_PRODUCTION', label: '生产中' },
+    { key: 'QC_PENDING', label: '待质检' },
+    { key: 'QC_IN_PROGRESS', label: '质检中' },
+    { key: 'QC_PASS', label: '合格' },
+    { key: 'QC_FAIL', label: '不合格' },
+    { key: 'COA_PENDING', label: '待生成CoA' },
+    { key: 'COA_SUBMITTED', label: '已提交' },
+    { key: 'COA_APPROVED', label: '已批准' },
+    { key: 'RELEASED', label: '已放行' },
+    { key: 'SCRAPPED', label: '已报废' },
+  ],
+}
 
 // ============================================
 // Product Line Filter Tabs
@@ -182,6 +227,16 @@ export function BatchListContent({
     setPage(1)
   }, [statusFilter, searchQuery, productLineFilter])
 
+  // 当产品线切换时，如果当前状态筛选不属于新产品线，重置为"全部"
+  useEffect(() => {
+    if (statusFilter && productLineFilter) {
+      const validFilters = STATUS_FILTERS_BY_PRODUCT_LINE[productLineFilter]
+      if (validFilters && !validFilters.some((f) => f.key === statusFilter)) {
+        setStatusFilter('')
+      }
+    }
+  }, [productLineFilter, statusFilter])
+
   // Search debounce
   const handleSearch = () => {
     setSearchQuery(searchInput)
@@ -229,9 +284,12 @@ export function BatchListContent({
 
       {/* Filters */}
       <div className="space-y-3">
-        {/* Status Filter Chips */}
+        {/* Status Filter Chips — 按产品线动态切换 */}
         <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-          {STATUS_FILTERS.map((filter) => (
+          {(productLineFilter && STATUS_FILTERS_BY_PRODUCT_LINE[productLineFilter]
+            ? STATUS_FILTERS_BY_PRODUCT_LINE[productLineFilter]
+            : STATUS_FILTERS_ALL
+          ).map((filter) => (
             <button
               key={filter.key}
               onClick={() => setStatusFilter(filter.key)}
