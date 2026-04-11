@@ -1827,3 +1827,34 @@ Stage Summary:
 - 修复：用纯 React 实现替代 Radix Checkbox 和 Switch，完全消除 usePresence 依赖
 - 影响范围：CreateUserDialog（角色选择、产品线选择）、CreateBatchDialog（鉴定项目）、settings/product-roles（角色分配）
 - dev server 正常运行，所有页面编译通过
+
+---
+Task ID: 3
+Agent: Main Agent
+Task: 修复权限总览页面访问控制 — SUPERVISOR 看全部, QA/QC/OPERATOR 看自己
+
+Work Log:
+- 分析权限总览页面 `/settings/permissions/page.tsx` 的现有逻辑
+- 发现两个 API 层面问题:
+  1. `/api/users` GET 只允许 ADMIN 访问 → SUPERVISOR/QA/QC/OPERATOR 均被 403
+  2. `/api/product-roles` GET 只允许 ADMIN/SUPERVISOR 访问 → QA/QC/OPERATOR 被 403
+- 发现前端逻辑问题: SUPERVISOR 被限制为只看自己产品线的用户（应看全部）
+- 修复 `/api/users` GET:
+  - ADMIN + SUPERVISOR: 返回所有用户
+  - QA/QC/OPERATOR: 仅返回自己
+- 修复 `/api/product-roles` GET:
+  - ADMIN + SUPERVISOR: 返回所有产品角色分配
+  - QA/QC/OPERATOR: 仅返回自己的产品角色
+- 修复前端权限页面:
+  - `isManagement = isAdmin || isSupervisor` 代替旧的复杂判断
+  - `isOperationalOnly = !isManagement` 覆盖 QA/QC/OPERATOR
+  - 移除客户端重复过滤（API 已处理）
+  - SUPERVISOR 底部标签改为"主管视图 — 全部权限可见"
+- 验证编译成功，API 响应 200 OK
+
+Stage Summary:
+- 权限总览三级访问控制:
+  - ADMIN: 看全部用户 + 全部产品权限
+  - SUPERVISOR: 看全部用户 + 全部产品权限（与管理员相同）
+  - QA/QC/OPERATOR: 仅看自己的权限信息
+- 后端和前端同步修改，API 负责数据过滤，前端负责展示

@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } from '@/lib/auth'
-import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole, parseRoles } from '@/lib/roles'
+import { isAdmin, hasAnyRole, VALID_ROLES, serializeRoles, determinePrimaryRole, parseRoles, MANAGEMENT_ROLES } from '@/lib/roles'
 import { db } from '@/lib/db'
 
-// GET /api/users — List all users (admin only)
+// GET /api/users — List users
+// - ADMIN: all users
+// - SUPERVISOR: all users (full visibility for permission overview)
+// - QA/QC/OPERATOR: self only (own permission overview)
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request)
@@ -12,29 +15,58 @@ export async function GET(request: NextRequest) {
     }
 
     const payload = await verifyToken(token)
-    if (!payload || !isAdmin(getRolesFromPayload(payload))) {
-      return NextResponse.json({ error: '无权限' }, { status: 403 })
+    if (!payload) {
+      return NextResponse.json({ error: '登录已过期' }, { status: 401 })
     }
 
-    const users = await db.user.findMany({
-      select: {
-        id: true,
-        name: true,
-        email: true,
-        role: true,
-        roles: true,
-        department: true,
-        active: true,
-        createdAt: true,
-        updatedAt: true,
-        productLines: {
-          select: {
-            productLine: true,
+    const userRoles = getRolesFromPayload(payload)
+    const isManagement = isAdmin(userRoles) || hasAnyRole(userRoles, ['SUPERVISOR'])
+
+    let users
+    if (isManagement) {
+      // ADMIN + SUPERVISOR: see all users
+      users = await db.user.findMany({
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          roles: true,
+          department: true,
+          active: true,
+          createdAt: true,
+          updatedAt: true,
+          productLines: {
+            select: {
+              productLine: true,
+            },
           },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
+        orderBy: { createdAt: 'desc' },
+      })
+    } else {
+      // QA/QC/OPERATOR: see self only
+      users = await db.user.findMany({
+        where: { id: payload.userId },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          roles: true,
+          department: true,
+          active: true,
+          createdAt: true,
+          updatedAt: true,
+          productLines: {
+            select: {
+              productLine: true,
+            },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      })
+    }
 
     const formattedUsers = users.map((u) => ({
       ...u,

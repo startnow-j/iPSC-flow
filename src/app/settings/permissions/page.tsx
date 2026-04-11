@@ -75,7 +75,10 @@ export default function PermissionsOverviewPage() {
   const userRoles = currentUser?.roles || []
   const isCurrentUserAdmin = isAdmin(userRoles)
   const isSupervisor = hasAnyRole(userRoles, ['SUPERVISOR'])
-  const isOperationalOnly = hasAnyRole(userRoles, ['OPERATOR', 'QC']) && !isCurrentUserAdmin && !isSupervisor
+  // MANAGEMENT = ADMIN + SUPERVISOR: see everything
+  const isManagement = isCurrentUserAdmin || isSupervisor
+  // OPERATIONAL = QA + QC + OPERATOR: see own permissions only
+  const isOperationalOnly = !isManagement
 
   // Data
   const [users, setUsers] = useState<UserItem[]>([])
@@ -101,13 +104,19 @@ export default function PermissionsOverviewPage() {
     roles.some((r) => MANAGEMENT_ROLES.includes(r))
 
   // Determine visible product lines for filtering (memoized to prevent infinite loop)
+  // ADMIN + SUPERVISOR: all product lines
+  // QA/QC/OPERATOR: own product lines only
   const visibleProductLines = useMemo(() => {
-    return isCurrentUserAdmin
+    return isManagement
       ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
       : (currentUser?.productLines || [])
-  }, [isCurrentUserAdmin, currentUser?.productLines])
+  }, [isManagement, currentUser?.productLines])
 
   // Fetch all data
+  // Note: API already filters data by role:
+  //   - ADMIN + SUPERVISOR → all users & all product roles
+  //   - QA/QC/OPERATOR → self only
+  // So no client-side filtering is needed here.
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
@@ -128,24 +137,6 @@ export default function PermissionsOverviewPage() {
         fetchedRoles = data.assignments || []
       }
 
-      // Access control filtering
-      const currentUserId = currentUser?.id
-      if (isOperationalOnly && currentUserId) {
-        // Only show own row
-        fetchedUsers = fetchedUsers.filter((u) => u.id === currentUserId)
-        fetchedRoles = fetchedRoles.filter((r) => r.userId === currentUserId)
-      } else if (isSupervisor) {
-        // Only show users in their product lines
-        const lines = visibleProductLines
-        fetchedUsers = fetchedUsers.filter((u) =>
-          u.productLines?.some((pl) => lines.includes(pl))
-        )
-        fetchedRoles = fetchedRoles.filter((r) =>
-          lines.includes(r.productLine)
-        )
-      }
-
-      // Do NOT filter out inactive users — show all to indicate status
       setUsers(fetchedUsers)
       setProductRoles(fetchedRoles)
     } catch {
@@ -153,7 +144,7 @@ export default function PermissionsOverviewPage() {
     } finally {
       setLoading(false)
     }
-  }, [isOperationalOnly, isSupervisor, currentUser?.id, visibleProductLines])
+  }, [])
 
   useEffect(() => {
     if (!authLoading) {
@@ -547,9 +538,9 @@ export default function PermissionsOverviewPage() {
               仅显示当前用户
             </Badge>
           )}
-          {isSupervisor && (
+          {isSupervisor && !isCurrentUserAdmin && (
             <Badge variant="secondary" className="text-[10px]">
-              仅显示所属产品线用户
+              主管视图 — 全部权限可见
             </Badge>
           )}
         </div>

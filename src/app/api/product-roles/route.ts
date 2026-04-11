@@ -12,6 +12,9 @@ import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/services/audit-log'
 
 // GET /api/product-roles — List product role assignments
+// - ADMIN: everything
+// - SUPERVISOR: users in their product lines (changed: now sees ALL for permission overview)
+// - QA/QC/OPERATOR: own product roles only
 export async function GET(request: NextRequest) {
   try {
     const token = getTokenFromRequest(request)
@@ -29,50 +32,7 @@ export async function GET(request: NextRequest) {
     const filterProductLine = requestUrl.searchParams.get('productLine')
     const filterUserId = requestUrl.searchParams.get('userId')
 
-    // SUPERVISOR: only sees users in their own product lines
-    // ADMIN: sees everything
-    if (!isAdmin(userRoles)) {
-      // For non-admin, check if they have SUPERVISOR role
-      if (!hasAnyRole(userRoles, ['SUPERVISOR'])) {
-        return NextResponse.json({ error: '无权限' }, { status: 403 })
-      }
-
-      // Get the supervisor's product lines
-      const supervisorLines = await db.userProductLine.findMany({
-        where: { userId: payload.userId },
-        select: { productLine: true },
-      })
-      const myProductLines = supervisorLines.map((pl) => pl.productLine)
-
-      if (myProductLines.length === 0) {
-        return NextResponse.json({ assignments: [] })
-      }
-
-      // If filterProductLine specified, ensure supervisor manages that line
-      if (filterProductLine && !myProductLines.includes(filterProductLine)) {
-        return NextResponse.json({ assignments: [] })
-      }
-
-      // Build where clause: only users in the supervisor's product lines
-      // and only products in those product lines
-      const whereClause: Record<string, unknown> = {
-        product: {
-          productLine: { in: myProductLines },
-          active: true,
-        },
-      }
-
-      if (filterUserId) {
-        whereClause.userId = filterUserId
-      }
-
-      if (filterProductLine) {
-        whereClause.product = {
-          productLine: filterProductLine,
-          active: true,
-        }
-      }
-
+    const queryAssignments = async (whereClause: Record<string, unknown>) => {
       const assignments = await db.userProductRole.findMany({
         where: whereClause,
         include: {
@@ -93,65 +53,7 @@ export async function GET(request: NextRequest) {
         orderBy: { createdAt: 'desc' },
       })
 
-      return NextResponse.json({
-        assignments: assignments.map((a) => {
-          let parsedRoles: string[] = []
-          try {
-            parsedRoles = JSON.parse(a.roles)
-          } catch {
-            parsedRoles = []
-          }
-          return {
-            userId: a.userId,
-            userName: a.user.name,
-            productId: a.productId,
-            productCode: a.product.productCode,
-            productName: a.product.productName,
-            productLine: a.product.productLine,
-            roles: parsedRoles,
-          }
-        }),
-      })
-    }
-
-    // ADMIN: sees everything
-    const whereClause: Record<string, unknown> = {
-      product: { active: true },
-    }
-
-    if (filterUserId) {
-      whereClause.userId = filterUserId
-    }
-
-    if (filterProductLine) {
-      whereClause.product = {
-        productLine: filterProductLine,
-        active: true,
-      }
-    }
-
-    const assignments = await db.userProductRole.findMany({
-      where: whereClause,
-      include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        product: {
-          select: {
-            productCode: true,
-            productName: true,
-            productLine: true,
-          },
-        },
-      },
-      orderBy: { createdAt: 'desc' },
-    })
-
-    return NextResponse.json({
-      assignments: assignments.map((a) => {
+      return assignments.map((a) => {
         let parsedRoles: string[] = []
         try {
           parsedRoles = JSON.parse(a.roles)
@@ -167,8 +69,47 @@ export async function GET(request: NextRequest) {
           productLine: a.product.productLine,
           roles: parsedRoles,
         }
-      }),
-    })
+      })
+    }
+
+    const isManagement = isAdmin(userRoles) || hasAnyRole(userRoles, ['SUPERVISOR'])
+
+    if (isManagement) {
+      // ADMIN + SUPERVISOR: see everything
+      const whereClause: Record<string, unknown> = {
+        product: { active: true },
+      }
+
+      if (filterUserId) {
+        whereClause.userId = filterUserId
+      }
+
+      if (filterProductLine) {
+        whereClause.product = {
+          productLine: filterProductLine,
+          active: true,
+        }
+      }
+
+      const assignments = await queryAssignments(whereClause)
+      return NextResponse.json({ assignments })
+    }
+
+    // QA/QC/OPERATOR: only own product roles
+    const whereClause: Record<string, unknown> = {
+      userId: payload.userId,
+      product: { active: true },
+    }
+
+    if (filterProductLine) {
+      whereClause.product = {
+        productLine: filterProductLine,
+        active: true,
+      }
+    }
+
+    const assignments = await queryAssignments(whereClause)
+    return NextResponse.json({ assignments })
   } catch (error) {
     console.error('GET /api/product-roles error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
