@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/collapsible'
 import { hasAnyRole } from '@/lib/roles'
 import { ROLE_LABELS, ROLE_COLORS } from '@/lib/roles'
+import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import {
   MoreHorizontal,
   Pencil,
@@ -58,6 +59,7 @@ interface UserItem {
   active: boolean
   createdAt: string
   updatedAt: string
+  productLines?: string[]
   productRoles?: ProductRoleAssignment[]
 }
 
@@ -169,7 +171,8 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
               <TableHead>姓名</TableHead>
               <TableHead>邮箱</TableHead>
               <TableHead>角色</TableHead>
-              <TableHead className="hidden sm:table-cell">部门</TableHead>
+              <TableHead className="hidden sm:table-cell">产品线</TableHead>
+              <TableHead className="hidden lg:table-cell">部门</TableHead>
               <TableHead className="hidden md:table-cell">创建日期</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
@@ -181,6 +184,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
                 <TableCell><Skeleton className="h-4 w-32" /></TableCell>
                 <TableCell><Skeleton className="h-5 w-14 rounded-full" /></TableCell>
                 <TableCell className="hidden sm:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
+                <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-16" /></TableCell>
                 <TableCell className="hidden md:table-cell"><Skeleton className="h-4 w-24" /></TableCell>
                 <TableCell><Skeleton className="h-8 w-8 rounded-md" /></TableCell>
               </TableRow>
@@ -200,7 +204,8 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
               <TableHead>姓名</TableHead>
               <TableHead>邮箱</TableHead>
               <TableHead>角色</TableHead>
-              <TableHead className="hidden sm:table-cell">部门</TableHead>
+              <TableHead className="hidden sm:table-cell">产品线</TableHead>
+              <TableHead className="hidden lg:table-cell">部门</TableHead>
               <TableHead className="hidden md:table-cell">创建日期</TableHead>
               <TableHead className="w-[60px]" />
             </TableRow>
@@ -235,7 +240,17 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
                       ))}
                     </div>
                   </TableCell>
-                  <TableCell className="hidden sm:table-cell text-sm">
+                  <TableCell className="hidden sm:table-cell">
+                    <div className="flex items-center gap-1 flex-wrap">
+                      {(user.productLines || []).map((pl) => (
+                        <ProductLineBadge key={pl} productLine={pl} />
+                      ))}
+                      {(!user.productLines || user.productLines.length === 0) && (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      )}
+                    </div>
+                  </TableCell>
+                  <TableCell className="hidden lg:table-cell text-sm">
                     {user.department || '-'}
                   </TableCell>
                   <TableCell className="hidden md:table-cell text-sm text-muted-foreground">
@@ -281,7 +296,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
                 {/* Product Roles Expandable Row */}
                 {user.productRoles && user.productRoles.length > 0 && (
                   <TableRow key={`${user.id}-roles`} className={!user.active ? 'opacity-50' : ''}>
-                    <TableCell colSpan={6} className="p-0">
+                    <TableCell colSpan={7} className="p-0">
                       <Collapsible
                         open={expandedUsers.has(user.id)}
                         onOpenChange={() => toggleExpanded(user.id)}
@@ -323,7 +338,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
             ))}
             {users.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-32 text-center">
+                <TableCell colSpan={7} className="h-32 text-center">
                   <div className="flex flex-col items-center">
                     <ShieldAlert className="h-8 w-8 text-muted-foreground mb-2" />
                     <p className="text-sm text-muted-foreground">暂无用户数据</p>

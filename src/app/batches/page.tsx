@@ -15,12 +15,15 @@ import { Skeleton } from '@/components/ui/skeleton'
 import {
   Search,
   FlaskConical,
+  Microscope,
+  TestTubes,
   ChevronLeft,
   ChevronRight,
   Inbox,
   Plus,
 } from 'lucide-react'
 import { CreateBatchDialog } from '@/components/batches/create-batch-dialog'
+import type { LucideIcon } from 'lucide-react'
 
 // ============================================
 // Types
@@ -93,17 +96,41 @@ const PRODUCT_LINE_FILTERS = [
 ]
 
 // ============================================
-// Batch List Page Component
+// Product Line Icons
 // ============================================
 
-export default function BatchListPage() {
+const PRODUCT_LINE_ICONS: Record<string, LucideIcon> = {
+  CELL_PRODUCT: FlaskConical,
+  SERVICE: Microscope,
+  KIT: TestTubes,
+}
+
+// ============================================
+// BatchListContent — reusable batch list with props
+// ============================================
+
+export interface BatchListContentProps {
+  /** Force a specific product line filter */
+  defaultProductLine?: string
+  /** Hide the product line filter tabs */
+  hideProductLineFilter?: boolean
+  /** Override view mode: 'my' or 'all' */
+  viewMode?: 'my' | 'all'
+}
+
+export function BatchListContent({
+  defaultProductLine,
+  hideProductLineFilter = false,
+  viewMode: viewModeProp,
+}: BatchListContentProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { user } = useAuthStore()
 
-  // View mode: 'my' or 'all'
-  const isAllBatches = pathname === '/batches/all'
-  const viewMode = isAllBatches ? 'all' : 'my'
+  // View mode: use prop if provided, otherwise derive from pathname
+  // When defaultProductLine is set, default to 'all' unless explicitly 'my'
+  const resolvedViewMode = viewModeProp ??
+    (defaultProductLine ? 'all' : pathname === '/batches/all' ? 'all' : 'my')
 
   // State
   const [batches, setBatches] = useState<BatchItem[]>([])
@@ -112,7 +139,7 @@ export default function BatchListPage() {
   const [page, setPage] = useState(1)
   const [pageSize] = useState(20)
   const [statusFilter, setStatusFilter] = useState('')
-  const [productLineFilter, setProductLineFilter] = useState('')
+  const [productLineFilter, setProductLineFilter] = useState(defaultProductLine || '')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchInput, setSearchInput] = useState('')
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
@@ -127,7 +154,7 @@ export default function BatchListPage() {
       if (statusFilter) params.set('status', statusFilter)
       if (productLineFilter) params.set('productLine', productLineFilter)
       if (searchQuery) params.set('search', searchQuery)
-      if (viewMode === 'my' && user?.id) params.set('assignee', user.id)
+      if (resolvedViewMode === 'my' && user?.id) params.set('assignee', user.id)
 
       const res = await authFetch(`/api/batches?${params.toString()}`)
       if (res.ok) {
@@ -142,7 +169,7 @@ export default function BatchListPage() {
     } finally {
       setLoading(false)
     }
-  }, [page, pageSize, statusFilter, productLineFilter, searchQuery, viewMode, user?.id])
+  }, [page, pageSize, statusFilter, productLineFilter, searchQuery, resolvedViewMode, user?.id])
 
   useEffect(() => {
     fetchBatches()
@@ -176,10 +203,14 @@ export default function BatchListPage() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            {isAllBatches ? '所有批次' : '我的批次'}
+            {defaultProductLine
+              ? (PRODUCT_LINE_LABELS[defaultProductLine] || defaultProductLine)
+              : (resolvedViewMode === 'all' ? '所有批次' : '我的批次')}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {isAllBatches ? '查看系统中所有生产批次' : '查看您创建的生产批次'}
+            {defaultProductLine
+              ? `${PRODUCT_LINE_LABELS[defaultProductLine] || defaultProductLine}的生产批次`
+              : (resolvedViewMode === 'all' ? '查看系统中所有生产批次' : '查看您创建的生产批次')}
             {!loading && (
               <span className="ml-1">· 共 {total} 条</span>
             )}
@@ -215,24 +246,26 @@ export default function BatchListPage() {
 
         {/* Product Line Filter + Search Row */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          {/* Product Line Filter Tabs */}
-          <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
-            {PRODUCT_LINE_FILTERS.map((filter) => (
-              <button
-                key={filter.key}
-                onClick={() => setProductLineFilter(filter.key)}
-                className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                  productLineFilter === filter.key
-                    ? filter.key
-                      ? `${PRODUCT_LINE_COLORS[filter.key] || ''} shadow-sm font-semibold`
-                      : 'bg-primary text-primary-foreground shadow-sm'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                {filter.label}
-              </button>
-            ))}
-          </div>
+          {/* Product Line Filter Tabs — hidden when locked to a product line */}
+          {!hideProductLineFilter && (
+            <div className="flex gap-1.5 overflow-x-auto pb-1 no-scrollbar">
+              {PRODUCT_LINE_FILTERS.map((filter) => (
+                <button
+                  key={filter.key}
+                  onClick={() => setProductLineFilter(filter.key)}
+                  className={`shrink-0 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                    productLineFilter === filter.key
+                      ? filter.key
+                        ? `${PRODUCT_LINE_COLORS[filter.key] || ''} shadow-sm font-semibold`
+                        : 'bg-primary text-primary-foreground shadow-sm'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  {filter.label}
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* Search */}
           <div className="flex gap-2">
@@ -301,8 +334,19 @@ export default function BatchListPage() {
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                     {/* Left: Batch Info */}
                     <div className="flex items-start gap-3 min-w-0 flex-1">
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                        <FlaskConical className="h-4 w-4 text-primary" />
+                      <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${
+                        batch.productLine
+                          ? `${PRODUCT_LINE_COLORS[batch.productLine]?.split(' ')[0] || 'bg-primary/10'}`
+                          : 'bg-primary/10'
+                      }`}>
+                        {(() => {
+                          const Icon = PRODUCT_LINE_ICONS[batch.productLine || ''] || FlaskConical
+                          return <Icon className={`h-4 w-4 ${
+                            batch.productLine
+                              ? `${PRODUCT_LINE_COLORS[batch.productLine]?.split(' ')[1] || 'text-primary'}`
+                              : 'text-primary'
+                          }`} />
+                        })()}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -382,7 +426,16 @@ export default function BatchListPage() {
         open={createDialogOpen}
         onOpenChange={setCreateDialogOpen}
         onSuccess={fetchBatches}
+        defaultProductLine={defaultProductLine}
       />
     </div>
   )
+}
+
+// ============================================
+// Default Export — backward-compatible wrapper
+// ============================================
+
+export default function BatchListPage() {
+  return <BatchListContent />
 }

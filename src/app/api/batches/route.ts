@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canManage } from '@/lib/roles'
 import { validateBatchCreation } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
 import { BATCH_NO_PREFIXES } from '@/lib/roles'
@@ -165,6 +166,19 @@ export async function POST(request: NextRequest) {
         { error: `产品不存在` },
         { status: 400 }
       )
+    }
+
+    // 管理类权限检查：只有 SUPERVISOR（在对应产品线）或 ADMIN 可以创建批次
+    const roles = getRolesFromPayload(payload)
+    const userWithPermissions = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        productLines: { select: { productLine: true } },
+      },
+    })
+    const userProductLines = userWithPermissions?.productLines.map(pl => pl.productLine) || []
+    if (!canManage(roles, userProductLines, product.productLine as string, ['SUPERVISOR'])) {
+      return NextResponse.json({ error: '无权限在该产品线创建批次' }, { status: 403 })
     }
 
     // 获取批次编号前缀

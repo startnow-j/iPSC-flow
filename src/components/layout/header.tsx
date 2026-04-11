@@ -25,12 +25,17 @@ import { Separator } from '@/components/ui/separator'
 const pageTitles: Record<string, string> = {
   '/': '工作台',
   '/batches': '我的批次',
-  '/batches/all': '所有批次',
+  '/batches/all': '全部批次',
+  '/batches/cell-product': '细胞产品',
+  '/batches/service': '服务项目',
+  '/batches/kit': '试剂盒',
   '/batches/new': '新建批次',
   '/todos': '待办事项',
   '/products': '产品管理',
   '/users': '用户管理',
   '/audit': '审计日志',
+  '/settings/product-roles': '权限配置',
+  '/settings/permissions': '权限总览',
 }
 
 // Breadcrumb items mapping

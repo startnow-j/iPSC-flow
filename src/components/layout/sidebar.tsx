@@ -5,9 +5,10 @@ import { usePathname, useRouter } from 'next/navigation'
 import {
   LayoutDashboard,
   FlaskConical,
+  Microscope,
+  TestTubes,
   List,
   Clock,
-  Plus,
   ChevronRight,
   LogOut,
   Settings,
@@ -15,6 +16,8 @@ import {
   Users,
   FileText,
   Package,
+  Shield,
+  ShieldCheck,
 } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
 import { getRoleDisplay, hasAnyRole } from '@/lib/roles'
@@ -46,27 +49,42 @@ import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { BatchStatusOverview } from '@/components/batches/batch-status-overview'
 
-// Navigation items
+// Navigation items — Main
 const mainNavItems = [
   {
     title: '工作台',
     href: '/',
     icon: LayoutDashboard,
   },
+]
+
+// Navigation items — Production Management (all users see these)
+const productionNavItems = [
   {
-    title: '我的批次',
-    href: '/batches',
+    title: '细胞产品',
+    href: '/batches/cell-product',
     icon: FlaskConical,
   },
   {
-    title: '所有批次',
-    href: '/batches/all',
-    icon: List,
+    title: '服务项目',
+    href: '/batches/service',
+    icon: Microscope,
+  },
+  {
+    title: '试剂盒',
+    href: '/batches/kit',
+    icon: TestTubes,
   },
 ]
 
 // Admin-only navigation items
 const adminNavItems = [
+  {
+    title: '全部批次',
+    href: '/batches/all',
+    icon: List,
+    roles: ['ADMIN', 'SUPERVISOR'],
+  },
   {
     title: '产品管理',
     href: '/products',
@@ -84,6 +102,18 @@ const adminNavItems = [
     href: '/audit',
     icon: FileText,
     roles: ['ADMIN', 'SUPERVISOR'],
+  },
+  {
+    title: '权限配置',
+    href: '/settings/product-roles',
+    icon: Shield,
+    roles: ['ADMIN', 'SUPERVISOR'],
+  },
+  {
+    title: '权限总览',
+    href: '/settings/permissions',
+    icon: ShieldCheck,
+    roles: ['ADMIN', 'SUPERVISOR', 'QA', 'QC', 'OPERATOR'],
   },
 ]
 
@@ -171,6 +201,32 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
 
+        {/* Production Management — 3 product lines */}
+        <SidebarGroup>
+          <SidebarGroupLabel>生产管理</SidebarGroupLabel>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {productionNavItems.map((item) => (
+                <SidebarMenuItem key={item.href}>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={isActive(item.href)}
+                    tooltip={item.title}
+                  >
+                    <Link href={item.href}>
+                      <item.icon className="size-4" />
+                      <span>{item.title}</span>
+                    </Link>
+                  </SidebarMenuButton>
+                  {item.badge && (
+                    <SidebarMenuBadge>{item.badge}</SidebarMenuBadge>
+                  )}
+                </SidebarMenuItem>
+              ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
         {/* Batch Status Overview */}
         <SidebarGroup>
           <SidebarGroupLabel>批次状态概览</SidebarGroupLabel>
@@ -178,16 +234,6 @@ export function AppSidebar() {
             <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
               <BatchStatusOverview maxItems={6} />
             </div>
-            <Button
-              size="sm"
-              className="mx-2 mt-1 group-data-[collapsible=icon]:hidden"
-              asChild
-            >
-              <Link href="/batches">
-                <Plus className="size-4" />
-                新建批次
-              </Link>
-            </Button>
           </SidebarGroupContent>
         </SidebarGroup>
 

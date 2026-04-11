@@ -1,10 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canManage, canOperate } from '@/lib/roles'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
 import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
+
+// ============================================
+// 操作权限映射
+// 管理类操作 → canManage（需要产品线归属）
+// 操作类操作 → canOperate（需要产品级授权）
+// ============================================
+const MANAGEMENT_ACTIONS: Record<string, string[]> = {
+  start_production: ['SUPERVISOR'],
+  start_material_prep: ['SUPERVISOR'],
+  start_identification: ['SUPERVISOR'],
+  approve_coa: ['SUPERVISOR', 'QA'],
+  submit_coa: ['SUPERVISOR', 'QA'],
+  submit_report: ['SUPERVISOR', 'QA'],
+  scrap: ['SUPERVISOR'],
+  reject_coa: ['SUPERVISOR', 'QA'],
+}
+
+const OPERATIONAL_ACTIONS: Record<string, string[]> = {
+  pass_qc: ['QC'],
+  fail_qc: ['QC'],
+}
 
 // ============================================
 // POST /api/batches/[id]/transition — 状态转换
@@ -30,6 +52,51 @@ export async function POST(
 
     if (!action) {
       return NextResponse.json({ error: '缺少 action 参数' }, { status: 400 })
+    }
+
+    // ============================================
+    // 产品级权限检查
+    // 根据操作类型检查产品线/产品级权限
+    // ============================================
+    const managementRoles = MANAGEMENT_ACTIONS[action]
+    const operationalRoles = OPERATIONAL_ACTIONS[action]
+
+    if (managementRoles || operationalRoles) {
+      // 获取用户的产品线归属和产品级角色
+      const userWithPermissions = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: {
+          productLines: { select: { productLine: true } },
+          productRoles: {
+            where: { product: { active: true } },
+            select: { productId: true, roles: true },
+          },
+        },
+      })
+      const userProductLines = userWithPermissions?.productLines.map(pl => pl.productLine) || []
+      const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
+        productId: pr.productId,
+        roles: JSON.parse(pr.roles || '[]'),
+      })) || []
+
+      const roles = getRolesFromPayload(payload)
+
+      // 获取批次信息（productLine 和 productId）
+      const batchForPerm = await db.batch.findUnique({
+        where: { id },
+        select: { productLine: true, productId: true },
+      })
+      if (!batchForPerm) {
+        return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+      }
+
+      if (managementRoles && !canManage(roles, userProductLines, batchForPerm.productLine as string, managementRoles)) {
+        return NextResponse.json({ error: '无权限操作该产品线' }, { status: 403 })
+      }
+
+      if (operationalRoles && !canOperate(roles, userProductRoles, batchForPerm.productId, operationalRoles)) {
+        return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
+      }
     }
 
     // ============================================

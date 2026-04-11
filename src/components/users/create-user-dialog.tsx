@@ -16,8 +16,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Loader2, ShieldCheck } from 'lucide-react'
-import { ROLE_LABELS, ROLE_COLORS, VALID_ROLES } from '@/lib/roles'
+import { Loader2, ShieldCheck, FlaskConical, Microscope, TestTubes } from 'lucide-react'
+import { ROLE_LABELS, ROLE_COLORS, VALID_ROLES, isAdmin } from '@/lib/roles'
+import { useAuthStore } from '@/stores/auth-store'
 
 interface UserItem {
   id?: string
@@ -26,6 +27,7 @@ interface UserItem {
   role: string
   roles: string[]
   department: string | null
+  productLines?: string[]
 }
 
 interface CreateUserDialogProps {
@@ -50,7 +52,13 @@ export function CreateUserDialog({
     editUser?.roles?.length ? editUser.roles : [editUser?.role || 'OPERATOR']
   )
   const [department, setDepartment] = useState(editUser?.department || '')
+  const [productLines, setProductLines] = useState<string[]>(
+    editUser?.productLines || []
+  )
   const [loading, setLoading] = useState(false)
+
+  const { user: currentUser } = useAuthStore()
+  const isCurrentUserAdmin = currentUser ? isAdmin(currentUser.roles) : true
 
   // Reset form when dialog opens
   const handleOpenChange = (open: boolean) => {
@@ -62,8 +70,16 @@ export function CreateUserDialog({
         editUser?.roles?.length ? editUser.roles : [editUser?.role || 'OPERATOR']
       )
       setDepartment(editUser?.department || '')
+      setProductLines(editUser?.productLines || [])
     }
     onOpenChange(open)
+  }
+
+  const toggleProductLine = (key: string) => {
+    setProductLines((prev) => {
+      if (prev.includes(key)) return prev.filter((p) => p !== key)
+      return [...prev, key]
+    })
   }
 
   const toggleRole = (role: string) => {
@@ -84,7 +100,7 @@ export function CreateUserDialog({
     try {
       if (isEdit && editUser?.id) {
         // Update user
-        const body: Record<string, unknown> = { name, roles: selectedRoles, department }
+        const body: Record<string, unknown> = { name, roles: selectedRoles, department, productLines }
         if (email !== editUser.email) body.email = email
         if (password) body.password = password
 
@@ -106,7 +122,7 @@ export function CreateUserDialog({
         const res = await authFetch('/api/users', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ name, email, password, roles: selectedRoles, department }),
+          body: JSON.stringify({ name, email, password, roles: selectedRoles, department, productLines }),
         })
 
         if (!res.ok) {
@@ -243,6 +259,37 @@ export function CreateUserDialog({
               disabled={loading}
             />
           </div>
+
+          {/* 产品线归属 — only visible to ADMIN */}
+          {isCurrentUserAdmin && (
+            <div className="space-y-3">
+              <Label className="text-sm font-medium">产品线归属</Label>
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { key: 'CELL_PRODUCT', label: '细胞产品', icon: FlaskConical, color: 'emerald' },
+                  { key: 'SERVICE', label: '服务项目', icon: Microscope, color: 'violet' },
+                  { key: 'KIT', label: '试剂盒', icon: TestTubes, color: 'amber' },
+                ].map((pl) => (
+                  <div
+                    key={pl.key}
+                    className={`flex items-center gap-3 rounded-lg border p-3 cursor-pointer transition-colors ${
+                      productLines.includes(pl.key)
+                        ? 'border-primary bg-primary/5'
+                        : 'border-muted hover:border-muted-foreground/30'
+                    }`}
+                    onClick={() => toggleProductLine(pl.key)}
+                  >
+                    <pl.icon className="h-4 w-4 text-muted-foreground" />
+                    <span className="text-sm flex-1">{pl.label}</span>
+                    <Checkbox checked={productLines.includes(pl.key)} />
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                指定用户所属的产品线，决定其管理范围
+              </p>
+            </div>
+          )}
 
           <DialogFooter>
             <Button

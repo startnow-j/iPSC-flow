@@ -49,12 +49,15 @@ interface CreateBatchDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess?: () => void
+  /** Lock product selection to a specific product line */
+  defaultProductLine?: string
 }
 
 export function CreateBatchDialog({
   open,
   onOpenChange,
   onSuccess,
+  defaultProductLine,
 }: CreateBatchDialogProps) {
   const { user } = useAuthStore()
 
@@ -98,16 +101,22 @@ export function CreateBatchDialog({
       const res = await authFetch('/api/products')
       if (res.ok) {
         const data = await res.json()
-        const list: Product[] = data.products || []
+        let list: Product[] = data.products || []
+        // If locked to a product line, filter products
+        if (defaultProductLine) {
+          list = list.filter((p) => p.productLine === defaultProductLine)
+        }
         setProducts(list)
-        // Auto-select first product if only one
-        if (list.length === 1) {
+        // Auto-select first product if only one, or if locked to a product line
+        if (defaultProductLine && list.length > 0) {
+          setProductCode(list[0].productCode)
+        } else if (list.length === 1) {
           setProductCode(list[0].productCode)
         }
       }
     } catch {
       // Fallback to hardcoded product
-      setProducts([
+      let fallbackList: Product[] = [
         {
           id: 'fallback',
           productCode: 'IPSC-WT-001',
@@ -116,12 +125,18 @@ export function CreateBatchDialog({
           unit: '支',
           productLine: 'CELL_PRODUCT',
         },
-      ])
-      setProductCode('IPSC-WT-001')
+      ]
+      if (defaultProductLine) {
+        fallbackList = fallbackList.filter((p) => p.productLine === defaultProductLine)
+      }
+      setProducts(fallbackList)
+      if (fallbackList.length > 0) {
+        setProductCode(fallbackList[0].productCode)
+      }
     } finally {
       setProductsLoading(false)
     }
-  }, [])
+  }, [defaultProductLine])
 
   useEffect(() => {
     if (open) {

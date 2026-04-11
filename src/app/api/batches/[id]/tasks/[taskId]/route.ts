@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canOperate } from '@/lib/roles'
 import { db } from '@/lib/db'
 import { validateProductionTask } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
@@ -83,6 +84,25 @@ export async function PATCH(
 
     if (!batch) {
       return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    // 操作类权限检查：只有 OPERATOR（在该产品上有授权）或 ADMIN 可以更新任务
+    const roles = getRolesFromPayload(payload)
+    const userWithPermissions = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        productRoles: {
+          where: { product: { active: true } },
+          select: { productId: true, roles: true },
+        },
+      },
+    })
+    const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
+      productId: pr.productId,
+      roles: JSON.parse(pr.roles || '[]'),
+    })) || []
+    if (!canOperate(roles, userProductRoles, batch.productId, ['OPERATOR'])) {
+      return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
     }
 
     // 如果提交了 formData，进行校验

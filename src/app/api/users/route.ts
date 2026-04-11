@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } from '@/lib/auth'
-import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole } from '@/lib/roles'
+import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole, parseRoles } from '@/lib/roles'
 import { db } from '@/lib/db'
 
 // GET /api/users — List all users (admin only)
@@ -22,15 +22,27 @@ export async function GET(request: NextRequest) {
         name: true,
         email: true,
         role: true,
+        roles: true,
         department: true,
         active: true,
         createdAt: true,
         updatedAt: true,
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json({ users })
+    const formattedUsers = users.map((u) => ({
+      ...u,
+      roles: parseRoles(u.roles, u.role),
+      productLines: u.productLines.map((pl) => pl.productLine),
+    }))
+
+    return NextResponse.json({ users: formattedUsers })
   } catch (error) {
     console.error('GET /api/users error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
@@ -51,7 +63,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { name, email, password, role, roles, department } = body
+    const { name, email, password, role, roles, department, productLines } = body
 
     // Validation
     if (!name || !email || !password) {
@@ -111,29 +123,80 @@ export async function POST(request: NextRequest) {
     }
     const primaryRole = determinePrimaryRole(finalRoles)
 
+    // Validate productLines
+    const validProductLines = ['SERVICE', 'CELL_PRODUCT', 'KIT']
+    let finalProductLines: string[] = []
+    if (productLines && Array.isArray(productLines)) {
+      finalProductLines = productLines.filter((pl: string) =>
+        validProductLines.includes(pl),
+      )
+    }
+
     const hashedPassword = await hashPassword(password)
 
-    const user = await db.user.create({
-      data: {
-        name,
-        email,
-        password: hashedPassword,
-        role: primaryRole,
-        roles: serializeRoles(finalRoles),
-        department: department || null,
-      },
+    // Create user + product lines in a transaction
+    const user = await db.$transaction(async (tx) => {
+      const createdUser = await tx.user.create({
+        data: {
+          name,
+          email,
+          password: hashedPassword,
+          role: primaryRole,
+          roles: serializeRoles(finalRoles),
+          department: department || null,
+        },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          roles: true,
+          department: true,
+          active: true,
+          createdAt: true,
+        },
+      })
+
+      // Create UserProductLine records
+      if (finalProductLines.length > 0) {
+        await tx.userProductLine.createMany({
+          data: finalProductLines.map((productLine) => ({
+            userId: createdUser.id,
+            productLine,
+          })),
+        })
+      }
+
+      return createdUser
+    })
+
+    // Fetch the created user with productLines
+    const userWithLines = await db.user.findUnique({
+      where: { id: user.id },
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        roles: true,
         department: true,
         active: true,
         createdAt: true,
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
     })
 
-    return NextResponse.json({ user }, { status: 201 })
+    const formattedUser = {
+      ...userWithLines!,
+      roles: parseRoles(userWithLines!.roles, userWithLines!.role),
+      productLines: userWithLines!.productLines.map((pl) => pl.productLine),
+    }
+
+    return NextResponse.json({ user: formattedUser }, { status: 201 })
   } catch (error) {
     console.error('POST /api/users error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

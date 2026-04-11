@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canOperate } from '@/lib/roles'
 import { db } from '@/lib/db'
 import { validateQcRecord, type TestResultItem } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
@@ -89,6 +90,25 @@ export async function POST(
     })
     if (!batch) {
       return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    // 操作类权限检查：只有 QC（在该产品上有授权）或 ADMIN 可以创建质检记录
+    const roles = getRolesFromPayload(payload)
+    const userWithPermissions = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        productRoles: {
+          where: { product: { active: true } },
+          select: { productId: true, roles: true },
+        },
+      },
+    })
+    const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
+      productId: pr.productId,
+      roles: JSON.parse(pr.roles || '[]'),
+    })) || []
+    if (!canOperate(roles, userProductRoles, batch.productId, ['QC'])) {
+      return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
     }
 
     if (batch.status !== 'QC_IN_PROGRESS') {

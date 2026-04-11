@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } from '@/lib/auth'
-import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole } from '@/lib/roles'
+import { isAdmin, VALID_ROLES, serializeRoles, determinePrimaryRole, parseRoles } from '@/lib/roles'
 import { db } from '@/lib/db'
 
 // GET /api/users/[id] — Get single user (admin only)
@@ -28,10 +28,16 @@ export async function GET(
         name: true,
         email: true,
         role: true,
+        roles: true,
         department: true,
         active: true,
         createdAt: true,
         updatedAt: true,
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
     })
 
@@ -39,7 +45,13 @@ export async function GET(
       return NextResponse.json({ error: '用户不存在' }, { status: 404 })
     }
 
-    return NextResponse.json({ user })
+    const formattedUser = {
+      ...user,
+      roles: parseRoles(user.roles, user.role),
+      productLines: user.productLines.map((pl) => pl.productLine),
+    }
+
+    return NextResponse.json({ user: formattedUser })
   } catch (error) {
     console.error('GET /api/users/[id] error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
@@ -64,7 +76,7 @@ export async function PATCH(
 
     const { id } = await params
     const body = await request.json()
-    const { name, email, password, role, roles, department, active } = body
+    const { name, email, password, role, roles, department, active, productLines } = body
 
     // Check user exists
     const existingUser = await db.user.findUnique({ where: { id } })
@@ -131,22 +143,78 @@ export async function PATCH(
       updateData.password = await hashPassword(password)
     }
 
-    const updatedUser = await db.user.update({
+    // Handle productLines update in transaction
+    if (productLines !== undefined) {
+      const validProductLines = ['SERVICE', 'CELL_PRODUCT', 'KIT']
+      let finalProductLines: string[] = []
+      if (Array.isArray(productLines)) {
+        finalProductLines = productLines.filter((pl: string) =>
+          validProductLines.includes(pl),
+        )
+      }
+
+      await db.$transaction(async (tx) => {
+        // Delete existing UserProductLine records
+        await tx.userProductLine.deleteMany({
+          where: { userId: id },
+        })
+
+        // Create new UserProductLine records
+        if (finalProductLines.length > 0) {
+          await tx.userProductLine.createMany({
+            data: finalProductLines.map((productLine) => ({
+              userId: id,
+              productLine,
+            })),
+          })
+        }
+
+        // Apply other user field updates
+        if (Object.keys(updateData).length > 0) {
+          await tx.user.update({
+            where: { id },
+            data: updateData,
+          })
+        }
+      })
+    } else {
+      // No productLines change, just update user fields
+      if (Object.keys(updateData).length > 0) {
+        await db.user.update({
+          where: { id },
+          data: updateData,
+        })
+      }
+    }
+
+    // Fetch updated user with productLines
+    const updatedUser = await db.user.findUnique({
       where: { id },
-      data: updateData,
       select: {
         id: true,
         name: true,
         email: true,
         role: true,
+        roles: true,
         department: true,
         active: true,
         createdAt: true,
         updatedAt: true,
+        productLines: {
+          select: {
+            productLine: true,
+          },
+        },
       },
     })
 
-    return NextResponse.json({ user: updatedUser })
+    const formattedUser = {
+      ...updatedUser!,
+      roles: parseRoles(updatedUser!.roles, updatedUser!.role),
+      productLines: updatedUser!.productLines.map((pl) => pl.productLine),
+    }
+
+    return NextResponse.json({ user: formattedUser })
   } catch (error) {
     console.error('PATCH /api/users/[id] error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })
@@ -184,9 +252,23 @@ export async function DELETE(
       return NextResponse.json({ error: '用户不存在' }, { status: 404 })
     }
 
-    await db.user.update({
-      where: { id },
-      data: { active: false },
+    // Clean up related records before soft-deleting
+    await db.$transaction(async (tx) => {
+      // Delete all UserProductLine records for this user
+      await tx.userProductLine.deleteMany({
+        where: { userId: id },
+      })
+
+      // Delete all UserProductRole records for this user
+      await tx.userProductRole.deleteMany({
+        where: { userId: id },
+      })
+
+      // Soft-delete the user
+      await tx.user.update({
+        where: { id },
+        data: { active: false },
+      })
     })
 
     return NextResponse.json({ message: '用户已禁用' })

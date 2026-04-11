@@ -1599,3 +1599,85 @@ Stage Summary:
 - lint 通过（仅有预存的 generate-plan.js 错误）
 - dev server 编译正常
 - 准备进入 Phase 1 开发
+
+---
+Task ID: P1-C
+Agent: Permission Pages Developer
+Task: 产品线归属配置 + 产品权限配置页 + 权限总览页
+
+Work Log:
+- 读取 worklog.md 了解项目上下文（iPSC-Flow 多产品线生产管理系统）
+- 分析现有代码：create-user-dialog.tsx、user-list.tsx、sidebar.tsx、header.tsx、roles.ts、auth-store.ts、auth-fetch.ts
+- 确认后端 API 已完备：/api/users（含 productLines）、/api/product-roles（GET/POST/DELETE）、/api/products（GET）
+- 确认 Prisma schema 中 UserProductLine 和 UserProductRole 模型已存在
+
+**Task 1: 更新创建/编辑用户对话框 — 添加产品线归属**
+- 修改 `src/components/users/create-user-dialog.tsx`：
+  - 新增 imports：FlaskConical/Microscope/TestTubes（产品线图标）、isAdmin（权限检查）、useAuthStore（获取当前用户）
+  - UserItem 接口新增 productLines?: string[]
+  - 新增 productLines state（从 editUser 初始化）
+  - 新增 toggleProductLine() 函数
+  - handleOpenChange 重置时同步 productLines
+  - handleSubmit 的 POST/PATCH body 增加 productLines 字段
+  - 在"部门"字段后新增"产品线归属"区域：3 个产品线卡片（细胞产品/服务项目/试剂盒），点击可切换 Checkbox
+  - 仅 ADMIN 可见此区域（isCurrentUserAdmin 检查）
+
+**Task 2: 更新用户列表 — 显示产品线徽标**
+- 修改 `src/components/users/user-list.tsx`：
+  - 新增 import ProductLineBadge
+  - UserItem 接口新增 productLines?: string[]
+  - 表格新增"产品线"列（sm:table-cell），展示 ProductLineBadge 组件
+  - 部门列改为 lg:table-cell（更宽屏才显示）
+  - 骨架屏同步更新列数
+  - colspan 从 6 更新为 7（含产品线展开行和空状态行）
+
+**Task 3: 创建产品权限配置页**
+- 新建 `src/app/settings/product-roles/page.tsx`：
+  - 路由：/settings/product-roles
+  - 访问控制：ADMIN 看所有产品线，SUPERVISOR 仅看自己归属的产品线，操作员显示"无权限"
+  - 产品线切换标签栏：全部/细胞产品/服务项目/试剂盒
+  - 用户选择下拉框（Select）：仅显示有 OPERATOR 或 QC 角色的活跃用户
+  - 选中用户信息卡片：显示姓名、邮箱、全局角色、产品线
+  - 产品角色分配表格：产品编码/名称、产品线、OPERATOR checkbox、QC checkbox
+  - Checkbox 自动禁用：用户全局角色不包含则不可勾选（如无 QC 全局角色则 QC checkbox disabled）
+  - 警告提示：amber 色提示框，说明产品角色不能超出全局资质
+  - 产品搜索框：按产品编码/名称过滤
+  - 保存逻辑：对比原始与当前 assignments，仅提交变更项，支持 upsert 和 delete
+  - 加载状态：Skeleton 骨架屏
+  - 空状态：搜索无匹配时的提示
+
+**Task 4: 创建权限总览页**
+- 新建 `src/app/settings/permissions/page.tsx`：
+  - 路由：/settings/permissions
+  - 访问控制：ADMIN 看所有用户，SUPERVISOR 仅看自己产品线内的用户，OPERATOR/QC 仅看自己
+  - 产品线切换标签栏（非操作员可见）
+  - 搜索框：按用户名/邮箱过滤
+  - 桌面端表格（md:block）：用户名、邮箱、全局角色（Badge）、产品线（ProductLineBadge）、产品权限详情
+  - 管理类用户（ADMIN/SUPERVISOR/QA）显示"整线管理"/"整线质保"徽标
+  - 操作类用户（OPERATOR/QC）显示可展开的产品权限详情（DropdownMenu）
+  - 移动端卡片列表（md:hidden）：紧凑布局，产品权限支持折叠展开
+  - 统计信息：底部显示用户总数和访问级别说明
+  - 加载状态 + 空状态处理
+
+**Task 5: 更新侧边栏导航**
+- 修改 `src/components/layout/sidebar.tsx`：
+  - 新增 imports：Shield、ShieldCheck（权限相关图标）
+  - adminNavItems 新增 "权限配置"（/settings/product-roles，ADMIN+SUPERVISOR）
+  - adminNavItems 新增 "权限总览"（/settings/permissions，所有角色可见）
+
+**Task 6: 更新页头标题映射**
+- 修改 `src/components/layout/header.tsx`：
+  - pageTitles 新增 '/settings/product-roles': '权限配置'
+  - pageTitles 新增 '/settings/permissions': '权限总览'
+
+- Lint 检查通过：仅剩预存 generate-plan.js 2 个 error，本任务零新增
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：src/components/users/create-user-dialog.tsx（产品线归属区域）、src/components/users/user-list.tsx（产品线徽标列）、src/components/layout/sidebar.tsx（导航项）、src/components/layout/header.tsx（标题映射）
+- 新增文件：src/app/settings/product-roles/page.tsx（产品权限配置页）、src/app/settings/permissions/page.tsx（权限总览页）
+- 产品线归属：ADMIN 在创建/编辑用户时可指定产品线归属，支持 3 条产品线
+- 产品权限配置：SUPERVISOR 可在产品线内为操作员分配 OPERATOR/QC 产品级角色
+- 权限总览：所有用户可查看权限配置，三级访问控制（ADMIN 全看/SUPERVISOR 看自己线/操作员看自己）
+- 响应式设计：桌面端使用 Table，移动端使用卡片列表
+- 代码零新增 ESLint error/warning
