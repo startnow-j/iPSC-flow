@@ -803,11 +803,6 @@ export default function BatchDetailPage({
               <CardContent className="space-y-0">
                 <InfoRow
                   icon={Calendar}
-                  label="计划开始日期"
-                  value={formatDate(batch.plannedStartDate)}
-                />
-                <InfoRow
-                  icon={Calendar}
                   label="计划交付日期"
                   value={formatDate(batch.plannedEndDate)}
                 />
