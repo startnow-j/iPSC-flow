@@ -1741,3 +1741,24 @@ Stage Summary:
 - 权限管理: ADMIN 配置产品线归属 + SUPERVISOR 配置产品操作权限
 - 权限可视化: 权限配置页 + 权限总览页
 - 代码零新增 ESLint error/warning
+
+---
+Task ID: 3
+Agent: Main
+Task: Fix runtime errors in permissions and dialog components
+
+Work Log:
+- Fixed `ReferenceError: Cannot access 'selectedUser' before initialization` in product-roles page
+  - Moved `const selectedUser = assignableUsers.find(...)` declaration before its first usage (line 180)
+  - Removed duplicate declaration at line 208
+- Fixed `Maximum update depth exceeded` infinite loop in Radix UI Dialog
+  - Root cause: `animate-in`/`animate-out` CSS classes on DialogOverlay and DialogContent triggered Radix `usePresence` hook, which entered infinite ref callback loop when combined with Zustand store re-renders
+  - Fix: Removed ALL animation CSS classes from `src/components/ui/dialog.tsx` (animate-in, animate-out, fade-in-0, fade-out-0, zoom-in-95, zoom-out-95, duration-200)
+  - Reverted conditional rendering workarounds from users, products, and batches pages
+  - Restored original `handleDialogClose` implementations with immediate `setEditUser(null)` cleanup
+
+Stage Summary:
+- Dialog component now opens/closes without CSS animations (instant mount/unmount)
+- Eliminates Radix UI `usePresence` infinite loop bug
+- All three dialog pages (users, products, batches) reverted to clean original patterns
+- Lint passes, dev server compiles cleanly

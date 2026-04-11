@@ -36,6 +36,7 @@ export default function UsersPage() {
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open)
+    if (!open) setEditUser(null)
   }
 
   // Access control: only ADMIN
@@ -81,15 +82,13 @@ export default function UsersPage() {
         onRefresh={handleRefresh}
       />
 
-      {/* Create/Edit Dialog — conditionally rendered to avoid Radix usePresence infinite loop */}
-      {dialogOpen && (
-        <CreateUserDialog
-          open={dialogOpen}
-          onOpenChange={handleDialogClose}
-          onSuccess={handleRefresh}
-          editUser={editUser}
-        />
-      )}
+      {/* Create/Edit Dialog */}
+      <CreateUserDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogClose}
+        onSuccess={handleRefresh}
+        editUser={editUser}
+      />
     </div>
   )
 }

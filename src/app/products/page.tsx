@@ -90,6 +90,7 @@ export default function ProductsPage() {
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open)
+    if (!open) setEditProduct(null)
   }
 
   const handleToggleActive = async (product: ProductItem) => {
@@ -351,15 +352,13 @@ export default function ProductsPage() {
         })
       )}
 
-      {/* Create/Edit Dialog — conditionally rendered to avoid Radix usePresence infinite loop */}
-      {dialogOpen && (
-        <CreateProductDialog
-          open={dialogOpen}
-          onOpenChange={handleDialogClose}
-          onSuccess={fetchProducts}
-          editProduct={editProduct}
-        />
-      )}
+      {/* Create/Edit Dialog */}
+      <CreateProductDialog
+        open={dialogOpen}
+        onOpenChange={handleDialogClose}
+        onSuccess={fetchProducts}
+        editProduct={editProduct}
+      />
     </div>
   )
 }

@@ -421,15 +421,13 @@ export function BatchListContent({
         </>
       )}
 
-      {/* Create Batch Dialog — conditionally rendered to avoid Radix usePresence infinite loop */}
-      {createDialogOpen && (
-        <CreateBatchDialog
-          open={createDialogOpen}
-          onOpenChange={setCreateDialogOpen}
-          onSuccess={fetchBatches}
-          defaultProductLine={defaultProductLine}
-        />
-      )}
+      {/* Create Batch Dialog */}
+      <CreateBatchDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onSuccess={fetchBatches}
+        defaultProductLine={defaultProductLine}
+      />
     </div>
   )
 }
