@@ -176,6 +176,9 @@ export default function ProductRolesPage() {
     fetchAssignments(selectedUserId)
   }, [selectedUserId, fetchAssignments])
 
+  // Selected user info (must be before usage below)
+  const selectedUser = assignableUsers.find((u) => u.id === selectedUserId)
+
   // Filter products by: selected line, search, AND selected user's product lines
   const userProductLines = selectedUser?.productLines || []
   const filteredProducts = products.filter((p) => {
@@ -203,9 +206,6 @@ export default function ProductRolesPage() {
   const filteredUsers = useMemo(() => {
     return assignableUsers
   }, [assignableUsers])
-
-  // Selected user info
-  const selectedUser = assignableUsers.find((u) => u.id === selectedUserId)
 
   // Check if has changes
   const hasChanges = JSON.stringify(assignments) !== JSON.stringify(originalAssignments)
