@@ -1972,3 +1972,24 @@ Work Log:
 Stage Summary:
 - 修改文件: src/app/api/product-roles/available-users/route.ts, src/app/batches/[id]/page.tsx
 - 验证: 编译通过，无报错
+---
+Task ID: 3
+Agent: Main
+Task: 权限总览页面增加按产品筛选功能
+
+Work Log:
+- 分析现有权限总览页面，理解数据结构（users + productRoles）
+- 在搜索栏旁增加产品筛选下拉框（按产品线分组），使用 shadcn Select 组件
+- 获取产品列表数据（GET /api/products），按产品线分组展示
+- 新增 productUsersMap 反向映射：productId -> 用户权限列表
+- 当选中产品时，过滤用户列表：管理类角色（ADMIN/SUPERVISOR/QA）始终显示，操作类用户必须有 UserProductRole 记录
+- 选中产品后，产品权限列直接展示该产品的角色badge，不再折叠到下拉菜单中
+- 增加产品信息提示栏，显示当前选中的产品信息和匹配用户数
+- 支持清除产品筛选，恢复全部用户视图
+- 同步适配桌面端表格和移动端卡片布局
+
+Stage Summary:
+- 修改文件: src/app/settings/permissions/page.tsx
+- 新增功能: 产品筛选下拉框、产品用户反向映射、产品信息提示栏
+- 交互逻辑: 选产品→过滤用户→产品权限列直接展示角色badge→清除恢复全量
+- 验证: 编译通过，无报错

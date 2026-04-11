@@ -11,12 +11,14 @@ import {
   ROLE_LABELS,
   ROLE_COLORS,
   MANAGEMENT_ROLES,
+  PRODUCT_LINE_LABELS,
 } from '@/lib/roles'
 import { ProductLineBadge } from '@/components/shared/product-line-badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Button } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -26,6 +28,15 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import {
   ShieldAlert,
   Search,
   CheckCircle2,
@@ -33,13 +44,14 @@ import {
   ChevronDown,
   UserCog,
   Eye,
+  FlaskConical,
+  X,
 } from 'lucide-react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { Button } from '@/components/ui/button'
 
 // ========================
 // Types
@@ -66,6 +78,13 @@ interface ProductRoleItem {
   roles: string[]
 }
 
+interface ProductItem {
+  id: string
+  productCode: string
+  productName: string
+  productLine: string
+}
+
 // ========================
 // Page Component
 // ========================
@@ -83,10 +102,12 @@ export default function PermissionsOverviewPage() {
   // Data
   const [users, setUsers] = useState<UserItem[]>([])
   const [productRoles, setProductRoles] = useState<ProductRoleItem[]>([])
+  const [products, setProducts] = useState<ProductItem[]>([])
   const [loading, setLoading] = useState(false)
 
   // UI
   const [searchQuery, setSearchQuery] = useState('')
+  const [selectedProductId, setSelectedProductId] = useState<string>('')
   const [expandedUsers, setExpandedUsers] = useState<Set<string>>(new Set())
 
   // Build merged data: user + their product roles grouped
@@ -99,30 +120,56 @@ export default function PermissionsOverviewPage() {
     return map
   }, [productRoles])
 
+  // Build reverse map: productId -> users with that product role
+  const productUsersMap = useMemo(() => {
+    const map: Record<string, { userId: string; roles: string[] }[]> = {}
+    for (const pr of productRoles) {
+      if (!map[pr.productId]) map[pr.productId] = []
+      map[pr.productId].push({ userId: pr.userId, roles: pr.roles })
+    }
+    return map
+  }, [productRoles])
+
   // Check if a user has any management role
   const hasManagementRole = (roles: string[]) =>
-    roles.some((r) => MANAGEMENT_ROLES.includes(r))
+    roles.some((r) => MANAGEMENT_ROLES.includes(r) || r === 'QA')
 
   // Determine visible product lines for filtering (memoized to prevent infinite loop)
-  // ADMIN + SUPERVISOR: all product lines
-  // QA/QC/OPERATOR: own product lines only
   const visibleProductLines = useMemo(() => {
     return isManagement
       ? ['CELL_PRODUCT', 'SERVICE', 'KIT']
       : (currentUser?.productLines || [])
   }, [isManagement, currentUser?.productLines])
 
+  // Products grouped by product line for the dropdown
+  const productsByLine = useMemo(() => {
+    const grouped: Record<string, ProductItem[]> = {}
+    for (const p of products) {
+      if (!visibleProductLines.includes(p.productLine)) continue
+      if (!grouped[p.productLine]) grouped[p.productLine] = []
+      grouped[p.productLine].push(p)
+    }
+    // Sort each group by productCode
+    for (const line of Object.keys(grouped)) {
+      grouped[line].sort((a, b) => a.productCode.localeCompare(b.productCode))
+    }
+    return grouped
+  }, [products, visibleProductLines])
+
+  // Selected product info
+  const selectedProduct = useMemo(() => {
+    if (!selectedProductId) return null
+    return products.find((p) => p.id === selectedProductId) || null
+  }, [products, selectedProductId])
+
   // Fetch all data
-  // Note: API already filters data by role:
-  //   - ADMIN + SUPERVISOR → all users & all product roles
-  //   - QA/QC/OPERATOR → self only
-  // So no client-side filtering is needed here.
   const fetchData = useCallback(async () => {
     setLoading(true)
     try {
-      const [usersRes, rolesRes] = await Promise.all([
+      const [usersRes, rolesRes, productsRes] = await Promise.all([
         authFetch('/api/users'),
         authFetch('/api/product-roles'),
+        authFetch('/api/products'),
       ])
 
       let fetchedUsers: UserItem[] = []
@@ -137,8 +184,20 @@ export default function PermissionsOverviewPage() {
         fetchedRoles = data.assignments || []
       }
 
+      let fetchedProducts: ProductItem[] = []
+      if (productsRes.ok) {
+        const data = await productsRes.json()
+        fetchedProducts = (data.products || []).map((p: { id: string; productCode: string; productName: string; productLine: string }) => ({
+          id: p.id,
+          productCode: p.productCode,
+          productName: p.productName,
+          productLine: p.productLine,
+        }))
+      }
+
       setUsers(fetchedUsers)
       setProductRoles(fetchedRoles)
+      setProducts(fetchedProducts)
     } catch {
       toast.error('加载数据失败')
     } finally {
@@ -152,15 +211,44 @@ export default function PermissionsOverviewPage() {
     }
   }, [authLoading, fetchData])
 
-  // Filter users by search query
+  // Filter users: by search query AND by selected product
   const filteredUsers = useMemo(() => {
-    if (!searchQuery) return users
-    const q = searchQuery.toLowerCase()
-    return users.filter((u) =>
-      u.name.toLowerCase().includes(q) ||
-      u.email.toLowerCase().includes(q)
-    )
-  }, [users, searchQuery])
+    let result = users
+
+    // Filter by selected product
+    if (selectedProductId) {
+      const productAccess = productUsersMap[selectedProductId] || []
+      const userIdsWithAccess = new Set(productAccess.map((a) => a.userId))
+
+      result = result.filter((u) => {
+        // Management users (ADMIN/SUPERVISOR/QA) always shown if in the same product line
+        if (hasManagementRole(u.roles) && selectedProduct && u.productLines.includes(selectedProduct.productLine)) {
+          return true
+        }
+        // Operational users: must have explicit UserProductRole for this product
+        return userIdsWithAccess.has(u.id)
+      })
+    }
+
+    // Filter by search query
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase()
+      result = result.filter((u) =>
+        u.name.toLowerCase().includes(q) ||
+        u.email.toLowerCase().includes(q)
+      )
+    }
+
+    return result
+  }, [users, searchQuery, selectedProductId, productUsersMap, selectedProduct])
+
+  // Get the roles for a specific user on the selected product
+  const getProductRolesForUser = (userId: string): string[] => {
+    if (!selectedProductId) return []
+    const access = productUsersMap[selectedProductId] || []
+    const match = access.find((a) => a.userId === userId)
+    return match ? match.roles : []
+  }
 
   // Toggle expanded row (mobile)
   const toggleExpanded = (userId: string) => {
@@ -170,6 +258,11 @@ export default function PermissionsOverviewPage() {
       else next.add(userId)
       return next
     })
+  }
+
+  // Clear product filter
+  const clearProductFilter = () => {
+    setSelectedProductId('')
   }
 
   // ========================
@@ -204,7 +297,7 @@ export default function PermissionsOverviewPage() {
         </div>
       </div>
 
-      {/* Search + Stats */}
+      {/* Search + Product Filter + Stats */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -215,7 +308,51 @@ export default function PermissionsOverviewPage() {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        {!loading && users.length > 0 && (
+
+        {/* Product Filter Dropdown */}
+        {isManagement && products.length > 0 && (
+          <div className="flex items-center gap-2">
+            <div className="relative min-w-[220px]">
+              <Select
+                value={selectedProductId}
+                onValueChange={setSelectedProductId}
+              >
+                <SelectTrigger className="h-9 text-sm">
+                  <FlaskConical className="h-3.5 w-3.5 text-muted-foreground mr-1.5" />
+                  <SelectValue placeholder="按产品筛选权限..." />
+                </SelectTrigger>
+                <SelectContent className="max-h-72">
+                  {Object.entries(productsByLine).map(([line, lineProducts]) => (
+                    <SelectGroup key={line}>
+                      <SelectLabel className="text-xs font-medium">
+                        {PRODUCT_LINE_LABELS[line] || line}
+                      </SelectLabel>
+                      {lineProducts.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="text-xs">
+                          <span className="font-mono mr-1.5">{p.productCode}</span>
+                          <span className="text-muted-foreground">{p.productName}</span>
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedProductId && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-9 w-9 shrink-0"
+                onClick={clearProductFilter}
+                title="清除产品筛选"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            )}
+          </div>
+        )}
+
+        {!loading && !selectedProductId && users.length > 0 && (
           <div className="flex items-center gap-3 text-xs text-muted-foreground">
             <span>共 {users.length} 名用户</span>
             <span className="inline-flex items-center gap-1">
@@ -230,6 +367,20 @@ export default function PermissionsOverviewPage() {
         )}
       </div>
 
+      {/* Selected product info bar */}
+      {selectedProduct && (
+        <div className="flex items-center gap-3 rounded-lg border bg-muted/30 px-4 py-2.5">
+          <ProductLineBadge productLine={selectedProduct.productLine} />
+          <Badge variant="secondary" className="font-mono text-xs bg-primary/10 text-primary">
+            {selectedProduct.productCode}
+          </Badge>
+          <span className="text-sm font-medium">{selectedProduct.productName}</span>
+          <span className="text-xs text-muted-foreground">
+            — 显示有该产品权限的用户（共 {filteredUsers.length} 人）
+          </span>
+        </div>
+      )}
+
       {/* Data Table */}
       <Card>
         <CardContent className="p-0">
@@ -242,9 +393,15 @@ export default function PermissionsOverviewPage() {
           ) : filteredUsers.length === 0 ? (
             <div className="flex flex-col items-center py-12 text-muted-foreground">
               <ShieldAlert className="h-10 w-10 mb-3" />
-              <p className="text-sm font-medium">无匹配用户</p>
+              <p className="text-sm font-medium">
+                {selectedProductId ? '该产品暂无授权用户' : '无匹配用户'}
+              </p>
               <p className="text-xs mt-1">
-                {searchQuery ? '尝试修改搜索条件' : '暂无用户数据'}
+                {searchQuery
+                  ? '尝试修改搜索条件'
+                  : selectedProductId
+                    ? '可在产品权限配置中为用户分配该产品的操作权限'
+                    : '暂无用户数据'}
               </p>
             </div>
           ) : (
@@ -259,13 +416,24 @@ export default function PermissionsOverviewPage() {
                       <TableHead>状态</TableHead>
                       <TableHead>全局角色</TableHead>
                       <TableHead>产品线</TableHead>
-                      <TableHead>产品权限</TableHead>
+                      <TableHead>
+                        {selectedProductId ? (
+                          <span className="flex items-center gap-1.5">
+                            <FlaskConical className="h-3 w-3" />
+                            产品权限
+                          </span>
+                        ) : (
+                          '产品权限'
+                        )}
+                      </TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredUsers.map((user) => {
                       const userPr = userProductRolesMap[user.id] || []
-                      const isManagement = hasManagementRole(user.roles)
+                      const isMgmt = hasManagementRole(user.roles)
+                      const productSpecificRoles = getProductRolesForUser(user.id)
+                      const showProductSpecific = selectedProductId && productSpecificRoles.length > 0
 
                       return (
                         <TableRow
@@ -336,57 +504,84 @@ export default function PermissionsOverviewPage() {
 
                           {/* Product permissions */}
                           <TableCell>
-                            {isManagement ? (
-                              <Badge
-                                variant="secondary"
-                                className="text-[10px] bg-primary/10 text-primary"
-                              >
-                                {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
-                              </Badge>
-                            ) : userPr.length === 0 ? (
-                              <span className="text-xs text-muted-foreground">暂无产品权限</span>
+                            {/* Product-specific view: when a product is selected */}
+                            {selectedProductId ? (
+                              isMgmt ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] bg-primary/10 text-primary"
+                                >
+                                  {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
+                                </Badge>
+                              ) : showProductSpecific ? (
+                                <div className="flex items-center gap-1 flex-wrap">
+                                  {productSpecificRoles.map((r) => (
+                                    <Badge
+                                      key={r}
+                                      variant="secondary"
+                                      className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                                    >
+                                      {ROLE_LABELS[r]}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">-</span>
+                              )
                             ) : (
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
-                                    <Eye className="h-3 w-3" />
-                                    查看 ({userPr.length})
-                                    <ChevronDown className="h-3 w-3" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="start" className="w-80 max-h-72 overflow-y-auto">
-                                  <div className="p-2 space-y-1.5">
-                                    {userPr.map((pr) => (
-                                      <div
-                                        key={`${pr.productId}-${pr.roles.join()}`}
-                                        className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
-                                      >
-                                        <ProductLineBadge productLine={pr.productLine} />
-                                        <Badge
-                                          variant="secondary"
-                                          className="text-[9px] font-mono bg-primary/10 text-primary"
+                              /* Default view: no product selected */
+                              isMgmt ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-[10px] bg-primary/10 text-primary"
+                                >
+                                  {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
+                                </Badge>
+                              ) : userPr.length === 0 ? (
+                                <span className="text-xs text-muted-foreground">暂无产品权限</span>
+                              ) : (
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-7 text-xs gap-1">
+                                      <Eye className="h-3 w-3" />
+                                      查看 ({userPr.length})
+                                      <ChevronDown className="h-3 w-3" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="start" className="w-80 max-h-72 overflow-y-auto">
+                                    <div className="p-2 space-y-1.5">
+                                      {userPr.map((pr) => (
+                                        <div
+                                          key={`${pr.productId}-${pr.roles.join()}`}
+                                          className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
                                         >
-                                          {pr.productCode}
-                                        </Badge>
-                                        <span className="text-[10px] text-muted-foreground truncate flex-1">
-                                          {pr.productName}
-                                        </span>
-                                        <div className="flex gap-0.5 shrink-0">
-                                          {pr.roles.map((r) => (
-                                            <Badge
-                                              key={r}
-                                              variant="secondary"
-                                              className={`text-[9px] ${ROLE_COLORS[r] || ''}`}
-                                            >
-                                              {ROLE_LABELS[r]}
-                                            </Badge>
-                                          ))}
+                                          <ProductLineBadge productLine={pr.productLine} />
+                                          <Badge
+                                            variant="secondary"
+                                            className="text-[9px] font-mono bg-primary/10 text-primary"
+                                          >
+                                            {pr.productCode}
+                                          </Badge>
+                                          <span className="text-[10px] text-muted-foreground truncate flex-1">
+                                            {pr.productName}
+                                          </span>
+                                          <div className="flex gap-0.5 shrink-0">
+                                            {pr.roles.map((r) => (
+                                              <Badge
+                                                key={r}
+                                                variant="secondary"
+                                                className={`text-[9px] ${ROLE_COLORS[r] || ''}`}
+                                              >
+                                                {ROLE_LABELS[r]}
+                                              </Badge>
+                                            ))}
+                                          </div>
                                         </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
+                                      ))}
+                                    </div>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              )
                             )}
                           </TableCell>
                         </TableRow>
@@ -400,8 +595,10 @@ export default function PermissionsOverviewPage() {
               <div className="md:hidden divide-y">
                 {filteredUsers.map((user) => {
                   const userPr = userProductRolesMap[user.id] || []
-                  const isManagement = hasManagementRole(user.roles)
+                  const isMgmt = hasManagementRole(user.roles)
                   const isExpanded = expandedUsers.has(user.id)
+                  const productSpecificRoles = getProductRolesForUser(user.id)
+                  const showProductSpecific = selectedProductId && productSpecificRoles.length > 0
 
                   return (
                     <div
@@ -462,63 +659,93 @@ export default function PermissionsOverviewPage() {
                       </div>
 
                       {/* Product roles */}
-                      {isManagement ? (
-                        <div className="flex items-center gap-1.5">
-                          <Badge
-                            variant="secondary"
-                            className="text-[10px] bg-primary/10 text-primary"
-                          >
-                            {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
-                          </Badge>
-                        </div>
-                      ) : userPr.length > 0 ? (
-                        <div>
-                          <button
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-                            onClick={() => toggleExpanded(user.id)}
-                          >
-                            <ChevronDown
-                              className={`h-3 w-3 transition-transform ${
-                                isExpanded ? 'rotate-0' : '-rotate-90'
-                              }`}
-                            />
-                            产品权限 ({userPr.length})
-                          </button>
-                          {isExpanded && (
-                            <div className="mt-2 space-y-1.5">
-                              {userPr.map((pr) => (
-                                <div
-                                  key={`${pr.productId}-${pr.roles.join()}`}
-                                  className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
-                                >
-                                  <ProductLineBadge productLine={pr.productLine} />
-                                  <Badge
-                                    variant="secondary"
-                                    className="text-[9px] font-mono bg-primary/10 text-primary"
-                                  >
-                                    {pr.productCode}
-                                  </Badge>
-                                  <span className="text-[10px] text-muted-foreground truncate">
-                                    {pr.productName}
-                                  </span>
-                                  <div className="flex gap-0.5 ml-auto shrink-0">
-                                    {pr.roles.map((r) => (
-                                      <Badge
-                                        key={r}
-                                        variant="secondary"
-                                        className={`text-[9px] ${ROLE_COLORS[r] || ''}`}
-                                      >
-                                        {ROLE_LABELS[r]}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                      {selectedProductId ? (
+                        /* Product-specific view */
+                        isMgmt ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-primary/10 text-primary"
+                            >
+                              {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
+                            </Badge>
+                          </div>
+                        ) : showProductSpecific ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-muted-foreground">产品权限:</span>
+                            {productSpecificRoles.map((r) => (
+                              <Badge
+                                key={r}
+                                variant="secondary"
+                                className={`text-[10px] ${ROLE_COLORS[r] || ''}`}
+                              >
+                                {ROLE_LABELS[r]}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">无该产品权限</span>
+                        )
                       ) : (
-                        <span className="text-xs text-muted-foreground">暂无产品权限</span>
+                        /* Default view */
+                        isMgmt ? (
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              variant="secondary"
+                              className="text-[10px] bg-primary/10 text-primary"
+                            >
+                              {hasRole(user.roles, 'QA') ? '整线质保' : '整线管理'}
+                            </Badge>
+                          </div>
+                        ) : userPr.length > 0 ? (
+                          <div>
+                            <button
+                              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                              onClick={() => toggleExpanded(user.id)}
+                            >
+                              <ChevronDown
+                                className={`h-3 w-3 transition-transform ${
+                                  isExpanded ? 'rotate-0' : '-rotate-90'
+                                }`}
+                              />
+                              产品权限 ({userPr.length})
+                            </button>
+                            {isExpanded && (
+                              <div className="mt-2 space-y-1.5">
+                                {userPr.map((pr) => (
+                                  <div
+                                    key={`${pr.productId}-${pr.roles.join()}`}
+                                    className="flex items-center gap-1.5 rounded-md border bg-muted/30 px-2 py-1.5"
+                                  >
+                                    <ProductLineBadge productLine={pr.productLine} />
+                                    <Badge
+                                      variant="secondary"
+                                      className="text-[9px] font-mono bg-primary/10 text-primary"
+                                    >
+                                      {pr.productCode}
+                                    </Badge>
+                                    <span className="text-[10px] text-muted-foreground truncate">
+                                      {pr.productName}
+                                    </span>
+                                    <div className="flex gap-0.5 ml-auto shrink-0">
+                                      {pr.roles.map((r) => (
+                                        <Badge
+                                          key={r}
+                                          variant="secondary"
+                                          className={`text-[9px] ${ROLE_COLORS[r] || ''}`}
+                                        >
+                                          {ROLE_LABELS[r]}
+                                        </Badge>
+                                      ))}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">暂无产品权限</span>
+                        )
                       )}
                     </div>
                   )
@@ -533,12 +760,17 @@ export default function PermissionsOverviewPage() {
       {!loading && filteredUsers.length > 0 && (
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <span>显示 {filteredUsers.length} / {users.length} 名用户</span>
+          {selectedProductId && (
+            <Badge variant="secondary" className="text-[10px]">
+              产品筛选模式
+            </Badge>
+          )}
           {isOperationalOnly && (
             <Badge variant="secondary" className="text-[10px]">
               仅显示当前用户
             </Badge>
           )}
-          {isSupervisor && !isCurrentUserAdmin && (
+          {isSupervisor && !isCurrentUserAdmin && !selectedProductId && (
             <Badge variant="secondary" className="text-[10px]">
               主管视图 — 全部权限可见
             </Badge>
