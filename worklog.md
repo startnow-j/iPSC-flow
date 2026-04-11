@@ -708,3 +708,22 @@ Stage Summary:
 - 修复文件：`src/app/login/page.tsx`
 - 演示账号按钮现在支持一键登录（点击即自动调用登录 API）
 - 添加了 loading 状态防止重复提交
+---
+Task ID: 2
+Agent: Main Agent
+Task: 修复 QA 用户无法看到正确质检批次的问题
+
+Work Log:
+- 用户报告 QA 登录后点击"待质检批次"等链接显示"该批次可能已被删除"
+- 通过 Grep 搜索错误信息定位到 `src/app/batches/[id]/page.tsx:612`
+- 检查后端 API：QA 用户 token 正常、`/api/batches?status=QC_PENDING` 正确返回数据、`/api/batches/{id}` 正确返回批次详情
+- 检查前端路由结构：`src/app/batches/` 下只有 `page.tsx` 和 `[id]/page.tsx`，**没有 `all/page.tsx`**
+- **根因**：多处链接指向 `/batches/all`（如仪表板快捷操作、侧边栏、首页统计卡片），但 Next.js 没有 `/batches/all` 路由
+- Next.js 的 `[id]` 动态路由将 "all" 当作批次 ID → 调用 `/api/batches/all` → 404 → 前端显示"该批次可能已被删除"
+- 创建 `src/app/batches/all/page.tsx`，复用 `BatchListPage` 组件
+- 该组件通过 `usePathname()` 判断 `pathname === '/batches/all'`，自动切换为 `viewMode='all'`（不按用户过滤）
+
+Stage Summary:
+- 新增文件：`src/app/batches/all/page.tsx`
+- 所有指向 `/batches/all` 的链接现在都能正确渲染"所有批次"页面
+- QA 用户可以通过"待质检批次"快捷操作正常查看和操作质检批次
