@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Fragment } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { toast } from 'sonner'
 import {
@@ -207,8 +207,8 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
           </TableHeader>
           <TableBody>
             {users.map((user) => (
-              <>
-                <TableRow key={user.id} className={!user.active ? 'opacity-50' : ''}>
+              <Fragment key={user.id}>
+                <TableRow className={!user.active ? 'opacity-50' : ''}>
                   <TableCell>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">{user.name}</span>
@@ -319,7 +319,7 @@ export function UserList({ onEdit, onRefresh }: UserListProps) {
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </Fragment>
             ))}
             {users.length === 0 && (
               <TableRow>
