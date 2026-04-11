@@ -148,6 +148,12 @@ export function QcForm({ batchId, batchNo, batchActualQuantity, batchUnit, onSub
     setSubmitting(true)
     try {
       // Create QC record
+      // For select-type items, map judgment to human-readable resultValue
+      const SELECT_RESULT_MAP: Record<string, Record<string, string>> = {
+        MORPHOLOGY: { PASS: '正常', FAIL: '异常' },
+        MYCOPLASMA: { PASS: '阴性', FAIL: '阳性' },
+      }
+
       const qcRes = await authFetch(`/api/batches/${batchId}/qc`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -157,7 +163,7 @@ export function QcForm({ batchId, batchNo, batchActualQuantity, batchUnit, onSub
             itemName: item.itemName,
             method: item.method,
             standard: item.standard,
-            resultValue: item.resultValue,
+            resultValue: item.resultValue ?? (item.judgment && SELECT_RESULT_MAP[item.itemCode]?.[item.judgment]) ?? null,
             resultUnit: item.resultUnit,
             judgment: item.judgment,
           })),

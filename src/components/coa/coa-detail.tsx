@@ -325,7 +325,11 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
                         <td className="px-3 py-2">
                           {item.resultValue
                             ? `${item.resultValue}${item.resultUnit || ''}`
-                            : '-'}
+                            : item.judgment === 'PASS'
+                              ? '合格'
+                              : item.judgment === 'FAIL'
+                                ? '不合格'
+                                : '-'}
                         </td>
                         <td className="px-3 py-2 text-center">
                           <Badge

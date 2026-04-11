@@ -877,3 +877,18 @@ Stage Summary:
 - 内部视图（8个字段）：种子批号、种子代次、当前代次、计划数量、生产数量、存储位置、质检消耗、可发放数量
 - 客户视图（4个区块）：产品信息、代次信息（种子代次+最终代次）、质检结果+综合判定、审核签字（批准人+日期）
 - 数据来源：CoaContent JSON（状态机生成）+ CoaRecord 审核字段（审批API写入）
+
+---
+Task ID: coa-qc-result-display-fix
+Agent: Main Agent
+Task: 修复 CoA 质检结果中细胞形态和支原体检测"检测结果"列显示"-"的问题
+
+Work Log:
+- 分析问题根因：QC 表单中 MORPHOLOGY 和 MYCOPLASMA 是选择型检测项，提交时只设置了 judgment（PASS/FAIL），未设置 resultValue
+- 修复 QC 表单 (`src/components/qc/qc-form.tsx`)：新增 SELECT_RESULT_MAP，提交时为选择型检测项映射有意义的 resultValue（细胞形态→"正常"/"异常"，支原体→"阴性"/"阳性"）
+- 修复 CoA 展示 (`src/components/coa/coa-detail.tsx`)：增加 fallback 逻辑，当 resultValue 为空但 judgment 存在时显示"合格"/"不合格"（兼容历史数据）
+
+Stage Summary:
+- 修改文件：`src/components/qc/qc-form.tsx`, `src/components/coa/coa-detail.tsx`
+- 新提交的 QC 记录：细胞形态显示"正常"/"异常"，支原体检测显示"阴性"/"阳性"
+- 历史已提交的 QC 记录（无 resultValue）：fallback 显示"合格"/"不合格"
