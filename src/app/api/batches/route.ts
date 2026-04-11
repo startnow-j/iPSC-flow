@@ -178,8 +178,7 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const passage = seedPassage || 'P0'
-    const batchNo = `${batchNoPrefix}${String(nextSeq).padStart(3, '0')}-${passage}`
+    const batchNo = `${batchNoPrefix}${String(nextSeq).padStart(3, '0')}`
 
     // 创建批次
     const batch = await db.batch.create({
