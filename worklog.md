@@ -1955,3 +1955,20 @@ Stage Summary:
 - 修复文件: src/components/users/create-user-dialog.tsx
 - 修复方式: 添加 useEffect 监听 open/editUser 变化，在对话框打开时重置所有表单字段
 - 验证: 编译通过，lint 无新增错误
+---
+Task ID: 2
+Agent: Main
+Task: 修复任务指派中可指派人过滤逻辑不正确的问题
+
+Work Log:
+- 分析根因: available-users API 完全忽略了 productId 参数，只按产品线过滤
+- 批次详情页传递的是 productCode（如 IPSC-WT-001）而非数据库 productId（cuid）
+- 陈五出现在列表中因为他有 OPERATOR 全局角色且属于 CELL_PRODUCT 产品线，但没有该具体产品的 UserProductRole
+- 修复 API: 新增 productId 参数支持，按 UserProductRole 过滤有具体产品权限的用户
+- 管理类角色（ADMIN/SUPERVISOR/QA）始终可看到其产品线内所有产品
+- 操作类用户（OPERATOR）必须有 UserProductRole 记录才会出现在该产品的指派列表中
+- 修复批次详情页: BatchDetail 接口增加 productId 字段，传递 batch.productId（数据库FK）给指派对话框
+
+Stage Summary:
+- 修改文件: src/app/api/product-roles/available-users/route.ts, src/app/batches/[id]/page.tsx
+- 验证: 编译通过，无报错

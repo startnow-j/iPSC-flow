@@ -57,6 +57,7 @@ interface BatchDetail {
   id: string
   batchNo: string
   productCode: string
+  productId: string
   productName: string
   specification: string
   unit: string
@@ -887,20 +888,20 @@ export default function BatchDetailPage({
                 open: true,
                 taskId: req.taskId,
                 taskName: req.taskName,
-                productId: req.productId || batch.productCode || '',
+                productId: batch.productId || req.productId || '',
               })}
             />
           ) : (
             <GenericTaskList
               batchId={id}
               productLine={batch.productLine || 'CELL_PRODUCT'}
-              productId={batch.productCode || ''}
+              productId={batch.productId || ''}
               onBatchUpdated={handleProductionUpdate}
               onAssignTask={(req) => setAssignDialog({
                 open: true,
                 taskId: req.taskId,
                 taskName: req.taskName,
-                productId: req.productId || batch.productCode || '',
+                productId: batch.productId || req.productId || '',
               })}
             />
           )}
