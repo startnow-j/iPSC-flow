@@ -36,7 +36,11 @@ export default function UsersPage() {
 
   const handleDialogClose = (open: boolean) => {
     setDialogOpen(open)
-    if (!open) setEditUser(null)
+    // Delay clearing editUser to avoid re-rendering during Radix dialog close animation
+    // (Radix usePresence ref loop would otherwise cause infinite update depth)
+    if (!open) {
+      setTimeout(() => setEditUser(null), 250)
+    }
   }
 
   // Access control: only ADMIN
