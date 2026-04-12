@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasAnyRole } from '@/lib/roles'
@@ -10,10 +10,12 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TaskFormWrapper, TaskFormSkeleton } from './task-form-wrapper'
 import { ExpansionForm } from './expansion-form'
+import { DifferentiationForm } from './differentiation-form'
 import {
   FlaskConical,
   ArrowUpDown,
   Snowflake,
+  Microscope,
   CheckCircle2,
   Send,
   Loader2,
@@ -69,6 +71,7 @@ interface AssignTaskRequest {
 interface EbprStepGuideProps {
   batchId: string
   batch: BatchInfo
+  category?: string | null
   onBatchUpdated: () => void
   onAssignTask?: (request: AssignTaskRequest) => void
 }
@@ -77,7 +80,16 @@ interface EbprStepGuideProps {
 // Step definitions
 // ============================================
 
-const STEPS = [
+type StepCode = 'SEED_PREP' | 'EXPANSION' | 'DIFFERENTIATION' | 'HARVEST'
+
+interface StepDef {
+  code: StepCode
+  name: string
+  icon: React.ElementType
+  sequenceNo: number
+}
+
+const ALL_STEP_DEFS: StepDef[] = [
   {
     code: 'SEED_PREP',
     name: '种子复苏',
@@ -91,14 +103,27 @@ const STEPS = [
     sequenceNo: 2,
   },
   {
+    code: 'DIFFERENTIATION',
+    name: '分化诱导',
+    icon: Microscope,
+    sequenceNo: 3,
+  },
+  {
     code: 'HARVEST',
     name: '收获冻存',
     icon: Snowflake,
-    sequenceNo: 3,
+    sequenceNo: 4,
   },
-] as const
+]
 
-type StepCode = 'SEED_PREP' | 'EXPANSION' | 'HARVEST'
+const DIFF_CATEGORIES = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+
+function isDiffCategory(category?: string | null): boolean {
+  if (!category) return false
+  return DIFF_CATEGORIES.some(
+    (c) => category.startsWith(c) || category.includes('DIFF')
+  )
+}
 
 // ============================================
 // Step status helpers
@@ -120,8 +145,8 @@ function getStepStatus(
     return 'pending'
   }
 
-  // EXPANSION: at least one completed means it's been worked on
-  if (stepCode === 'EXPANSION') {
+  // EXPANSION and DIFFERENTIATION: phase-type tasks
+  if (stepCode === 'EXPANSION' || stepCode === 'DIFFERENTIATION') {
     const hasCompleted = stepTasks.some((t) => t.status === 'COMPLETED' || t.status === 'REVIEWED')
     const hasInProgress = stepTasks.some((t) => t.status === 'IN_PROGRESS')
     if (hasInProgress) return 'current'
@@ -160,6 +185,8 @@ function StepProgressIcon({ code, large }: { code: StepCode; large: boolean }) {
       return <FlaskConical className={cls} />
     case 'EXPANSION':
       return <ArrowUpDown className={cls} />
+    case 'DIFFERENTIATION':
+      return <Microscope className={cls} />
     case 'HARVEST':
       return <Snowflake className={cls} />
     default:
@@ -198,7 +225,7 @@ function StepProgressBar({
   activeStep,
   onStepClick,
 }: {
-  steps: typeof STEPS
+  steps: StepDef[]
   tasks: ProductionTask[]
   activeStep: StepCode | null
   onStepClick: (code: StepCode) => void
@@ -209,14 +236,17 @@ function StepProgressBar({
         const status = getStepStatus(step.code, tasks)
         const isActive = activeStep === step.code
         const completedCount = getStepCompletedCount(step.code, tasks)
-        const showCount = step.code === 'EXPANSION' && completedCount > 0
+        // Show count badge for phase-type tasks (EXPANSION and DIFFERENTIATION)
+        const showCount =
+          (step.code === 'EXPANSION' || step.code === 'DIFFERENTIATION') &&
+          completedCount > 0
         const repTask = getRepresentativeTask(step.code, tasks)
         return (
           <div key={step.code} className="flex items-center">
             {/* Step circle + label */}
             <button
               onClick={() => onStepClick(step.code)}
-              className={`flex flex-col items-center gap-1.5 px-4 py-2 rounded-lg transition-all ${
+              className={`flex flex-col items-center gap-1.5 px-3 sm:px-4 py-2 rounded-lg transition-all ${
                 isActive
                   ? 'bg-primary/10 scale-105'
                   : 'hover:bg-muted cursor-pointer'
@@ -275,7 +305,7 @@ function StepProgressBar({
             {/* Connector line */}
             {idx < steps.length - 1 && (
               <div
-                className={`h-0.5 w-8 sm:w-12 mx-1 ${
+                className={`h-0.5 w-6 sm:w-12 mx-1 ${
                   status === 'completed' ? 'bg-emerald-500' : 'bg-border'
                 }`}
               />
@@ -294,11 +324,21 @@ function StepProgressBar({
 export function EbprStepGuide({
   batchId,
   batch,
+  category,
   onBatchUpdated,
   onAssignTask,
 }: EbprStepGuideProps) {
   const { user } = useAuthStore()
   const canAssign = hasAnyRole(user?.roles || [], ['ADMIN', 'SUPERVISOR'])
+
+  // Dynamically determine steps based on category
+  const showDifferentiation = isDiffCategory(category)
+  const steps = useMemo<StepDef[]>(() => {
+    if (showDifferentiation) {
+      return [...ALL_STEP_DEFS] // all 4 steps
+    }
+    return ALL_STEP_DEFS.filter((s) => s.code !== 'DIFFERENTIATION')
+  }, [showDifferentiation])
 
   const [tasks, setTasks] = useState<ProductionTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -328,7 +368,7 @@ export function EbprStepGuide({
     if (tasks.length === 0) return
 
     // Find the first non-completed step
-    for (const step of STEPS) {
+    for (const step of steps) {
       const status = getStepStatus(step.code, tasks)
       if (status === 'current') {
         setActiveStep(step.code)
@@ -337,7 +377,7 @@ export function EbprStepGuide({
     }
 
     // If all completed, show the last one
-    const lastCompleted = [...STEPS].reverse().find(
+    const lastCompleted = [...steps].reverse().find(
       (s) => getStepStatus(s.code, tasks) === 'completed'
     )
     if (lastCompleted) {
@@ -346,8 +386,8 @@ export function EbprStepGuide({
     }
 
     // Default to first step
-    setActiveStep('SEED_PREP')
-  }, [tasks])
+    setActiveStep(steps[0]?.code ?? 'SEED_PREP')
+  }, [tasks, steps])
 
   const handleStepClick = (code: StepCode) => {
     setActiveStep(code)
@@ -403,6 +443,7 @@ export function EbprStepGuide({
 
   // No tasks yet (batch not in production)
   if (tasks.length === 0) {
+    const stepNames = steps.map((s) => s.name).join('、')
     return (
       <Card>
         <CardContent className="flex flex-col items-center justify-center py-16">
@@ -411,36 +452,40 @@ export function EbprStepGuide({
           </div>
           <h3 className="text-base font-medium mb-1">暂无生产记录</h3>
           <p className="text-sm text-muted-foreground text-center max-w-xs">
-            开始生产后将自动创建种子复苏、扩增培养、收获冻存等生产任务。
+            开始生产后将自动创建{stepNames}等生产任务。
           </p>
         </CardContent>
       </Card>
     )
   }
 
-  // Get the active task to display in the form
-  const activeTask = activeStep
-    ? tasks.find(
-        (t) =>
-          t.taskCode === activeStep &&
-          (activeStep === 'EXPANSION'
-            ? t.status === 'IN_PROGRESS' || t.status === 'PENDING'
-            : t.status !== 'COMPLETED' && t.status !== 'REVIEWED' && t.status !== 'SKIPPED')
-      ) ?? tasks.find((t) => t.taskCode === activeStep)
-    : null
-
   // Check if harvest is completed
   const harvestCompleted = getStepStatus('HARVEST', tasks) === 'completed'
-  const allStepsCompleted =
-    getStepStatus('SEED_PREP', tasks) === 'completed' &&
-    getStepStatus('EXPANSION', tasks) === 'completed' &&
-    harvestCompleted
 
-  // Compute pending expansion tasks for assignment check
+  // Build all required step checks
+  const seedPrepCompleted = getStepStatus('SEED_PREP', tasks) === 'completed'
+  const expansionCompleted = getStepStatus('EXPANSION', tasks) === 'completed'
+  const differentiationCompleted = showDifferentiation
+    ? getStepStatus('DIFFERENTIATION', tasks) === 'completed'
+    : true
+  const allStepsCompleted =
+    seedPrepCompleted && expansionCompleted && differentiationCompleted && harvestCompleted
+
+  // Compute pending phase tasks for assignment check
   const pendingExpansionTasks = tasks.filter(
     (t) => t.taskCode === 'EXPANSION' && (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
   )
-  const showExpansionForm = pendingExpansionTasks.length === 0 && getStepStatus('EXPANSION', tasks) !== 'completed'
+  const showExpansionForm =
+    pendingExpansionTasks.length === 0 &&
+    getStepStatus('EXPANSION', tasks) !== 'completed'
+
+  const pendingDifferentiationTasks = tasks.filter(
+    (t) => t.taskCode === 'DIFFERENTIATION' && (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+  )
+  const showDifferentiationForm =
+    showDifferentiation &&
+    pendingDifferentiationTasks.length === 0 &&
+    getStepStatus('DIFFERENTIATION', tasks) !== 'completed'
 
   // Check if already submitted for QC
   const isQcSubmitted = batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS'
@@ -452,7 +497,7 @@ export function EbprStepGuide({
         <CardContent className="p-4 sm:p-6">
           <div className="flex justify-center overflow-x-auto pb-1">
             <StepProgressBar
-              steps={[...STEPS]}
+              steps={steps}
               tasks={tasks}
               activeStep={activeStep}
               onStepClick={handleStepClick}
@@ -501,10 +546,57 @@ export function EbprStepGuide({
             ))
           )}
         </div>
+      ) : activeStep === 'DIFFERENTIATION' && showDifferentiation ? (
+        <div className="space-y-3">
+          {/* Completed differentiation summaries */}
+          {tasks
+            .filter((t) => t.taskCode === 'DIFFERENTIATION' && t.status === 'COMPLETED')
+            .map((t) => (
+              <div key={t.id}>
+                <TaskFormWrapper
+                  task={t}
+                  batch={batch}
+                  allTasks={tasks}
+                  onTaskUpdated={handleTaskUpdated}
+                />
+              </div>
+            ))}
+
+          {/* Differentiation: show form or assignment cards */}
+          {showDifferentiationForm ? (
+            <DifferentiationSection
+              batch={batch}
+              allTasks={tasks}
+              onTaskUpdated={handleTaskUpdated}
+            />
+          ) : (
+            pendingDifferentiationTasks.map((diffTask) => (
+              <DifferentiationTaskWithAssignment
+                key={diffTask.id}
+                task={diffTask}
+                batch={batch}
+                allTasks={tasks}
+                canAssign={canAssign}
+                currentUserId={user?.id}
+                onTaskUpdated={handleTaskUpdated}
+                onAssignTask={onAssignTask}
+                productCode={batch.id}
+              />
+            ))
+          )}
+        </div>
       ) : (
-        activeTask && (
+        activeStep && (
           <TaskWithAssignment
-            task={activeTask}
+            task={
+              tasks.find(
+                (t) =>
+                  t.taskCode === activeStep &&
+                  t.status !== 'COMPLETED' &&
+                  t.status !== 'REVIEWED' &&
+                  t.status !== 'SKIPPED'
+              ) ?? tasks.find((t) => t.taskCode === activeStep)
+            }
             batch={batch}
             allTasks={tasks}
             canAssign={canAssign}
@@ -580,7 +672,7 @@ function TaskWithAssignment({
   onAssignTask,
   productCode,
 }: {
-  task: ProductionTask
+  task: ProductionTask | undefined
   batch: BatchInfo
   allTasks: ProductionTask[]
   canAssign: boolean
@@ -589,6 +681,8 @@ function TaskWithAssignment({
   onAssignTask?: (request: AssignTaskRequest) => void
   productCode: string
 }) {
+  if (!task) return null
+
   const needsAssignment = task.status === 'PENDING' && !task.assigneeId
   const isLockedOut = task.assigneeId && task.assigneeId !== currentUserId && !canAssign
 
@@ -825,6 +919,132 @@ function ExpansionTaskWithAssignment({
 }
 
 // ============================================
+// Differentiation Task Assignment Wrapper
+// ============================================
+
+function DifferentiationTaskWithAssignment({
+  task,
+  batch,
+  allTasks,
+  canAssign,
+  currentUserId,
+  onTaskUpdated,
+  onAssignTask,
+  productCode,
+}: {
+  task: ProductionTask
+  batch: BatchInfo
+  allTasks: ProductionTask[]
+  canAssign: boolean
+  currentUserId?: string
+  onTaskUpdated: () => void
+  onAssignTask?: (request: AssignTaskRequest) => void
+  productCode: string
+}) {
+  const needsAssignment = task.status === 'PENDING' && !task.assigneeId
+  const isLockedOut = task.assigneeId && task.assigneeId !== currentUserId && !canAssign
+
+  // Task is waiting for assignment
+  if (needsAssignment) {
+    return (
+      <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+            <UserPlus className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+          </div>
+          <h3 className="text-base font-medium mb-1">等待指派</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            {task.taskName}{task.stepGroup ? ` (${task.stepGroup})` : ''} 尚未指派操作员。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1 mb-3">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+          {canAssign && onAssignTask && (
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 gap-1.5"
+              onClick={() => onAssignTask({
+                taskId: task.id,
+                taskName: task.taskName,
+                productId: productCode,
+              })}
+            >
+              <UserPlus className="h-4 w-4" />
+              指派操作员
+            </Button>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // User is not the assignee and cannot assign
+  if (isLockedOut) {
+    return (
+      <Card className="border-muted-foreground/20 bg-muted/30">
+        <CardContent className="flex flex-col items-center justify-center py-10">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-muted mb-4">
+            <ShieldCheck className="h-7 w-7 text-muted-foreground" />
+          </div>
+          <h3 className="text-base font-medium mb-1">非指派人员</h3>
+          <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+            该任务已指派给 <span className="font-medium text-foreground">{task.assigneeName}</span>，仅被指派人员可以操作。
+          </p>
+          {task.reviewerName && (
+            <p className="text-xs text-muted-foreground flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // Show assignee info header for assigned tasks
+  if (task.assigneeName && task.status !== 'COMPLETED' && task.status !== 'REVIEWED') {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-3 text-xs text-muted-foreground px-1">
+          {task.assigneeName && (
+            <span className="flex items-center gap-1">
+              <User className="h-3 w-3" />
+              操作员: {task.assigneeName}
+            </span>
+          )}
+          {task.reviewerName && (
+            <span className="flex items-center gap-1">
+              <ShieldCheck className="h-3 w-3" />
+              复核人: {task.reviewerName}
+            </span>
+          )}
+        </div>
+        <TaskFormWrapper
+          task={task}
+          batch={batch}
+          allTasks={allTasks}
+          onTaskUpdated={onTaskUpdated}
+        />
+      </div>
+    )
+  }
+
+  // Default: show normal task form
+  return (
+    <TaskFormWrapper
+      task={task}
+      batch={batch}
+      allTasks={allTasks}
+      onTaskUpdated={onTaskUpdated}
+    />
+  )
+}
+
+// ============================================
 // Expansion Section (for inline rendering)
 // ============================================
 
@@ -845,6 +1065,32 @@ function ExpansionSection({
     <ExpansionForm
       batch={batch}
       existingExpansions={completedExpansions}
+      onSuccess={onTaskUpdated}
+    />
+  )
+}
+
+// ============================================
+// Differentiation Section (for inline rendering)
+// ============================================
+
+function DifferentiationSection({
+  batch,
+  allTasks,
+  onTaskUpdated,
+}: {
+  batch: BatchInfo
+  allTasks: ProductionTask[]
+  onTaskUpdated: () => void
+}) {
+  const completedDifferentiations = allTasks.filter(
+    (t) => t.taskCode === 'DIFFERENTIATION' && t.status === 'COMPLETED'
+  )
+
+  return (
+    <DifferentiationForm
+      batch={batch}
+      existingDifferentiations={completedDifferentiations}
       onSuccess={onTaskUpdated}
     />
   )

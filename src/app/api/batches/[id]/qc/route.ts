@@ -25,6 +25,10 @@ export async function GET(
 
     const { id } = await params
 
+    // 获取查询参数（支持 qcType 过滤）
+    const { searchParams } = new URL(request.url)
+    const qcTypeFilter = searchParams.get('qcType') || undefined
+
     // 检查批次是否存在
     const batch = await db.batch.findUnique({
       where: { id },
@@ -33,9 +37,14 @@ export async function GET(
       return NextResponse.json({ error: '批次不存在' }, { status: 404 })
     }
 
-    // 查询所有质检记录，按创建时间倒序
+    // 查询质检记录，按创建时间倒序
+    const qcWhere: Record<string, unknown> = { batchId: id }
+    if (qcTypeFilter) {
+      qcWhere.qcType = qcTypeFilter
+    }
+
     const qcRecords = await db.qcRecord.findMany({
-      where: { batchId: id },
+      where: qcWhere,
       orderBy: { createdAt: 'desc' },
     })
 
@@ -72,10 +81,23 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { testResults, operatorId, operatorName, thawedVials } = body
+    const { testResults, operatorId, operatorName, thawedVials, qcType, taskId, sampleInfo } = body
 
     if (!Array.isArray(testResults) || testResults.length === 0) {
       return NextResponse.json({ error: '检测结果不能为空' }, { status: 400 })
+    }
+
+    // 校验 qcType（仅允许 ROUTINE 和 IN_PROCESS）
+    const finalQcType = qcType === 'IN_PROCESS' ? 'IN_PROCESS' : 'ROUTINE'
+
+    // 校验关联 taskId（如提供）
+    if (taskId) {
+      const relatedTask = await db.productionTask.findFirst({
+        where: { id: taskId, batchId: id },
+      })
+      if (!relatedTask) {
+        return NextResponse.json({ error: '关联的生产任务不存在' }, { status: 404 })
+      }
     }
 
     // 校验复苏支数
@@ -111,9 +133,18 @@ export async function POST(
       return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
     }
 
-    if (batch.status !== 'QC_IN_PROGRESS') {
+    // IN_PROCESS 类型允许在生产中进行状态下创建（过程监控）
+    // ROUTINE 类型保持原有逻辑：只能在质检中进行状态下创建
+    if (finalQcType === 'ROUTINE' && batch.status !== 'QC_IN_PROGRESS') {
       return NextResponse.json(
-        { error: '只能在质检中进行状态下创建质检记录' },
+        { error: '只能在质检中进行状态下创建常规质检记录' },
+        { status: 400 }
+      )
+    }
+
+    if (finalQcType === 'IN_PROCESS' && !['IN_PRODUCTION', 'QC_PENDING', 'QC_IN_PROGRESS'].includes(batch.status)) {
+      return NextResponse.json(
+        { error: '过程质检只能在生产中、待质检或质检中状态下创建' },
         { status: 400 }
       )
     }
@@ -127,17 +158,19 @@ export async function POST(
       )
     }
 
-    // 自动计算综合判定
-    const overallJudgment = testResults.every(
-      (item: TestResultItem) => item.judgment === 'PASS'
-    )
-      ? 'PASS'
-      : 'FAIL'
+    // 自动计算综合判定（IN_PROCESS 记录默认为 PENDING，等待后续审核确认）
+    const overallJudgment = finalQcType === 'IN_PROCESS'
+      ? 'PENDING'
+      : testResults.every(
+          (item: TestResultItem) => item.judgment === 'PASS'
+        )
+          ? 'PASS'
+          : 'FAIL'
 
-    // 收集不合格原因
-    const failItems = testResults.filter(
-      (item: TestResultItem) => item.judgment === 'FAIL'
-    )
+    // 收集不合格原因（IN_PROCESS 不收集，因为判定为 PENDING）
+    const failItems = finalQcType !== 'IN_PROCESS'
+      ? testResults.filter((item: TestResultItem) => item.judgment === 'FAIL')
+      : []
     const failReason = failItems.length > 0
       ? failItems.map((item: TestResultItem) => `${item.itemName || item.itemCode}: ${item.resultValue || item.judgment}`).join('; ')
       : null
@@ -147,7 +180,8 @@ export async function POST(
       data: {
         batchId: id,
         batchNo: batch.batchNo,
-        qcType: 'ROUTINE',
+        qcType: finalQcType,
+        taskId: taskId || null,
         sampleQuantity: parsedThawedVials,
         testResults: JSON.stringify(testResults),
         overallJudgment,
@@ -167,8 +201,10 @@ export async function POST(
       operatorId: payload.userId,
       operatorName: payload.name,
       dataAfter: {
-        qcType: 'ROUTINE',
+        qcType: finalQcType,
+        taskId: taskId || null,
         sampleQuantity: parsedThawedVials,
+        ...(sampleInfo ? { sampleInfo } : {}),
         overallJudgment,
         testResults,
         failReason,

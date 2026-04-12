@@ -4,7 +4,7 @@ import { canManage, canOperate } from '@/lib/roles'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import type { TransitionOptions } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
-import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS } from '@/lib/services/task-templates'
+import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS, getTaskTemplates } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
@@ -248,17 +248,27 @@ export async function POST(
     if (action === 'start_production' || action === 'start_material_prep' || action === 'start_identification') {
       const batch = await db.batch.findUnique({
         where: { id },
-        include: { tasks: true },
+        include: { tasks: true, product: { select: { category: true } } },
       })
 
       if (batch) {
         const productLine = batch.productLine as string
-        const templates = TASK_TEMPLATES[productLine]?.[action]
+        const category = batch.product?.category || undefined
+        const templates = getTaskTemplates(productLine, action, category)
 
-        if (templates && templates.length > 0) {
+        // CELL_PRODUCT: 纯 iPSC 扩增产品跳过 DIFFERENTIATION 步骤
+        let filteredTemplates = templates
+        if (filteredTemplates && productLine === 'CELL_PRODUCT') {
+          const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+            filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
+          }
+        }
+
+        if (filteredTemplates && filteredTemplates.length > 0) {
           // 仅在没有任务时创建（防重复）
           if (batch.tasks.length === 0) {
-            const tasksData = templates.map((t: TaskTemplate) => ({
+            const tasksData = filteredTemplates.map((t: TaskTemplate) => ({
               batchId: id,
               batchNo: batch.batchNo,
               taskCode: t.taskCode,
@@ -283,6 +293,7 @@ export async function POST(
               dataAfter: {
                 action: `${action}_auto_tasks`,
                 productLine,
+                category: category || null,
                 tasks: tasksData.map(t => ({
                   taskCode: t.taskCode,
                   taskName: t.taskName,

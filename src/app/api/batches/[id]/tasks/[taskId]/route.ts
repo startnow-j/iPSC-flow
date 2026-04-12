@@ -5,6 +5,7 @@ import { db } from '@/lib/db'
 import { validateProductionTask } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
+import { TASK_TEMPLATES, CATEGORY_TASK_TEMPLATES } from '@/lib/services/task-templates'
 
 // ============================================
 // GET /api/batches/[id]/tasks/[taskId] — 获取单个任务详情
@@ -67,9 +68,124 @@ export async function PATCH(
 
     const { id, taskId } = await params
     const body = await request.json()
-    const { formData, status, notes, attachments, assigneeId, assigneeName, reviewerId, reviewerName } = body
+    const { formData, status, notes, attachments, assigneeId, assigneeName, reviewerId, reviewerName, action } = body
 
-    // 获取任务和批次信息
+    // ============================================
+    // 重做任务 (action: 'redo')
+    // 将当前任务标记为 FAILED，创建一个新的 PENDING 任务
+    // ============================================
+    if (action === 'redo') {
+      const task = await db.productionTask.findFirst({
+        where: { id: taskId, batchId: id },
+      })
+      if (!task) {
+        return NextResponse.json({ error: '任务不存在' }, { status: 404 })
+      }
+
+      const batch = await db.batch.findUnique({
+        where: { id },
+        include: { product: { select: { category: true } } },
+      })
+      if (!batch) {
+        return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+      }
+
+      // 仅允许 COMPLETED 或 FAILED 的任务重做
+      if (task.status !== 'COMPLETED' && task.status !== 'FAILED') {
+        return NextResponse.json({
+          error: `只有已完成或已失败的任务可以重做，当前状态: ${task.status}`,
+        }, { status: 400 })
+      }
+
+      // 检查任务是否可重做（taskType 为 'redoable'）
+      const productLine = batch.productLine as string
+      const category = batch.product?.category || undefined
+      const allTemplates = [
+        ...(CATEGORY_TASK_TEMPLATES[category || '']?.['start_production'] || []),
+        ...(TASK_TEMPLATES[productLine]?.['start_production'] || []),
+      ]
+      const templateDef = allTemplates.find(t => t.taskCode === task.taskCode)
+      if (!templateDef || templateDef.taskType !== 'redoable') {
+        return NextResponse.json({
+          error: `任务 ${task.taskCode}(${task.taskName}) 不支持重做`,
+        }, { status: 400 })
+      }
+
+      // 计算重做轮次（基于 stepGroup 后缀 -R{n}）
+      const baseStepGroup = task.stepGroup || task.taskCode
+      const roundMatch = baseStepGroup.match(/-R(\d+)$/)
+      const currentRound = roundMatch ? parseInt(roundMatch[1], 10) : 0
+      const nextRound = currentRound + 1
+      const newStepGroup = `${task.stepGroup || task.taskCode}-R${nextRound}`
+
+      // 将当前任务标记为 FAILED
+      await db.productionTask.update({
+        where: { id: taskId },
+        data: { status: 'FAILED' },
+      })
+
+      // 创建新的 PENDING 任务
+      const newTask = await db.productionTask.create({
+        data: {
+          batchId: id,
+          batchNo: batch.batchNo,
+          taskCode: task.taskCode,
+          taskName: task.taskName,
+          sequenceNo: task.sequenceNo + 0.1,
+          stepGroup: newStepGroup,
+          status: 'PENDING',
+          assigneeId: batch.productionOperatorId || null,
+          assigneeName: batch.productionOperatorName || null,
+          notes: `重做任务（第${nextRound}轮）- 原任务 ${task.id.substring(0, 8)}`,
+        },
+      })
+
+      // 记录审计日志
+      await createAuditLog({
+        eventType: 'TASK_CREATED',
+        targetType: 'TASK',
+        targetId: newTask.id,
+        targetBatchNo: batch.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataAfter: {
+          taskCode: task.taskCode,
+          taskName: task.taskName,
+          stepGroup: newStepGroup,
+          redoRound: nextRound,
+          originalTaskId: task.id,
+        },
+      })
+
+      await createAuditLog({
+        eventType: 'TASK_UPDATED',
+        targetType: 'TASK',
+        targetId: taskId,
+        targetBatchNo: batch.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataBefore: { status: task.status },
+        dataAfter: {
+          status: 'FAILED',
+          reason: `任务重做，已创建第${nextRound}轮任务`,
+        },
+      })
+
+      return NextResponse.json({
+        task: {
+          ...newTask,
+          formData: newTask.formData ? JSON.parse(newTask.formData) : null,
+          attachments: newTask.attachments ? JSON.parse(newTask.attachments) : null,
+        },
+        redoInfo: {
+          round: nextRound,
+          originalTaskId: task.id,
+          stepGroup: newStepGroup,
+        },
+      })
+    }
+
+    // 获取任务和批次信息（非 redo 操作）
     const task = await db.productionTask.findFirst({
       where: { id: taskId, batchId: id },
     })

@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Clock, User, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Microscope, Clock, User, ShieldCheck } from 'lucide-react'
 
 // ============================================
 // Types
@@ -51,6 +51,8 @@ function TaskIcon({ taskCode, className = 'h-4 w-4 text-muted-foreground' }: { t
       return <ArrowUpDown className={className} />
     case 'HARVEST':
       return <Snowflake className={className} />
+    case 'DIFFERENTIATION':
+      return <Microscope className={className} />
     default:
       return <CheckCircle2 className={className} />
   }
@@ -115,6 +117,50 @@ function ExpansionSummary({ formData, stepGroup }: { formData: Record<string, an
   )
 }
 
+function DifferentiationSummary({ formData, stepGroup }: { formData: Record<string, any>; stepGroup: string | null }) {
+  return (
+    <div className="grid gap-2 sm:grid-cols-3 text-sm">
+      <div>
+        <span className="text-xs text-muted-foreground">分化阶段</span>
+        <p className="font-medium line-clamp-1">{formData.diff_stage ?? '-'}</p>
+      </div>
+      <div>
+        <span className="text-xs text-muted-foreground">操作日期</span>
+        <p>{formData.diff_date ? formatDate(formData.diff_date) : '-'}</p>
+      </div>
+      <div>
+        <span className="text-xs text-muted-foreground">培养天数</span>
+        <p className="font-medium">{formData.culture_days ?? '-'} 天</p>
+      </div>
+      <div>
+        <span className="text-xs text-muted-foreground">诱导因子</span>
+        <p className="font-medium line-clamp-1">{formData.induction_factors ?? '-'}</p>
+      </div>
+      <div>
+        <span className="text-xs text-muted-foreground">培养基</span>
+        <p className="font-medium">{formData.medium ?? '-'}</p>
+      </div>
+      <div>
+        <span className="text-xs text-muted-foreground">细胞形态</span>
+        <p>
+          <Badge
+            variant="secondary"
+            className={
+              formData.morphology === '正常'
+                ? 'bg-emerald-100 text-emerald-700'
+                : formData.morphology === '异常'
+                  ? 'bg-red-100 text-red-700'
+                  : 'bg-amber-100 text-amber-700'
+            }
+          >
+            {formData.morphology ?? '-'}
+          </Badge>
+        </p>
+      </div>
+    </div>
+  )
+}
+
 function HarvestSummary({ formData }: { formData: Record<string, any> }) {
   return (
     <div className="grid gap-2 sm:grid-cols-4 text-sm">
@@ -172,6 +218,9 @@ export function TaskSummary({ task }: TaskSummaryProps) {
               <ExpansionSummary formData={data} stepGroup={task.stepGroup} />
             )}
             {task.taskCode === 'HARVEST' && <HarvestSummary formData={data} />}
+            {task.taskCode === 'DIFFERENTIATION' && (
+              <DifferentiationSummary formData={data} stepGroup={task.stepGroup} />
+            )}
 
             {/* Meta */}
             <div className="flex items-center gap-4 text-xs text-muted-foreground">

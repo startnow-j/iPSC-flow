@@ -25,6 +25,11 @@ export async function GET(
 
     const batch = await db.batch.findUnique({
       where: { id },
+      include: {
+        product: {
+          select: { category: true },
+        },
+      },
     })
 
     if (!batch) {
@@ -52,7 +57,10 @@ export async function GET(
       : null
 
     return NextResponse.json({
-      batch,
+      batch: {
+        ...batch,
+        productCategory: batch.product?.category || null,
+      },
       availableActions,
       remainingQuantity,
       totalConsumedVials: totalConsumed,

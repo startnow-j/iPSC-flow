@@ -189,6 +189,9 @@ export function validateProductionTask(
     case 'HARVEST':
       validateHarvest(data, result)
       break
+    case 'DIFFERENTIATION':
+      validateDifferentiation(data, result)
+      break
     default:
       addWarning(result, 'taskCode', 'UNKNOWN_TASK', `未知的任务类型: ${taskCode}，跳过校验`)
   }
@@ -314,6 +317,45 @@ function validateHarvest(data: Record<string, any>, result: ValidationResult): v
   // storage_location: 必填
   if (!data.storage_location || typeof data.storage_location !== 'string') {
     addError(result, 'storage_location', 'REQUIRED', '存储位置不能为空')
+  }
+}
+
+function validateDifferentiation(data: Record<string, any>, result: ValidationResult): void {
+  // diff_stage: 必填
+  if (!data.diff_stage || typeof data.diff_stage !== 'string' || data.diff_stage.trim() === '') {
+    addError(result, 'diff_stage', 'REQUIRED', '分化阶段不能为空')
+  }
+
+  // diff_date: 必填
+  if (!data.diff_date) {
+    addError(result, 'diff_date', 'REQUIRED', '操作日期不能为空')
+  } else {
+    const d = new Date(data.diff_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'diff_date', 'INVALID_DATE', '操作日期格式无效')
+    }
+  }
+
+  // culture_days: 必填，> 0
+  if (data.culture_days === undefined || data.culture_days === null) {
+    addError(result, 'culture_days', 'REQUIRED', '培养天数不能为空')
+  } else {
+    const days = Number(data.culture_days)
+    if (isNaN(days) || days <= 0) {
+      addError(result, 'culture_days', 'OUT_OF_RANGE', '培养天数必须大于 0')
+    }
+  }
+
+  // morphology: 必填，限定值
+  if (!data.morphology || typeof data.morphology !== 'string') {
+    addError(result, 'morphology', 'REQUIRED', '细胞形态不能为空')
+  } else if (!['正常', '异常', '待观察'].includes(data.morphology.trim())) {
+    addError(
+      result,
+      'morphology',
+      'INVALID_ENUM',
+      '细胞形态必须为 "正常"、"异常" 或 "待观察"',
+    )
   }
 }
 

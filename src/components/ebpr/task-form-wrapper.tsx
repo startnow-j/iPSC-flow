@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { SeedPrepForm } from './seed-prep-form'
 import { ExpansionForm } from './expansion-form'
+import { DifferentiationForm } from './differentiation-form'
 import { HarvestForm } from './harvest-form'
 import { TaskSummary } from './task-summary'
 import { Card, CardContent } from '@/components/ui/card'
@@ -107,6 +108,20 @@ export function TaskFormWrapper({
         <ExpansionForm
           batch={batch}
           existingExpansions={existingExpansions}
+          onSuccess={() => handleSuccess()}
+        />
+      )
+    }
+
+    case 'DIFFERENTIATION': {
+      // Get all completed differentiation tasks for the history display
+      const existingDifferentiations = allTasks.filter(
+        (t) => t.taskCode === 'DIFFERENTIATION' && t.status === 'COMPLETED'
+      )
+      return (
+        <DifferentiationForm
+          batch={batch}
+          existingDifferentiations={existingDifferentiations}
           onSuccess={() => handleSuccess()}
         />
       )

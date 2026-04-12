@@ -98,6 +98,18 @@ const PRODUCTS = [
     unit: '株',
     description: 'CRISPR/Cas9基因编辑服务，含阳性克隆鉴定',
   },
+  {
+    productCode: 'SRV-DIFF-001',
+    productName: '细胞分化服务',
+    productLine: 'SERVICE' as ProductLine,
+    category: 'DIFF_SERVICE',
+    cellType: 'NPC',
+    specification: '按订单交付',
+    storageCondition: null,
+    shelfLife: null,
+    unit: '批次',
+    description: 'iPSC定向分化服务（NPC/CM等），含鉴定报告',
+  },
   // ===== 试剂盒产品线 =====
   {
     productCode: 'KIT-NDF-001',
@@ -136,21 +148,24 @@ const USER_PRODUCT_ROLES: { email: string; productCode: string; roles: string[] 
   { email: 'operator@ipsc.com', productCode: 'NPC-001', roles: ['OPERATOR', 'QC'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-REPG-001', roles: ['OPERATOR'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['OPERATOR'] },
+  { email: 'operator@ipsc.com', productCode: 'SRV-DIFF-001', roles: ['OPERATOR'] },
 
   // 李质检(QC): 细胞产品和服务项目的质检员
   { email: 'qc@ipsc.com', productCode: 'IPSC-WT-001', roles: ['QC'] },
   { email: 'qc@ipsc.com', productCode: 'NPC-001', roles: ['QC'] },
   { email: 'qc@ipsc.com', productCode: 'SRV-REPG-001', roles: ['QC'] },
   { email: 'qc@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['QC'] },
+  { email: 'qc@ipsc.com', productCode: 'SRV-DIFF-001', roles: ['QC'] },
   { email: 'qc@ipsc.com', productCode: 'KIT-NDF-001', roles: ['QC'] },
   { email: 'qc@ipsc.com', productCode: 'KIT-CDM-001', roles: ['QC'] },
 ]
 
 // 用户-产品线归属（ADMIN 配置，控制用户的活动范围）
 const USER_PRODUCT_LINES: { email: string; productLine: string }[] = [
-  // 李主管: 管理细胞产品和服务项目线
+  // 李主管: 管理所有三条产品线
   { email: 'supervisor@ipsc.com', productLine: 'CELL_PRODUCT' },
   { email: 'supervisor@ipsc.com', productLine: 'SERVICE' },
+  { email: 'supervisor@ipsc.com', productLine: 'KIT' },
   // 王QA: 质量保证，归属细胞产品线
   { email: 'qa@ipsc.com', productLine: 'CELL_PRODUCT' },
   // 张三: 归属细胞产品和服务项目线
@@ -163,7 +178,7 @@ const USER_PRODUCT_LINES: { email: string; productLine: string }[] = [
 ]
 
 async function main() {
-  console.log('🌱 Seeding database (v2.0 — QA/QC分离 + 产品线归属)...')
+  console.log('🌱 Seeding database (v3.0 — Phase 3B 产品线差异化)...')
 
   const hashedPassword = await bcrypt.hash('123456', 10)
 
@@ -263,7 +278,7 @@ async function main() {
   console.log('\n✅ Seed completed successfully!')
   console.log('\n📊 Summary:')
   console.log(`  Users: ${USERS.length}`)
-  console.log(`  Products: ${PRODUCTS.length} (细胞产品×2 + 服务项目×2 + 试剂盒×2)`)
+  console.log(`  Products: ${PRODUCTS.length} (细胞产品×2 + 服务项目×3 + 试剂盒×2)`)
   console.log(`  User-Product Lines: ${USER_PRODUCT_LINES.length} 条归属`)
   console.log(`  User-Product Roles: ${USER_PRODUCT_ROLES.length} 条关联`)
   console.log('  Default password: 123456')

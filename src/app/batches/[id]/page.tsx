@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, use } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useRouter } from 'next/navigation'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
+import { TERMINATION_REASONS, TERMINATION_REASON_LABELS } from '@/lib/services/state-machine'
 import type { AvailableAction } from '@/lib/services'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -22,6 +23,23 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import {
   ArrowLeft,
   FlaskConical,
   Clock,
@@ -38,6 +56,7 @@ import {
   AlertCircle,
   PlayCircle,
   CheckCircle2,
+  TriangleAlert,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -84,6 +103,11 @@ interface BatchDetail {
   productionOperatorName?: string | null
   qcOperatorId?: string | null
   qcOperatorName?: string | null
+  // 3B-2: product category for differentiation
+  productCategory?: string | null
+  // Termination info
+  terminationReason?: string | null
+  scrapReason?: string | null
 }
 
 interface QcRecord {
@@ -447,6 +471,11 @@ export default function BatchDetailPage({
   // Transition confirmation dialog
   const [confirmAction, setConfirmAction] = useState<AvailableAction | null>(null)
 
+  // Terminate dialog (SERVICE product line)
+  const [terminateDialogOpen, setTerminateDialogOpen] = useState(false)
+  const [terminateCategory, setTerminateCategory] = useState('')
+  const [terminateReason, setTerminateReason] = useState('')
+
   // Assign task dialog
   const [assignDialog, setAssignDialog] = useState({ open: false, taskId: '', taskName: '', productId: '' })
 
@@ -586,6 +615,15 @@ export default function BatchDetailPage({
   const handleTransition = async () => {
     if (!confirmAction) return
 
+    // Route terminate actions to the terminate dialog
+    if (confirmAction.action === 'terminate') {
+      setConfirmAction(null)
+      setTerminateCategory('')
+      setTerminateReason('')
+      setTerminateDialogOpen(true)
+      return
+    }
+
     setTransitioning(true)
     try {
       const res = await authFetch(`/api/batches/${id}/transition`, {
@@ -597,17 +635,60 @@ export default function BatchDetailPage({
       const data = await res.json()
 
       if (!res.ok) {
-        alert(data.error || '操作失败')
+        toast.error(data.error || '操作失败')
         return
       }
 
       // Success — refresh data
+      toast.success(confirmAction.label ? `${confirmAction.label}成功` : '操作成功')
       setConfirmAction(null)
       await fetchBatchDetail()
       // Also refresh timeline
       fetchTimeline()
     } catch {
-      alert('网络错误，请重试')
+      toast.error('网络错误，请重试')
+    } finally {
+      setTransitioning(false)
+    }
+  }
+
+  const handleTerminate = async () => {
+    if (!terminateCategory) {
+      toast.error('请选择终止原因分类')
+      return
+    }
+    if (!terminateReason.trim()) {
+      toast.error('请输入终止原因说明')
+      return
+    }
+
+    setTransitioning(true)
+    try {
+      const res = await authFetch(`/api/batches/${id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'terminate',
+          reason: terminateReason.trim(),
+          terminationReason: terminateCategory,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || '终止操作失败')
+        return
+      }
+
+      toast.success('项目已终止')
+      setTerminateDialogOpen(false)
+      setTerminateCategory('')
+      setTerminateReason('')
+      await fetchBatchDetail()
+      fetchTimeline()
+    } catch {
+      toast.error('网络错误，请重试')
     } finally {
       setTransitioning(false)
     }
@@ -686,8 +767,39 @@ export default function BatchDetailPage({
           </div>
         </div>
 
-        {/* Action Buttons */}
-        {availableActions.length > 0 && (
+        {/* TERMINATED Status Banner */}
+        {batch.status === 'TERMINATED' && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 dark:border-amber-700 dark:bg-amber-950/40">
+            <div className="flex items-start gap-3">
+              <TriangleAlert className="mt-0.5 h-5 w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-300">
+                  此项目已终止
+                </p>
+                {batch.terminationReason && (
+                  <div className="mt-1.5 space-y-1">
+                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                      <span className="font-medium">终止原因分类：</span>
+                      {TERMINATION_REASON_LABELS[batch.terminationReason] || batch.terminationReason}
+                    </p>
+                    {batch.scrapReason && (
+                      <p className="text-xs text-amber-700 dark:text-amber-400">
+                        <span className="font-medium">详细原因：</span>
+                        {batch.scrapReason}
+                      </p>
+                    )}
+                  </div>
+                )}
+                <p className="text-xs text-amber-600 dark:text-amber-500 mt-1.5">
+                  所有已完成的生产和鉴定记录将保留为只读。此操作不可撤销。
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Action Buttons — hidden when TERMINATED */}
+        {availableActions.length > 0 && batch.status !== 'TERMINATED' && (
           <div className="flex gap-2 flex-wrap">
             {availableActions.map((action) => (
               <Button
@@ -928,6 +1040,7 @@ export default function BatchDetailPage({
             <EbprStepGuide
               batchId={id}
               batch={batch}
+              category={batch.productCategory}
               onBatchUpdated={handleProductionUpdate}
               onAssignTask={(req) => setAssignDialog({
                 open: true,
@@ -1079,14 +1192,8 @@ export default function BatchDetailPage({
                       <Skeleton className="h-48" />
                       <Skeleton className="h-24" />
                     </div>
-                  ) : qcRecords.length > 0 ? (
-                    <QcResultsSummary qcRecords={qcRecords} />
                   ) : (
-                    <PlaceholderCard
-                      icon={ClipboardCheck}
-                      title="暂无质检记录"
-                      description="质检记录功能将在第四阶段开发完成后可用，届时可在此查看细胞活力、形态学、支原体检测等质检结果。"
-                    />
+                    <QcResultsSummary batchId={id} />
                   )}
                 </>
               )}
@@ -1170,7 +1277,7 @@ export default function BatchDetailPage({
       />
 
       {/* ============================================ */}
-      {/* Transition Confirmation Dialog */}
+      {/* Transition Confirmation Dialog (non-terminate) */}
       {/* ============================================ */}
       <AlertDialog
         open={!!confirmAction}
@@ -1184,11 +1291,6 @@ export default function BatchDetailPage({
                 <>
                   您确定要将批次 <span className="font-mono font-medium text-foreground">{batch.batchNo}</span> 标记为{' '}
                   <span className="text-destructive font-medium">已报废</span> 吗？此操作不可撤销。
-                </>
-              ) : confirmAction?.label === '终止' ? (
-                <>
-                  您确定要<span className="text-destructive font-medium">终止</span>服务项目{' '}
-                  <span className="font-mono font-medium text-foreground">{batch.batchNo}</span> 吗？此操作不可撤销。
                 </>
               ) : (
                 <>
@@ -1204,7 +1306,7 @@ export default function BatchDetailPage({
               onClick={handleTransition}
               disabled={transitioning}
               className={
-                confirmAction?.label.includes('报废') || confirmAction?.label.includes('终止')
+                confirmAction?.label.includes('报废')
                   ? 'bg-destructive text-white hover:bg-destructive/90'
                   : ''
               }
@@ -1215,6 +1317,78 @@ export default function BatchDetailPage({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ============================================ */}
+      {/* Terminate Dialog (SERVICE product line) */}
+      {/* ============================================ */}
+      <Dialog open={terminateDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setTerminateDialogOpen(false)
+          setTerminateCategory('')
+          setTerminateReason('')
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>终止项目</DialogTitle>
+            <DialogDescription>
+              终止后，所有已完成的生产和鉴定记录将保留为只读。此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            {/* Reason Category */}
+            <div className="space-y-2">
+              <Label htmlFor="terminate-category">
+                终止原因分类 <span className="text-destructive">*</span>
+              </Label>
+              <Select value={terminateCategory} onValueChange={setTerminateCategory}>
+                <SelectTrigger id="terminate-category">
+                  <SelectValue placeholder="请选择终止原因分类" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TERMINATION_REASONS.map((reason) => (
+                    <SelectItem key={reason} value={reason}>
+                      {TERMINATION_REASON_LABELS[reason]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Detailed Reason */}
+            <div className="space-y-2">
+              <Label htmlFor="terminate-reason">
+                详细原因 <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="terminate-reason"
+                placeholder="请输入终止原因..."
+                value={terminateReason}
+                onChange={(e) => setTerminateReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setTerminateDialogOpen(false)}
+              disabled={transitioning}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleTerminate}
+              disabled={transitioning || !terminateCategory || !terminateReason.trim()}
+            >
+              {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认终止
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

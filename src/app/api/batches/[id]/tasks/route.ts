@@ -53,7 +53,7 @@ export async function GET(
 }
 
 // ============================================
-// POST /api/batches/[id]/tasks — 创建新的传代记录 (EXPANSION)
+// POST /api/batches/[id]/tasks — 创建新的生产记录 (EXPANSION / DIFFERENTIATION)
 // ============================================
 export async function POST(
   request: NextRequest,
@@ -72,7 +72,17 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { formData, notes, attachments } = body
+    const { formData, notes, attachments, taskCode } = body
+
+    // 校验 taskCode
+    const supportedTaskCodes = ['EXPANSION', 'DIFFERENTIATION']
+    const resolvedTaskCode = taskCode || 'EXPANSION'
+    if (!supportedTaskCodes.includes(resolvedTaskCode)) {
+      return NextResponse.json(
+        { error: `不支持的任务类型: ${resolvedTaskCode}` },
+        { status: 400 }
+      )
+    }
 
     // 检查批次是否存在且在生产中
     const batch = await db.batch.findUnique({
@@ -84,13 +94,13 @@ export async function POST(
 
     if (batch.status !== 'IN_PRODUCTION') {
       return NextResponse.json(
-        { error: '只能在生产中状态下创建传代记录' },
+        { error: '只能在生产中状态下创建生产记录' },
         { status: 400 }
       )
     }
 
     // 校验表单数据
-    const validation = validateProductionTask('EXPANSION', formData ?? {})
+    const validation = validateProductionTask(resolvedTaskCode, formData ?? {})
     if (!validation.valid) {
       return NextResponse.json(
         { error: '表单校验失败', validation },
@@ -98,23 +108,39 @@ export async function POST(
       )
     }
 
-    // 构建 stepGroup
-    const stepGroup = `${formData.passage_from}→${formData.passage_to}`
+    // 任务配置映射
+    const taskConfig: Record<string, { taskName: string; sequenceNo: number; buildStepGroup: (data: Record<string, any>, count: number) => string }> = {
+      EXPANSION: {
+        taskName: '扩增培养',
+        sequenceNo: 2,
+        buildStepGroup: (data) => `${data.passage_from}→${data.passage_to}`,
+      },
+      DIFFERENTIATION: {
+        taskName: '分化诱导',
+        sequenceNo: 3,
+        buildStepGroup: (_data, count) => `第${count + 1}轮`,
+      },
+    }
 
-    // 查询当前已有的 EXPANSION 任务数量，用于确定 sequenceNo
-    const existingExpansions = await db.productionTask.findMany({
-      where: { batchId: id, taskCode: 'EXPANSION' },
+    const config = taskConfig[resolvedTaskCode]
+
+    // 查询当前已有的同类任务数量
+    const existingTasks = await db.productionTask.findMany({
+      where: { batchId: id, taskCode: resolvedTaskCode },
       orderBy: { createdAt: 'asc' },
     })
 
-    // 创建新的传代任务
+    // 构建 stepGroup
+    const stepGroup = config.buildStepGroup(formData ?? {}, existingTasks.length)
+
+    // 创建新的生产任务
     const task = await db.productionTask.create({
       data: {
         batchId: id,
         batchNo: batch.batchNo,
-        taskCode: 'EXPANSION',
-        taskName: '扩增培养',
-        sequenceNo: 2,
+        taskCode: resolvedTaskCode,
+        taskName: config.taskName,
+        sequenceNo: config.sequenceNo,
         stepGroup,
         status: 'COMPLETED',
         assigneeId: payload.userId,
@@ -127,14 +153,6 @@ export async function POST(
       },
     })
 
-    // 更新批次的 currentPassage
-    await db.batch.update({
-      where: { id },
-      data: {
-        currentPassage: `P${formData.passage_to}`,
-      },
-    })
-
     // 记录审计日志
     await createAuditLog({
       eventType: 'TASK_COMPLETED',
@@ -144,23 +162,32 @@ export async function POST(
       operatorId: payload.userId,
       operatorName: payload.name,
       dataAfter: {
-        taskCode: 'EXPANSION',
+        taskCode: resolvedTaskCode,
         stepGroup,
         formData,
       },
     })
 
-    // 同时更新批次记录
-    await createAuditLog({
-      eventType: 'BATCH_UPDATED',
-      targetType: 'BATCH',
-      targetId: id,
-      targetBatchNo: batch.batchNo,
-      operatorId: payload.userId,
-      operatorName: payload.name,
-      dataBefore: { currentPassage: batch.currentPassage },
-      dataAfter: { currentPassage: `P${formData.passage_to}` },
-    })
+    // EXPANSION: 更新批次的 currentPassage
+    if (resolvedTaskCode === 'EXPANSION' && formData?.passage_to) {
+      await db.batch.update({
+        where: { id },
+        data: {
+          currentPassage: `P${formData.passage_to}`,
+        },
+      })
+
+      await createAuditLog({
+        eventType: 'BATCH_UPDATED',
+        targetType: 'BATCH',
+        targetId: id,
+        targetBatchNo: batch.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataBefore: { currentPassage: batch.currentPassage },
+        dataAfter: { currentPassage: `P${formData.passage_to}` },
+      })
+    }
 
     return NextResponse.json({
       task: {
