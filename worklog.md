@@ -2268,3 +2268,68 @@ Stage Summary:
 - `src/components/ebpr/ebpr-step-guide.tsx` — 已使用 `complete_production`，无需修改
 - `src/components/dashboard/stat-card.tsx` — 纯展示组件，无需修改
 - `src/app/batches/cell-product/page.tsx` / `service/page.tsx` / `kit/page.tsx` — 复用 BatchListContent，状态筛选由父组件控制
+---
+Task ID: 3B
+Agent: Main Agent + 4 Sub-agents
+Task: Phase 3B — 生产任务差异化（任务模板系统升级 + 分化诱导 + 采样记录 + 任务重做 + 服务终止）
+
+Work Log:
+- 读取 PROJECT_DOCS.md 和 流程重构实施计划-v3.0.md 确认 Phase 3B 范围
+- 分析现有代码状态：task-templates.ts 已定义 CATEGORY_TASK_TEMPLATES 和 getTaskTemplates() 但未在 transition API 中调用
+- 启动 4 个并行子代理完成开发
+
+**3B.1 Backend 任务模板系统升级**
+- 修改 transition/route.ts: 使用 getTaskTemplates(productLine, action, category) 替代 TASK_TEMPLATES[productLine]
+- 新增 product include 到 batch 查询获取 category
+- CELL_PRODUCT 自动过滤 DIFFERENTIATION 步骤（非 NPC/CM/DIFF_KIT 类产品）
+- [taskId]/route.ts: 新增 action: 'redo' 处理（标记 FAILED + 创建新 PENDING 任务 + stepGroup 命名）
+- QC route.ts: 支持 qcType=IN_PROCESS 过滤、taskId 关联、PENDING 判定
+
+**3B.2 分化诱导表单 + eBPR 步骤引导**
+- 新增 differentiation-form.tsx: 分化阶段/操作日期/培养天数/诱导因子/培养基/细胞形态/备注
+- 重构 ebpr-step-guide.tsx: 接收 category prop，动态 4步/3步 条件渲染
+- 更新 task-summary.tsx: 新增 DIFFERENTIATION 结果展示（6字段网格）
+- 更新 task-form-wrapper.tsx: 新增 DIFFERENTIATION case
+- 新增 validateDifferentiation() 到 validation.ts
+
+**3B.3 批次详情页 category 传递**
+- batch API 返回 productCategory
+- batch-detail page 传递 category 给 EbprStepGuide
+
+**3B.4 采样记录功能**
+- 新增 sampling-record.tsx: 可折叠采样记录区域
+- 自动创建 IN_PROCESS QC 记录（qcType=IN_PROCESS）
+- 支持 检测项/样本编号/取样时间/取样人 输入
+
+**3B.5 任务重做 UI**
+- 新增/重写 generic-task-list.tsx: 重做按钮 + 确认对话框
+- FAILED 任务红色背景 + AlertTriangle 徽标
+- 后续任务锁定逻辑（前序未完成时锁定）
+- stepGroup 命名规范展示（R1/R2/R...）
+
+**3B.6 服务项目终止 UI**
+- 批次详情页新增终止对话框（Dialog 含 Select+Textarea）
+- 终止原因分类：客户取消/样本问题/需求变更/服务失败/其他
+- TERMINATED 状态 amber 警告横幅 + 只读展示
+
+**3B.7 QC 界面 IN_PROCESS/ROUTINE 区分**
+- 重写 qc-results-summary.tsx: 双 Tab（过程采样/终检）+ 自获取数据
+- 汇总统计卡片（总记录数/待检测数）
+- PENDING 判定的 IN_PROCESS 记录显示"等待检测结果"
+
+**3B.8 种子数据更新**
+- 新增 SRV-DIFF-001 细胞分化服务（DIFF_SERVICE category）
+- 主管扩展至全部三条产品线（CELL_PRODUCT + SERVICE + KIT）
+- 新增 2 条产品角色分配
+
+- Lint 检查：仅预存 generate-plan.js 2 个 error
+- Dev server 编译成功，API 正常返回
+- Seed 运行成功：7 产品、5 用户、9 产品线归属、12 产品角色
+- Git commit + push 完成
+
+Stage Summary:
+- 新增文件：6 个（differentiation-form.tsx, sampling-record.tsx, generic-task-list.tsx + 3 个 agent-ctx 文档）
+- 修改文件：14 个（transition API, tasks API, QC API, batch detail, eBPR 组件, QC 组件, validation, seed 等）
+- 代码变更：+2916 / -271 行
+- 关键功能：category-aware 任务模板、分化诱导阶段型步骤、采样记录→QC自动关联、任务重做机制、服务终止UI
+- Git 推送：e995897 → main
