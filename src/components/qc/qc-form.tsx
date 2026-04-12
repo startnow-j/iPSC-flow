@@ -178,12 +178,18 @@ export function QcForm({ batchId, batchNo, batchActualQuantity, batchUnit, onSub
         throw new Error(data.error || '提交失败')
       }
 
-      // Trigger batch transition based on QC result
-      const action = overallJudgment === 'PASS' ? 'pass_qc' : 'fail_qc'
+      // v3.0: If QC fails, submit record but don't transition (supervisor handles rework/scrap)
+      if (overallJudgment !== 'PASS') {
+        toast.error('质检不合格，请联系主管安排返工或报废')
+        onSubmitted()
+        return
+      }
+
+      // Trigger batch transition: pass_qc (auto-generates CoA draft on backend)
       const transitionRes = await authFetch(`/api/batches/${batchId}/transition`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
+        body: JSON.stringify({ action: 'pass_qc' }),
       })
 
       if (!transitionRes.ok) {
@@ -191,23 +197,8 @@ export function QcForm({ batchId, batchNo, batchActualQuantity, batchUnit, onSub
         throw new Error(data.error || '状态转换失败')
       }
 
-      // If QC passes, chain the auto generate_coa transition
-      if (overallJudgment === 'PASS') {
-        const coaRes = await authFetch(`/api/batches/${batchId}/transition`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'generate_coa' }),
-        })
-        if (!coaRes.ok) {
-          console.error('Auto generate_coa failed, but QC pass was recorded')
-        }
-      }
-
-      toast.success(
-        overallJudgment === 'PASS'
-          ? '质检合格，CoA草稿已自动生成'
-          : '质检不合格，请安排返工或报废'
-      )
+      // v3.0: pass_qc auto-generates CoA draft on backend, no separate generate_coa call
+      toast.success('质检合格，CoA草稿已自动生成')
       onSubmitted()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '提交失败，请重试')

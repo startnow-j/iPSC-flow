@@ -496,9 +496,9 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
       >
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>确认批准 CoA</AlertDialogTitle>
+            <AlertDialogTitle>确认批准并放行</AlertDialogTitle>
             <AlertDialogDescription>
-              确认批准 CoA ({coa.coaNo})？批准后该批次可进入放行流程。
+              确认批准 CoA ({coa.coaNo})？批准后该批次将自动放行（v3.0: 批准=放行）。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -520,7 +520,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>确认退回 CoA</AlertDialogTitle>
             <AlertDialogDescription>
-              确认退回 CoA ({coa.coaNo})？退回后 CoA 将变为草稿状态，需要修改后重新提交审核。
+              确认退回 CoA ({coa.coaNo})？退回后 CoA 将变为草稿状态，QC 需要重新提交。批次状态保持 COA_SUBMITTED。
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-2">

@@ -36,7 +36,6 @@ import {
   Activity,
   History,
   AlertCircle,
-  RotateCcw,
   PlayCircle,
   CheckCircle2,
 } from 'lucide-react'
@@ -543,8 +542,8 @@ export default function BatchDetailPage({
   const handleQcSubmitted = async () => {
     await fetchBatchDetail()
     fetchTimeline()
-    // After QC pass, the CoA is auto-generated, fetch it
-    if (batch?.status === 'QC_PASS' || batch?.status === 'COA_PENDING') {
+    // v3.0: After QC pass, CoA draft is auto-generated, fetch it
+    if (batch?.status === 'QC_PASS' || batch?.status === 'COA_SUBMITTED') {
       fetchCoa()
     }
   }
@@ -694,7 +693,7 @@ export default function BatchDetailPage({
               <Button
                 key={action.action}
                 variant={
-                  action.label.includes('报废') || action.label.includes('不合格')
+                  action.label.includes('报废') || action.label.includes('终止')
                     ? 'destructive'
                     : 'default'
                 }
@@ -1007,8 +1006,17 @@ export default function BatchDetailPage({
                 </Card>
               )}
 
+              {/* TERMINATED status */}
+              {batch.status === 'TERMINATED' && (
+                <PlaceholderCard
+                  icon={AlertCircle}
+                  title="项目已终止"
+                  description="该服务项目已终止，无法进行质检。"
+                />
+              )}
+
               {/* Other statuses: no QC yet */}
-              {!['IDENTIFICATION', 'REPORT_PENDING', 'COA_SUBMITTED', 'RELEASED'].includes(batch.status) && (
+              {!['IDENTIFICATION', 'REPORT_PENDING', 'COA_SUBMITTED', 'RELEASED', 'TERMINATED'].includes(batch.status) && (
                 <PlaceholderCard
                   icon={ClipboardCheck}
                   title="服务项目"
@@ -1062,9 +1070,8 @@ export default function BatchDetailPage({
               )}
 
               {/* Post-QC statuses: show QC results summary */}
-              {(batch.status === 'QC_PASS' || batch.status === 'QC_FAIL' ||
-                batch.status === 'COA_PENDING' || batch.status === 'COA_SUBMITTED' ||
-                batch.status === 'COA_APPROVED' ||
+              {(batch.status === 'QC_PASS' ||
+                batch.status === 'COA_SUBMITTED' ||
                 batch.status === 'RELEASED') && (
                 <>
                   {qcLoading ? (
@@ -1082,36 +1089,6 @@ export default function BatchDetailPage({
                     />
                   )}
                 </>
-              )}
-
-              {/* Status: QC_FAIL — show results + rework button */}
-              {batch.status === 'QC_FAIL' && (
-                <div className="mt-4">
-                  <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
-                    <CardContent className="flex items-center justify-between p-4">
-                      <div className="flex items-center gap-3">
-                        <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                        <div>
-                          <p className="text-sm font-medium">质检不合格</p>
-                          <p className="text-xs text-muted-foreground">请联系主管安排返工或报废</p>
-                        </div>
-                      </div>
-                      {availableActions.some(a => a.action === 'rework') && (
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            const reworkAction = availableActions.find(a => a.action === 'rework')
-                            if (reworkAction) setConfirmAction(reworkAction)
-                          }}
-                        >
-                          <RotateCcw className="mr-2 h-4 w-4" />
-                          返工
-                        </Button>
-                      )}
-                    </CardContent>
-                  </Card>
-                </div>
               )}
 
               {/* SCRAPPED status */}
@@ -1135,13 +1112,13 @@ export default function BatchDetailPage({
           ) : coa ? (
             <CoaDetail coa={coa} onUpdated={handleCoaUpdated} />
           ) : (
-            ['QC_PASS', 'COA_PENDING', 'COA_SUBMITTED', 'COA_APPROVED', 'RELEASED', 'REPORT_PENDING'].includes(batch.status) ? (
+            ['QC_PASS', 'COA_SUBMITTED', 'RELEASED', 'REPORT_PENDING'].includes(batch.status) ? (
               <PlaceholderCard
                 icon={FileText}
                 title="CoA生成中"
                 description={batch.productLine === 'SERVICE'
                   ? '报告+CoA将在提交报告时生成，请稍后刷新查看。'
-                  : 'CoA将自动生成，请稍后刷新查看。'}
+                  : 'CoA草稿将在质检合格后自动生成，请稍后刷新查看。'}
               />
             ) : (
               <PlaceholderCard
@@ -1208,10 +1185,10 @@ export default function BatchDetailPage({
                   您确定要将批次 <span className="font-mono font-medium text-foreground">{batch.batchNo}</span> 标记为{' '}
                   <span className="text-destructive font-medium">已报废</span> 吗？此操作不可撤销。
                 </>
-              ) : confirmAction?.label === '质检不合格' ? (
+              ) : confirmAction?.label === '终止' ? (
                 <>
-                  您确定将批次 <span className="font-mono font-medium text-foreground">{batch.batchNo}</span> 标记为{' '}
-                  <span className="text-destructive font-medium">质检不合格</span> 吗？后续可选择返工或报废。
+                  您确定要<span className="text-destructive font-medium">终止</span>服务项目{' '}
+                  <span className="font-mono font-medium text-foreground">{batch.batchNo}</span> 吗？此操作不可撤销。
                 </>
               ) : (
                 <>
@@ -1227,7 +1204,7 @@ export default function BatchDetailPage({
               onClick={handleTransition}
               disabled={transitioning}
               className={
-                confirmAction?.label.includes('报废') || confirmAction?.label.includes('不合格')
+                confirmAction?.label.includes('报废') || confirmAction?.label.includes('终止')
                   ? 'bg-destructive text-white hover:bg-destructive/90'
                   : ''
               }

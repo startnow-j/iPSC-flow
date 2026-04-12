@@ -99,6 +99,7 @@ export function MyTasks() {
     }
     if (hasRoleCheck(userRoles, 'QC')) {
       if (!seen.has('qc-pending')) { actions.push({ label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' }); seen.add('qc-pending') }
+      if (!seen.has('coa-submit')) { actions.push({ label: '待提交CoA', icon: FileCheck, href: '/batches/all?status=COA_SUBMITTED' }); seen.add('coa-submit') }
     }
     if (hasRoleCheck(userRoles, 'OPERATOR') || hasRoleCheck(userRoles, 'SUPERVISOR') || hasRoleCheck(userRoles, 'ADMIN')) {
       if (!seen.has('new-batch')) { actions.unshift({ label: '新建批次', icon: Plus, href: '/batches' }); seen.add('new-batch') }

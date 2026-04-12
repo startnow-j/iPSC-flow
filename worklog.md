@@ -2213,3 +2213,58 @@ Stage Summary:
 - 指派机制：批次级预指派 → 任务自动继承 → 转交更新未完成任务
 - 四眼原则：创建批次/开始生产/转交 三个入口均有校验
 - 审计追踪：所有指派变更均有审计日志
+
+## Phase 3A.3 — 前端适配状态机变化
+
+**日期**: $(date +%Y-%m-%d)
+
+### 变更概要
+适配 Phase 3A.1 状态机重写（三产品线差异化、CoA简化、QC严格分离）后的前端UI变化。
+
+### 修改文件
+
+1. **src/lib/services/index.ts**
+   - 新增导出：`TransitionOptions` 类型、`TERMINATION_REASONS`、`TERMINATION_REASON_LABELS`
+
+2. **src/components/batches/batch-status-overview.tsx**
+   - CELL_PRODUCT: 移除 QC_FAIL、COA_PENDING、COA_APPROVED
+   - SERVICE: 移除 HANDOVER，新增 TERMINATED
+   - KIT: 移除 QC_FAIL、COA_PENDING、COA_APPROVED
+
+3. **src/components/qc/qc-form.tsx**
+   - 移除 `fail_qc` + `generate_coa` 链式调用
+   - 新流程：POST /qc → pass_qc transition（后端自动生成CoA草稿）
+   - QC不合格时：仅保存记录，不自动转换状态，提示联系主管
+
+4. **src/components/coa/coa-detail.tsx**
+   - 批准确认对话框：更新文案为"批准并放行"（v3.0: 批准=放行）
+   - 退回确认对话框：更新文案说明batch状态保持COA_SUBMITTED
+
+5. **src/app/batches/[id]/page.tsx**
+   - 移除 RotateCcw import（QC_FAIL返工按钮已去除）
+   - handleQcSubmitted: COA_PENDING → COA_SUBMITTED
+   - QC Tab: 移除 QC_FAIL/COA_PENDING/COA_APPROVED 状态判断
+   - QC Tab: 移除 QC_FAIL 返工按钮区域
+   - QC Tab: SERVICE新增 TERMINATED 状态处理
+   - CoA Tab: 移除 COA_PENDING/COA_APPROVED，简化为 QC_PASS/COA_SUBMITTED/RELEASED/REPORT_PENDING
+   - 过渡确认对话框: 移除"质检不合格"分支，新增"终止"分支
+   - 操作按钮variant: "不合格" → "终止"
+
+6. **src/app/page.tsx (Dashboard)**
+   - CELL_PRODUCT: 移除 COA_APPROVED 统计卡片
+   - SERVICE: 移除 HANDOVER，新增 TERMINATED
+   - KIT: 移除 COA_APPROVED 统计卡片
+
+7. **src/components/dashboard/my-tasks.tsx**
+   - QC角色快捷操作: 新增"待提交CoA"链接（跳转 COA_SUBMITTED 筛选）
+
+8. **src/app/batches/page.tsx (批次列表)**
+   - STATUS_FILTERS_ALL: 移除 HANDOVER/QC_FAIL/COA_PENDING/COA_APPROVED，新增 TERMINATED
+   - CELL_PRODUCT: 移除 QC_FAIL/COA_PENDING/COA_APPROVED
+   - SERVICE: 移除 HANDOVER，新增 TERMINATED
+   - KIT: 移除 QC_FAIL/COA_PENDING/COA_APPROVED
+
+### 未修改文件
+- `src/components/ebpr/ebpr-step-guide.tsx` — 已使用 `complete_production`，无需修改
+- `src/components/dashboard/stat-card.tsx` — 纯展示组件，无需修改
+- `src/app/batches/cell-product/page.tsx` / `service/page.tsx` / `kit/page.tsx` — 复用 BatchListContent，状态筛选由父组件控制

@@ -17,7 +17,10 @@ export type {
   TransitionRule,
   AvailableAction,
   TransitionResult,
+  TransitionOptions,
 } from './state-machine'
+
+export { TERMINATION_REASONS, TERMINATION_REASON_LABELS } from './state-machine'
 
 // 校验服务
 export {
