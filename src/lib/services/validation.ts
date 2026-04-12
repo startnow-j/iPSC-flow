@@ -192,6 +192,36 @@ export function validateProductionTask(
     case 'DIFFERENTIATION':
       validateDifferentiation(data, result)
       break
+    case 'SAMPLE_PREP':
+      validateSamplePrep(data, result)
+      break
+    case 'REPROGRAM':
+      validateReprogram(data, result)
+      break
+    case 'FREEZE':
+      validateFreeze(data, result)
+      break
+    case 'CELL_REVIVAL':
+      validateCellRevival(data, result)
+      break
+    case 'GENE_EDITING':
+      validateGeneEditing(data, result)
+      break
+    case 'MATERIAL_PREP':
+      validateMaterialPrep(data, result)
+      break
+    case 'PREPARATION':
+      validatePreparation(data, result)
+      break
+    case 'DISPENSING':
+      validateDispensing(data, result)
+      break
+    case 'CLONE_PICKING':
+      validateClonePicking(data, result)
+      break
+    case 'CLONE_SCREENING':
+      validateCloneScreening(data, result)
+      break
     default:
       addWarning(result, 'taskCode', 'UNKNOWN_TASK', `未知的任务类型: ${taskCode}，跳过校验`)
   }
@@ -356,6 +386,266 @@ function validateDifferentiation(data: Record<string, any>, result: ValidationRe
       'INVALID_ENUM',
       '细胞形态必须为 "正常"、"异常" 或 "待观察"',
     )
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 样本前处理
+// ============================================
+
+function validateSamplePrep(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.sample_id || typeof data.sample_id !== 'string') {
+    addError(result, 'sample_id', 'REQUIRED', '样本编号不能为空')
+  }
+  if (!data.sample_type) {
+    addError(result, 'sample_type', 'REQUIRED', '样本类型不能为空')
+  }
+  if (!data.receive_date) {
+    addError(result, 'receive_date', 'REQUIRED', '样本接收日期不能为空')
+  } else {
+    const d = new Date(data.receive_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'receive_date', 'INVALID_DATE', '样本接收日期格式无效')
+    }
+  }
+  if (!data.sample_status) {
+    addError(result, 'sample_status', 'REQUIRED', '样本状态不能为空')
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 重编程
+// ============================================
+
+function validateReprogram(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.reprogram_method || typeof data.reprogram_method !== 'string') {
+    addError(result, 'reprogram_method', 'REQUIRED', '重编程方式不能为空')
+  }
+  if (!data.reprogram_date) {
+    addError(result, 'reprogram_date', 'REQUIRED', '重编程日期不能为空')
+  } else {
+    const d = new Date(data.reprogram_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'reprogram_date', 'INVALID_DATE', '重编程日期格式无效')
+    }
+  }
+  if (!data.vector_type) {
+    addError(result, 'vector_type', 'REQUIRED', '载体类型不能为空')
+  }
+  if (data.colony_count !== undefined && data.colony_count !== null) {
+    const count = Number(data.colony_count)
+    if (isNaN(count) || count < 0) {
+      addError(result, 'colony_count', 'OUT_OF_RANGE', '克隆数量必须为非负数值')
+    }
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 冻存
+// ============================================
+
+function validateFreeze(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.freeze_date) {
+    addError(result, 'freeze_date', 'REQUIRED', '冻存日期不能为空')
+  } else {
+    const d = new Date(data.freeze_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'freeze_date', 'INVALID_DATE', '冻存日期格式无效')
+    }
+  }
+  if (data.total_cells === undefined || data.total_cells === null) {
+    addError(result, 'total_cells', 'REQUIRED', '总细胞数不能为空')
+  } else {
+    const cells = Number(data.total_cells)
+    if (isNaN(cells) || cells <= 0) {
+      addError(result, 'total_cells', 'OUT_OF_RANGE', '总细胞数必须大于 0')
+    }
+  }
+  if (data.viability === undefined || data.viability === null) {
+    addError(result, 'viability', 'REQUIRED', '存活率不能为空')
+  } else {
+    const viability = Number(data.viability)
+    if (isNaN(viability) || viability < 0 || viability > 100) {
+      addError(result, 'viability', 'OUT_OF_RANGE', '存活率必须在 0~100 之间')
+    }
+  }
+  if (!data.storage_location || typeof data.storage_location !== 'string') {
+    addError(result, 'storage_location', 'REQUIRED', '存储位置不能为空')
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 细胞复苏
+// ============================================
+
+function validateCellRevival(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.revival_date) {
+    addError(result, 'revival_date', 'REQUIRED', '复苏日期不能为空')
+  } else {
+    const d = new Date(data.revival_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'revival_date', 'INVALID_DATE', '复苏日期格式无效')
+    }
+  }
+  if (!data.revival_method || typeof data.revival_method !== 'string') {
+    addError(result, 'revival_method', 'REQUIRED', '复苏方式不能为空')
+  }
+  if (!data.revival_status) {
+    addError(result, 'revival_status', 'REQUIRED', '复苏状态不能为空')
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 基因编辑
+// ============================================
+
+function validateGeneEditing(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.editing_method || typeof data.editing_method !== 'string') {
+    addError(result, 'editing_method', 'REQUIRED', '编辑方式不能为空')
+  }
+  if (!data.target_gene || typeof data.target_gene !== 'string') {
+    addError(result, 'target_gene', 'REQUIRED', '靶基因不能为空')
+  }
+  if (!data.editing_date) {
+    addError(result, 'editing_date', 'REQUIRED', '编辑日期不能为空')
+  } else {
+    const d = new Date(data.editing_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'editing_date', 'INVALID_DATE', '编辑日期格式无效')
+    }
+  }
+  if (data.efficiency !== undefined && data.efficiency !== null) {
+    const eff = Number(data.efficiency)
+    if (isNaN(eff) || eff < 0 || eff > 100) {
+      addError(result, 'efficiency', 'OUT_OF_RANGE', '编辑效率必须在 0~100 之间')
+    }
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 克隆挑取
+// ============================================
+
+function validateClonePicking(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.picking_date) {
+    addError(result, 'picking_date', 'REQUIRED', '挑取日期不能为空')
+  } else {
+    const d = new Date(data.picking_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'picking_date', 'INVALID_DATE', '挑取日期格式无效')
+    }
+  }
+  if (data.clone_count === undefined || data.clone_count === null) {
+    addError(result, 'clone_count', 'REQUIRED', '挑取克隆数不能为空')
+  } else {
+    const count = Number(data.clone_count)
+    if (isNaN(count) || count <= 0) {
+      addError(result, 'clone_count', 'OUT_OF_RANGE', '挑取克隆数必须大于 0')
+    }
+  }
+  if (!data.well_position || typeof data.well_position !== 'string') {
+    addError(result, 'well_position', 'REQUIRED', '孔位信息不能为空')
+  }
+}
+
+// ============================================
+// SERVICE 产品线 — 单克隆筛选
+// ============================================
+
+function validateCloneScreening(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.screening_date) {
+    addError(result, 'screening_date', 'REQUIRED', '筛选日期不能为空')
+  } else {
+    const d = new Date(data.screening_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'screening_date', 'INVALID_DATE', '筛选日期格式无效')
+    }
+  }
+  if (!data.screening_method || typeof data.screening_method !== 'string') {
+    addError(result, 'screening_method', 'REQUIRED', '筛选方法不能为空')
+  }
+  if (!data.result || typeof data.result !== 'string') {
+    addError(result, 'result', 'REQUIRED', '筛选结果不能为空')
+  }
+}
+
+// ============================================
+// KIT 产品线 — 物料准备
+// ============================================
+
+function validateMaterialPrep(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.material_name || typeof data.material_name !== 'string') {
+    addError(result, 'material_name', 'REQUIRED', '物料名称不能为空')
+  }
+  if (!data.material_code || typeof data.material_code !== 'string') {
+    addError(result, 'material_code', 'REQUIRED', '物料编码不能为空')
+  }
+  if (!data.lot_no || typeof data.lot_no !== 'string') {
+    addError(result, 'lot_no', 'REQUIRED', '批号不能为空')
+  }
+  if (!data.prep_date) {
+    addError(result, 'prep_date', 'REQUIRED', '准备日期不能为空')
+  } else {
+    const d = new Date(data.prep_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'prep_date', 'INVALID_DATE', '准备日期格式无效')
+    }
+  }
+  if (!data.prep_status) {
+    addError(result, 'prep_status', 'REQUIRED', '准备状态不能为空')
+  }
+}
+
+// ============================================
+// KIT 产品线 — 配制
+// ============================================
+
+function validatePreparation(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.prep_formula || typeof data.prep_formula !== 'string') {
+    addError(result, 'prep_formula', 'REQUIRED', '配制配方不能为空')
+  }
+  if (!data.prep_date) {
+    addError(result, 'prep_date', 'REQUIRED', '配制日期不能为空')
+  } else {
+    const d = new Date(data.prep_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'prep_date', 'INVALID_DATE', '配制日期格式无效')
+    }
+  }
+  if (!data.operator) {
+    addError(result, 'operator', 'REQUIRED', '操作人不能为空')
+  }
+  if (!data.prep_result) {
+    addError(result, 'prep_result', 'REQUIRED', '配制结果不能为空')
+  }
+}
+
+// ============================================
+// KIT 产品线 — 分装
+// ============================================
+
+function validateDispensing(data: Record<string, any>, result: ValidationResult): void {
+  if (!data.dispensing_date) {
+    addError(result, 'dispensing_date', 'REQUIRED', '分装日期不能为空')
+  } else {
+    const d = new Date(data.dispensing_date)
+    if (isNaN(d.getTime())) {
+      addError(result, 'dispensing_date', 'INVALID_DATE', '分装日期格式无效')
+    }
+  }
+  if (data.dispensing_count === undefined || data.dispensing_count === null) {
+    addError(result, 'dispensing_count', 'REQUIRED', '分装数量不能为空')
+  } else {
+    const count = Number(data.dispensing_count)
+    if (isNaN(count) || count <= 0) {
+      addError(result, 'dispensing_count', 'OUT_OF_RANGE', '分装数量必须大于 0')
+    }
+  }
+  if (!data.specification || typeof data.specification !== 'string') {
+    addError(result, 'specification', 'REQUIRED', '分装规格不能为空')
+  }
+  if (!data.storage_condition) {
+    addError(result, 'storage_condition', 'REQUIRED', '存储条件不能为空')
   }
 }
 

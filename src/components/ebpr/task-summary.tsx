@@ -2,7 +2,7 @@
 
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Microscope, Clock, User, ShieldCheck } from 'lucide-react'
+import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Microscope, Clock, User, ShieldCheck, Dna, Crosshair, ThermometerSun, Wand2, Search, PackageSearch, TestTubes, Printer } from 'lucide-react'
 
 // ============================================
 // Types
@@ -53,6 +53,26 @@ function TaskIcon({ taskCode, className = 'h-4 w-4 text-muted-foreground' }: { t
       return <Snowflake className={className} />
     case 'DIFFERENTIATION':
       return <Microscope className={className} />
+    case 'SAMPLE_PREP':
+      return <FlaskConical className={className} />
+    case 'REPROGRAM':
+      return <Dna className={className} />
+    case 'CLONE_PICKING':
+      return <Crosshair className={className} />
+    case 'FREEZE':
+      return <Snowflake className={className} />
+    case 'CELL_REVIVAL':
+      return <ThermometerSun className={className} />
+    case 'GENE_EDITING':
+      return <Wand2 className={className} />
+    case 'CLONE_SCREENING':
+      return <Search className={className} />
+    case 'MATERIAL_PREP':
+      return <PackageSearch className={className} />
+    case 'PREPARATION':
+      return <TestTubes className={className} />
+    case 'DISPENSING':
+      return <Printer className={className} />
     default:
       return <CheckCircle2 className={className} />
   }
@@ -220,6 +240,18 @@ export function TaskSummary({ task }: TaskSummaryProps) {
             {task.taskCode === 'HARVEST' && <HarvestSummary formData={data} />}
             {task.taskCode === 'DIFFERENTIATION' && (
               <DifferentiationSummary formData={data} stepGroup={task.stepGroup} />
+            )}
+
+            {/* Generic fallback for SERVICE/KIT/ID tasks */}
+            {!['SEED_PREP', 'EXPANSION', 'DIFFERENTIATION', 'HARVEST'].includes(task.taskCode) && Object.keys(data).length > 0 && (
+              <div className="grid gap-2 sm:grid-cols-3 text-sm">
+                {Object.entries(data).filter(([key]) => !['operator_name', 'notes'].includes(key)).slice(0, 6).map(([key, value]) => (
+                  <div key={key}>
+                    <span className="text-xs text-muted-foreground">{key}</span>
+                    <p className="font-medium line-clamp-1">{String(value ?? '-')}</p>
+                  </div>
+                ))}
+              </div>
             )}
 
             {/* Meta */}

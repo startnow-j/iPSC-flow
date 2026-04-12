@@ -75,7 +75,7 @@ export async function POST(
     const { formData, notes, attachments, taskCode } = body
 
     // 校验 taskCode
-    const supportedTaskCodes = ['EXPANSION', 'DIFFERENTIATION']
+    const supportedTaskCodes = ['EXPANSION', 'DIFFERENTIATION', 'CLONE_PICKING', 'CLONE_SCREENING']
     const resolvedTaskCode = taskCode || 'EXPANSION'
     if (!supportedTaskCodes.includes(resolvedTaskCode)) {
       return NextResponse.json(
@@ -117,6 +117,16 @@ export async function POST(
       },
       DIFFERENTIATION: {
         taskName: '分化诱导',
+        sequenceNo: 3,
+        buildStepGroup: (_data, count) => `第${count + 1}轮`,
+      },
+      CLONE_PICKING: {
+        taskName: '克隆挑取',
+        sequenceNo: 3,
+        buildStepGroup: (_data, count) => `第${count + 1}轮`,
+      },
+      CLONE_SCREENING: {
+        taskName: '单克隆筛选',
         sequenceNo: 3,
         buildStepGroup: (_data, count) => `第${count + 1}轮`,
       },

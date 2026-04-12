@@ -24,6 +24,7 @@ import {
   UserPlus,
   ShieldCheck,
 } from 'lucide-react'
+import { TaskFormWrapper } from './task-form-wrapper'
 
 // ============================================
 // Types
@@ -150,7 +151,7 @@ function formatDate(dateStr: string | null): string {
 // Single Task Card
 // ============================================
 
-function TaskCard({ task, onAssignTask, canAssign }: { task: ProductionTask; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean }) {
+function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks }: { task: ProductionTask; allTasks: ProductionTask[]; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean; onRefreshTasks: () => void }) {
   const isCompleted = task.status === 'COMPLETED'
   const isReviewed = task.status === 'REVIEWED'
   const isSkipped = task.status === 'SKIPPED'
@@ -256,12 +257,14 @@ function TaskCard({ task, onAssignTask, canAssign }: { task: ProductionTask; onA
               </p>
             )}
 
-            {/* IN_PROGRESS placeholder (Phase 3) */}
+            {/* IN_PROGRESS: Show actual form */}
             {task.status === 'IN_PROGRESS' && (
-              <div className="rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground border border-dashed">
-                <Construction className="h-3.5 w-3.5 inline-block mr-1.5 text-amber-500" />
-                表单开发中（Phase 3 将添加具体录入表单）
-              </div>
+              <TaskFormWrapper
+                task={task}
+                batch={{ batchNo: task.batchNo }}
+                allTasks={allTasks}
+                onTaskUpdated={onRefreshTasks}
+              />
             )}
           </div>
         </div>
@@ -409,7 +412,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
             </Badge>
           </div>
           {regularTasks.map(task => (
-            <TaskCard key={task.id} task={task} onAssignTask={onAssignTask} canAssign={canAssign} />
+            <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} />
           ))}
         </div>
       )}
@@ -427,7 +430,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
               </Badge>
             </div>
             {identificationTasks.map(task => (
-              <TaskCard key={task.id} task={task} onAssignTask={onAssignTask} canAssign={canAssign} />
+              <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} />
             ))}
           </div>
         </>

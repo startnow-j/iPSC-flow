@@ -2333,3 +2333,54 @@ Stage Summary:
 - 代码变更：+2916 / -271 行
 - 关键功能：category-aware 任务模板、分化诱导阶段型步骤、采样记录→QC自动关联、任务重做机制、服务终止UI
 - Git 推送：e995897 → main
+
+---
+Task ID: Phase 3C
+Agent: Main Agent
+Task: Phase 3C — 表单差异化（SERVICE + KIT 产品线专属表单）
+
+Work Log:
+- 读取 worklog.md、流程重构实施计划-v3.0.md、PROJECT_DOCS.md 了解项目状态
+- 深度探索现有代码：task-templates、state-machine、task-form-wrapper、generic-task-list、validation、task-summary、tasks API
+- 确认 10 个缺失表单组件和 5 个待修改集成文件
+- 并行启动 2 个子代理：
+  - Agent 3C-1：创建 10 个新表单组件
+  - Agent 3C-2：更新 5 个集成文件
+
+**新增 10 个表单组件 (src/components/ebpr/)**：
+
+SERVICE 产品线（7个）：
+1. sample-prep-form.tsx — 样本处理（样本编号/类型/接收日期/状态/数量）
+2. reprogram-form.tsx — 重编程操作（方法/载体/转导日期/培养皿/克隆数/结果）
+3. clone-picking-form.tsx — 克隆挑取（阶段型，含历史记录，POST 创建新任务）
+4. freeze-form.tsx — 冻存（日期/细胞数/存活率/规格/自动计算总支数/存储位置）
+5. cell-revival-form.tsx — 解冻复苏（冻存编号/位置/复苏耗时/方式/状态）
+6. gene-editing-form.tsx — 基因编辑（工具/靶基因/gRNA/编辑类型/转染方式/结果）
+7. clone-screening-form.tsx — 单克隆筛选（阶段型，含历史记录，POST 创建新任务）
+
+KIT 产品线（3个）：
+8. material-prep-form.tsx — 物料准备（物料清单/批号/环境检查/温度）
+9. preparation-form.tsx — 配制生产（日期/批次号/规格/数量/培养基批号）
+10. dispensing-form.tsx — 分装贴标（日期/数量/规格/标签/外观检查）
+
+**修改 5 个集成文件**：
+1. task-form-wrapper.tsx — 导入 10 个新表单，添加 10 个 switch case，CLONE_PICKING/SCREENING 传递历史记录，default 回退到 TaskSummary
+2. generic-task-list.tsx — 替换"表单开发中"占位符为 TaskFormWrapper 实际表单渲染
+3. validation.ts — 新增 10 个校验函数（SAMPLE_PREP/REPROGRAM/FREEZE/CELL_REVIVAL/GENE_EDITING/CLONE_PICKING/CLONE_SCREENING/MATERIAL_PREP/PREPARATION/DISPENSING）
+4. task-summary.tsx — 新增 10 个图标映射 + 通用 formData 回退渲染
+5. tasks/route.ts — supportedTaskCodes 扩展支持 CLONE_PICKING/CLONE_SCREENING 阶段型任务
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 正常编译运行
+- 更新文档：流程重构实施计划 v3.0+++ (Phase 3C 完成)、PROJECT_DOCS.md
+
+Stage Summary:
+- 新增文件：src/components/ebpr/ 下 10 个表单组件
+- 修改文件：task-form-wrapper.tsx、generic-task-list.tsx、validation.ts、task-summary.tsx、tasks/route.ts（5 个）
+- 三产品线表单差异化全部完成：
+  - CELL_PRODUCT: SEED_PREP + EXPANSION + DIFFERENTIATION + HARVEST（Phase 3B 已有）
+  - SERVICE: SAMPLE_PREP + REPROGRAM + CLONE_PICKING + FREEZE + CELL_REVIVAL + GENE_EDITING + CLONE_SCREENING（Phase 3C 新增）
+  - KIT: MATERIAL_PREP + PREPARATION + DISPENSING（Phase 3C 新增）
+- 阶段型任务(POST 新建)支持扩展到 CLONE_PICKING 和 CLONE_SCREENING
+- GenericTaskList 从"占位符"升级为"实际表单"
+- v3.0 全部三阶段（3A + 3B + 3C）已完成
