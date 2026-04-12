@@ -1993,3 +1993,59 @@ Stage Summary:
 - 新增功能: 产品筛选下拉框、产品用户反向映射、产品信息提示栏
 - 交互逻辑: 选产品→过滤用户→产品权限列直接展示角色badge→清除恢复全量
 - 验证: 编译通过，无报错
+
+Stage Summary:
+- 新增文件：`src/app/batches/all/page.tsx`
+- 所有指向 `/batches/all` 的链接现在都能正确渲染"所有批次"页面
+- QA 用户可以通过"待质检批次"快捷操作正常查看批次列表
+
+---
+Task ID: TEST-AUDIT
+Agent: Main Agent
+Task: 梳理项目测试状态 — 区分已测试/发现问题/未测试
+
+Work Log:
+- 通读 worklog.md 全部历史记录，了解每个 Task 的实现情况
+- 读取 state-machine.ts（状态机）、task-templates.ts（任务模板）、schema.prisma（数据模型）
+- 读取三条产品线的批次列表页面（cell-product/service/kit）
+- 读取 assign-task-dialog.tsx（当前逐任务指派 UI）
+- 读取 products/page.tsx、permissions/page.tsx、product-roles/page.tsx（管理功能）
+- 对照 v3.0 流程重构实施计划，梳理各模块测试覆盖情况
+
+Stage Summary:
+
+**✅ 已通过测试（13 项）：**
+1. 登录认证（演示账号一键登录已修复）
+2. 多角色系统（Badge 展示、权限判断）
+3. Dashboard 工作台（统计卡片、近期批次、待办任务）
+4. 批次列表（我的/所有、状态筛选、搜索、分页）
+5. 批次创建（仅 CELL_PRODUCT 线）
+6. 批次详情（概览/时间线标签页）
+7. 细胞产品 eBPR（种子复苏→传代→收获冻存）
+8. QC 质检（仅 CELL_PRODUCT 线）
+9. CoA 审批（仅 CELL_PRODUCT 线）
+10. 用户管理（CRUD）
+11. 产品管理（CRUD）
+12. 暗色模式
+13. 审计日志（批次时间线）
+
+**⚠️ 测试中发现问题，已确认方案但未实施（6 项）：**
+1. 三条产品线流程差异不够 → v3.0 重构计划
+2. 逐任务指派操作繁琐 → 改为批次级预指派
+3. QC 角色未与 OPERATOR 严格分离 → 状态机 roles 修改
+4. CoA 流程步骤过多 → 简化为 2 步人工
+5. HANDOVER 反模式 → 去除，用转交机制替代
+6. 任务模板不完整 → 按 v3.0 扩展
+
+**❓ 尚未测试（30 项）：**
+- 批次管理：服务项目/试剂盒创建、批次编辑、报废（无原因字段）、三条线状态筛选、Dashboard统计
+- 服务项目：样本接收、鉴定流程、提交报告+CoA、批准交付、退回、鉴定任务动态创建
+- 试剂盒：物料准备、开始配制、QC/CoA 完整流程
+- 权限系统：产品级权限分配、权限总览页、产品线归属控制、SUPERVISOR 边界
+- 任务管理：AssignTaskDialog、服务/试剂盒任务创建、复核人
+- 其他：全局审计日志、我的待办准确性、CoA 退回重提、QC 不合格返工
+
+**🔧 尚未实施（v3.0 计划，13 项）：**
+P0: 批次预指派、四眼原则、转交机制、报废原因、CoA简化、去HANDOVER、TERMINATED、QC严格分离
+P1: 分化诱导、服务项目任务模板、采样记录、任务重做机制
+P2: 各产品线专属表单
