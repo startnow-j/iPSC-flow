@@ -48,17 +48,16 @@ export async function GET(
 // ============================================
 // PATCH /api/coa/[coaId] — 更新CoA（提交/审核）
 //
-// Actions (按产品线区分):
+// Actions (v3.0 简化):
 //   submit:
-//     CELL_PRODUCT/KIT → transition 'submit_coa' (DRAFT→SUBMITTED, batch COA_PENDING→COA_SUBMITTED)
-//     SERVICE          → transition 'submit_report' (DRAFT→SUBMITTED, batch REPORT_PENDING→COA_SUBMITTED)
+//     CELL_PRODUCT/KIT (batch QC_PASS) → transition 'submit_coa' (batch → COA_SUBMITTED)
+//     CELL_PRODUCT/KIT (batch COA_SUBMITTED, resubmit) → transition 'resubmit_coa' (batch stays COA_SUBMITTED)
+//     SERVICE (batch REPORT_PENDING) → transition 'submit_report' (batch → COA_SUBMITTED)
 //   approve:
-//     CELL_PRODUCT/KIT → transition 'approve_coa' (SUBMITTED→APPROVED, batch COA_SUBMITTED→COA_APPROVED)
-//     SERVICE          → transition 'approve' (SUBMITTED→APPROVED, batch COA_SUBMITTED→RELEASED)
+//     ALL → transition 'approve' (COA_SUBMITTED → RELEASED, CoA SUBMITTED → APPROVED)
 //   reject:
-//     CELL_PRODUCT     → CoA→DRAFT, batch stays COA_SUBMITTED (no transition)
-//     SERVICE          → transition 'reject' (batch COA_SUBMITTED→REPORT_PENDING), CoA→DRAFT
-//     KIT              → 400 error (no reject support)
+//     CELL_PRODUCT/SERVICE → CoA → DRAFT, batch stays COA_SUBMITTED (no transition)
+//     KIT → 400 error (no reject support)
 // ============================================
 export async function PATCH(
   request: NextRequest,
@@ -118,8 +117,22 @@ export async function PATCH(
         )
       }
 
-      // 根据产品线选择不同的 transition action
-      const transitionAction = productLine === 'SERVICE' ? 'submit_report' : 'submit_coa'
+      // v3.0: 根据批次状态选择正确的 transition action
+      let transitionAction: string
+      if (productLine === 'SERVICE' && batch.status === 'REPORT_PENDING') {
+        transitionAction = 'submit_report'
+      } else if (batch.status === 'QC_PASS') {
+        // CELL_PRODUCT/KIT: 首次提交 CoA（QC_PASS → COA_SUBMITTED）
+        transitionAction = 'submit_coa'
+      } else if (batch.status === 'COA_SUBMITTED') {
+        // CoA 被退回后重新提交（COA_SUBMITTED 自环）
+        transitionAction = 'resubmit_coa'
+      } else {
+        return NextResponse.json(
+          { error: `当前批次状态 ${getStatusLabel(batch.status)} 不允许提交 CoA` },
+          { status: 400 }
+        )
+      }
       const result = await transition(
         existingCoa.batchId,
         transitionAction,
@@ -164,8 +177,8 @@ export async function PATCH(
         )
       }
 
-      // 根据产品线选择不同的 transition action
-      const transitionAction = productLine === 'SERVICE' ? 'approve' : 'approve_coa'
+      // v3.0: 所有产品线统一使用 'approve' (COA_SUBMITTED → RELEASED)
+      const transitionAction = 'approve'
       const result = await transition(
         existingCoa.batchId,
         transitionAction,
@@ -177,18 +190,7 @@ export async function PATCH(
         return NextResponse.json({ error: result.message }, { status: 400 })
       }
 
-      // SERVICE: transition('approve') doesn't update CoA status, do it manually
-      if (productLine === 'SERVICE') {
-        await db.coa.update({
-          where: { id: coaId },
-          data: {
-            status: 'APPROVED',
-            approvedBy: payload.userId,
-            approvedByName: payload.name,
-            approvedAt: new Date(),
-          },
-        })
-      }
+      // transition('approve') 已自动更新 CoA 状态为 APPROVED 并设置 approvedBy/approvedAt
 
       // 记录审计日志
       await createAuditLog({
@@ -213,8 +215,8 @@ export async function PATCH(
     }
 
     // ============================================
-    // Reject (SUBMITTED → DRAFT/REJECTED)
-    // 按产品线区分处理
+    // Reject (SUBMITTED → DRAFT)
+    // v3.0: 统一处理，CoA → DRAFT，批次状态保持 COA_SUBMITTED
     // ============================================
     if (action === 'reject') {
       if (existingCoa.status !== 'SUBMITTED') {
@@ -232,93 +234,43 @@ export async function PATCH(
         )
       }
 
-      if (productLine === 'CELL_PRODUCT') {
-        // CELL_PRODUCT: CoA → DRAFT, batch stays COA_SUBMITTED
-        await db.coa.update({
-          where: { id: coaId },
-          data: {
-            status: 'DRAFT',
-            reviewedBy: payload.userId,
-            reviewedByName: payload.name,
-            reviewComment: reviewComment ?? '',
-            reviewedAt: new Date(),
-          },
-        })
+      // v3.0: CELL_PRODUCT 和 SERVICE 统一处理
+      // CoA → DRAFT，批次状态保持 COA_SUBMITTED（不触发状态转换）
+      await db.coa.update({
+        where: { id: coaId },
+        data: {
+          status: 'DRAFT',
+          reviewedBy: payload.userId,
+          reviewedByName: payload.name,
+          reviewComment: reviewComment ?? '',
+          reviewedAt: new Date(),
+        },
+      })
 
-        // 记录审计日志
-        await createAuditLog({
-          eventType: 'COA_REJECTED',
-          targetType: 'COA',
-          targetId: coaId,
-          targetBatchNo: existingCoa.batchNo,
-          operatorId: payload.userId,
-          operatorName: payload.name,
-          dataBefore: { coaStatus: existingCoa.status, batchStatus: batch.status },
-          dataAfter: {
-            coaStatus: 'DRAFT',
-            batchStatus: batch.status,
-            note: 'CoA退回为草稿，批次状态保持COA_SUBMITTED',
-            reviewComment,
-          },
-        })
-
-        const updatedCoa = await db.coa.findUnique({ where: { id: coaId } })
-        return NextResponse.json({
-          success: true,
-          message: `CoA已退回为草稿，批次状态保持 ${getStatusLabel(batch.status)}`,
-          newState: batch.status,
-          coa: updatedCoa ? { ...updatedCoa, content: JSON.parse(updatedCoa.content) } : null,
-        })
-      } else {
-        // SERVICE: transition 'reject' (batch COA_SUBMITTED → REPORT_PENDING), CoA → DRAFT
-        const result = await transition(
-          existingCoa.batchId,
-          'reject',
-          payload.userId,
-          payload.name,
+      // 记录审计日志
+      await createAuditLog({
+        eventType: 'COA_REJECTED',
+        targetType: 'COA',
+        targetId: coaId,
+        targetBatchNo: existingCoa.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataBefore: { coaStatus: existingCoa.status, batchStatus: batch.status },
+        dataAfter: {
+          coaStatus: 'DRAFT',
+          batchStatus: batch.status,
+          note: 'CoA退回为草稿，批次状态保持COA_SUBMITTED',
           reviewComment,
-        )
+        },
+      })
 
-        if (!result.success) {
-          return NextResponse.json({ error: result.message }, { status: 400 })
-        }
-
-        // Update CoA to DRAFT
-        await db.coa.update({
-          where: { id: coaId },
-          data: {
-            status: 'DRAFT',
-            reviewedBy: payload.userId,
-            reviewedByName: payload.name,
-            reviewComment: reviewComment ?? '',
-            reviewedAt: new Date(),
-          },
-        })
-
-        // 记录审计日志
-        await createAuditLog({
-          eventType: 'COA_REJECTED',
-          targetType: 'COA',
-          targetId: coaId,
-          targetBatchNo: existingCoa.batchNo,
-          operatorId: payload.userId,
-          operatorName: payload.name,
-          dataBefore: { coaStatus: existingCoa.status, batchStatus: 'COA_SUBMITTED' },
-          dataAfter: {
-            coaStatus: 'DRAFT',
-            batchStatus: result.newState,
-            reviewComment,
-          },
-        })
-
-        const updatedCoa = await db.coa.findUnique({ where: { id: coaId } })
-        return NextResponse.json({
-          success: true,
-          message: result.message,
-          newState: result.newState,
-          coa: updatedCoa ? { ...updatedCoa, content: JSON.parse(updatedCoa.content) } : null,
-        })
-      }
+      const updatedCoa = await db.coa.findUnique({ where: { id: coaId } })
+      return NextResponse.json({
+        success: true,
+        message: `CoA已退回为草稿，批次状态保持 ${getStatusLabel(batch.status)}`,
+        newState: batch.status,
+        coa: updatedCoa ? { ...updatedCoa, content: JSON.parse(updatedCoa.content) } : null,
+      })
     }
 
     // Should never reach here

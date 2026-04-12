@@ -1,7 +1,14 @@
 // ============================================
-// iPSC 生产管理系统 — 批次状态机服务（多产品线）
+// iPSC 生产管理系统 — 批次状态机服务 v3.0
 // 控制所有 BatchStatus 状态转换的核心业务逻辑
 // 支持 3 种产品线：CELL_PRODUCT / SERVICE / KIT
+//
+// v3.0 核心变更：
+//   - CoA 流程简化：QC_PASS 自动生成 CoA 并设为 COA_SUBMITTED
+//   - 批准 = 自动放行：approve COA_SUBMITTED → RELEASED（合并 approve_coa + release）
+//   - QC 角色严格分离：质检操作仅限 QC 角色
+//   - 服务项目去除 HANDOVER，新增 TERMINATED
+//   - 报废/终止必须传入 reason
 // ============================================
 
 import { db } from '@/lib/db'
@@ -21,8 +28,12 @@ export interface TransitionRule {
   roles: (Role | 'SYSTEM')[];
   /** 中文操作标签，用于前端按钮展示 */
   label: string;
-  /** 是否为系统自动触发（如 QC_PASS → COA_PENDING） */
+  /** 是否为系统自动触发（如 QC_PASS → COA_SUBMITTED） */
   auto?: boolean;
+  /** 是否需要强制填写原因 */
+  requiresReason?: boolean;
+  /** 是否需要填写终止原因分类 */
+  requiresTerminationReason?: boolean;
 }
 
 /** 对外暴露的可用操作描述 */
@@ -31,6 +42,8 @@ export interface AvailableAction {
   action: string;
   label: string;
   auto?: boolean;
+  requiresReason?: boolean;
+  requiresTerminationReason?: boolean;
 }
 
 /** transition() 函数返回值 */
@@ -41,6 +54,24 @@ export interface TransitionResult {
   message: string;
 }
 
+/** 终止原因枚举 */
+export const TERMINATION_REASONS = [
+  'CUSTOMER_CANCEL',     // 客户取消
+  'SAMPLE_ISSUE',        // 样本问题
+  'REQUIREMENT_CHANGE',  // 需求变更
+  'SERVICE_FAILURE',     // 服务失败（如重编程两轮均失败）
+  'OTHER',               // 其他
+] as const
+
+/** 终止原因中文标签 */
+export const TERMINATION_REASON_LABELS: Record<string, string> = {
+  CUSTOMER_CANCEL: '客户取消',
+  SAMPLE_ISSUE: '样本问题',
+  REQUIREMENT_CHANGE: '需求变更',
+  SERVICE_FAILURE: '服务失败',
+  OTHER: '其他',
+}
+
 // ============================================
 // 状态转换模板（按产品线组织）
 // ============================================
@@ -48,142 +79,133 @@ export interface TransitionResult {
 /**
  * 多产品线状态机转换规则定义
  *
- * CELL_PRODUCT — 细胞产品（库存驱动，现有 iPSC 流程）:
- *   NEW → IN_PRODUCTION → QC_PENDING → QC_IN_PROGRESS → QC_PASS → COA_PENDING(自动) → COA_SUBMITTED → COA_APPROVED → RELEASED
- *                                                                             └→ QC_FAIL → (返工→QC_PENDING or 报废→SCRAPPED)
- *   NEW/IN_PRODUCTION → SCRAPPED
+ * CELL_PRODUCT — 细胞产品（库存驱动）:
+ *   NEW → IN_PRODUCTION → QC_PENDING → QC_IN_PROGRESS → QC_PASS → COA_SUBMITTED → RELEASED
+ *   中间状态 → SCRAPPED（强制原因）
+ *   QC_PASS 时系统自动生成 CoA 草稿（batch 仍处于 QC_PASS）
+ *   QC 角色手动提交 CoA（QC_PASS → COA_SUBMITTED）
+ *   被退回的 CoA 可重新提交（COA_SUBMITTED 自环）
  *
  * SERVICE — 服务项目（订单驱动）:
- *   NEW → SAMPLE_RECEIVED → IN_PRODUCTION → HANDOVER(交接) / IDENTIFICATION(鉴定)
- *   IDENTIFICATION → REPORT_PENDING → COA_SUBMITTED → RELEASED
- *   HANDOVER → IN_PRODUCTION（交接回来）
+ *   NEW → SAMPLE_RECEIVED → IN_PRODUCTION → IDENTIFICATION → REPORT_PENDING → COA_SUBMITTED → RELEASED
+ *   IN_PRODUCTION → TERMINATED（终止，强制原因+分类）
+ *   IDENTIFICATION → IN_PRODUCTION（返工）
+ *   中间状态 → SCRAPPED（强制原因）
  *
  * KIT — 试剂盒（产品驱动）:
- *   NEW → MATERIAL_PREP → IN_PRODUCTION → QC_PENDING → ... → RELEASED
- *   与 CELL_PRODUCT 类似，但增加了 MATERIAL_PREP 物料准备阶段
+ *   NEW → MATERIAL_PREP → IN_PRODUCTION → QC_PENDING → QC_IN_PROGRESS → QC_PASS → COA_SUBMITTED → RELEASED
+ *   中间状态 → SCRAPPED（强制原因）
  */
 const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>> = {
   // ------------------------------------------------
-  // 细胞产品 — 完全保留原有 11 状态 16 规则
+  // 细胞产品 — v3.0 简化 CoA 流程，QC 角色严格分离
   // ------------------------------------------------
   CELL_PRODUCT: {
     NEW: [
       { to: 'IN_PRODUCTION', action: 'start_production', roles: ['SUPERVISOR', 'OPERATOR'], label: '开始生产' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [
       { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交质检' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PENDING: [
-      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC', 'OPERATOR'], label: '开始质检' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC'], label: '开始质检' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_IN_PROGRESS: [
-      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC', 'OPERATOR'], label: '质检合格' },
-      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QC', 'OPERATOR'], label: '质检不合格' },
+      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC'], label: '质检合格' },
+      { to: 'QC_PENDING', action: 'rework', roles: ['SUPERVISOR', 'ADMIN'], label: '返工' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PASS: [
-      { to: 'COA_PENDING', action: 'generate_coa', roles: ['SYSTEM'], label: '生成CoA', auto: true },
-    ],
-    QC_FAIL: [
-      { to: 'QC_PENDING', action: 'rework', roles: ['SUPERVISOR', 'ADMIN'], label: '返工' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
-    ],
-    COA_PENDING: [
-      { to: 'COA_SUBMITTED', action: 'submit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交审核' },
+      // v3.0: QC 角色预览后手动提交 CoA（QC_PASS → COA_SUBMITTED）
+      // CoA 草稿在 pass_qc 时自动生成
+      { to: 'COA_SUBMITTED', action: 'submit_coa', roles: ['QC'], label: '提交CoA' },
     ],
     COA_SUBMITTED: [
-      { to: 'COA_APPROVED', action: 'approve_coa', roles: ['SUPERVISOR', 'QA'], label: '批准' },
-      // NOTE: REJECTED batch status 已移除。CoA 退回现在在 CoA 表层面处理（status → DRAFT）
-      // 重新提交：批次状态保持 COA_SUBMITTED（自环），CoA 状态从 REJECTED → SUBMITTED
-      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '重新提交' },
-    ],
-    COA_APPROVED: [
-      { to: 'RELEASED', action: 'release', roles: ['SUPERVISOR', 'ADMIN'], label: '放行' },
+      // v3.0: 批准 CoA = 自动放行（合并 approve_coa + release）
+      { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
+      // CoA 被退回后重新提交（batch 状态保持 COA_SUBMITTED）
+      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['QC'], label: '重新提交CoA' },
     ],
     RELEASED: [],
     SCRAPPED: [],
   },
 
   // ------------------------------------------------
-  // 服务项目 — 订单驱动，含样本接收、交接、鉴定阶段
+  // 服务项目 — v3.0 去除 HANDOVER，新增 TERMINATED
   // ------------------------------------------------
   SERVICE: {
     NEW: [
       { to: 'SAMPLE_RECEIVED', action: 'receive_sample', roles: ['OPERATOR'], label: '接收样本' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     SAMPLE_RECEIVED: [
       { to: 'IN_PRODUCTION', action: 'start_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '开始生产' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [
-      { to: 'HANDOVER', action: 'request_handover', roles: ['OPERATOR'], label: '申请交接' },
       { to: 'IDENTIFICATION', action: 'start_identification', roles: ['OPERATOR', 'SUPERVISOR'], label: '进入鉴定' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
-    ],
-    HANDOVER: [
-      { to: 'IN_PRODUCTION', action: 'accept_handover', roles: ['OPERATOR'], label: '接收交接' },
+      // v3.0 新增: 服务项目可终止（非报废性终止）
+      { to: 'TERMINATED', action: 'terminate', roles: ['ADMIN', 'SUPERVISOR'], label: '终止', requiresReason: true, requiresTerminationReason: true },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IDENTIFICATION: [
       { to: 'REPORT_PENDING', action: 'complete_identification', roles: ['OPERATOR', 'SUPERVISOR'], label: '鉴定完成' },
       { to: 'IN_PRODUCTION', action: 'rework', roles: ['SUPERVISOR', 'ADMIN'], label: '返工' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'TERMINATED', action: 'terminate', roles: ['ADMIN', 'SUPERVISOR'], label: '终止', requiresReason: true, requiresTerminationReason: true },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     REPORT_PENDING: [
+      // v3.0: 提交报告+CoA，自动生成 CoA 草稿并设为 SUBMITTED
       { to: 'COA_SUBMITTED', action: 'submit_report', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交报告+CoA' },
+      { to: 'TERMINATED', action: 'terminate', roles: ['ADMIN', 'SUPERVISOR'], label: '终止', requiresReason: true, requiresTerminationReason: true },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     COA_SUBMITTED: [
-      { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'ADMIN'], label: '批准交付' },
-      { to: 'REPORT_PENDING', action: 'reject', roles: ['SUPERVISOR', 'QA'], label: '退回修改' },
+      // v3.0: 批准 CoA = 自动放行
+      { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
     ],
     RELEASED: [],
+    TERMINATED: [],
     SCRAPPED: [],
   },
 
   // ------------------------------------------------
-  // 试剂盒 — 产品驱动，含物料准备阶段
+  // 试剂盒 — v3.0 简化 CoA 流程，QC 角色严格分离
   // ------------------------------------------------
   KIT: {
     NEW: [
       { to: 'MATERIAL_PREP', action: 'start_material_prep', roles: ['OPERATOR'], label: '开始备料' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     MATERIAL_PREP: [
       { to: 'IN_PRODUCTION', action: 'start_production', roles: ['OPERATOR'], label: '开始配制' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [
       { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交质检' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PENDING: [
-      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC', 'OPERATOR'], label: '开始质检' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
+      { to: 'QC_IN_PROGRESS', action: 'start_qc', roles: ['QC'], label: '开始质检' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_IN_PROGRESS: [
-      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC', 'OPERATOR'], label: '质检合格' },
-      { to: 'QC_FAIL', action: 'fail_qc', roles: ['QC', 'OPERATOR'], label: '质检不合格' },
+      { to: 'QC_PASS', action: 'pass_qc', roles: ['QC'], label: '质检合格' },
+      { to: 'QC_PENDING', action: 'rework', roles: ['SUPERVISOR', 'ADMIN'], label: '返工' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PASS: [
-      { to: 'COA_PENDING', action: 'generate_coa', roles: ['SYSTEM'], label: '生成CoA', auto: true },
-    ],
-    QC_FAIL: [
-      { to: 'QC_PENDING', action: 'rework', roles: ['SUPERVISOR', 'ADMIN'], label: '返工' },
-      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废' },
-    ],
-    COA_PENDING: [
-      { to: 'COA_SUBMITTED', action: 'submit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交审核' },
+      // v3.0: QC 角色预览后手动提交 CoA（QC_PASS → COA_SUBMITTED）
+      { to: 'COA_SUBMITTED', action: 'submit_coa', roles: ['QC'], label: '提交CoA' },
     ],
     COA_SUBMITTED: [
-      { to: 'COA_APPROVED', action: 'approve_coa', roles: ['SUPERVISOR', 'QA'], label: '批准' },
-      // NOTE: CoA 退回在 CoA 表层面处理（status → DRAFT）
-      // 重新提交：批次状态保持 COA_SUBMITTED（自环），CoA 状态从 REJECTED → SUBMITTED
-      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['OPERATOR', 'SUPERVISOR'], label: '重新提交' },
-    ],
-    COA_APPROVED: [
-      { to: 'RELEASED', action: 'release', roles: ['SUPERVISOR', 'ADMIN'], label: '放行' },
+      // v3.0: 批准 CoA = 自动放行
+      { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
+      // CoA 被退回后重新提交
+      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['QC'], label: '重新提交CoA' },
     ],
     RELEASED: [],
     SCRAPPED: [],
@@ -191,57 +213,60 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
 }
 
 // ============================================
-// 状态中文标签（15 种状态 + 1 个已废弃）
+// 状态中文标签（含废弃状态向后兼容映射）
 // ============================================
 
 const STATUS_LABELS: Record<string, string> = {
-  // 通用
+  // === 通用（v3.0 活跃状态） ===
   NEW: '新建',
   IN_PRODUCTION: '生产中',
   QC_PENDING: '待质检',
   QC_IN_PROGRESS: '质检中',
   QC_PASS: '质检合格',
-  QC_FAIL: '质检不合格',
-  COA_PENDING: '待生成CoA',
   COA_SUBMITTED: 'CoA已提交',
-  COA_APPROVED: 'CoA已批准',
   RELEASED: '已放行',
   SCRAPPED: '已报废',
-  // 服务项目
+  // === 服务项目特有 ===
   SAMPLE_RECEIVED: '样本已接收',
-  HANDOVER: '交接中',
   IDENTIFICATION: '鉴定中',
   REPORT_PENDING: '待生成报告',
-  // 试剂盒
+  TERMINATED: '已终止',
+  // === 试剂盒特有 ===
   MATERIAL_PREP: '物料准备中',
-  // 已废弃（保留映射以兼容历史数据）
+  // === 已废弃（向后兼容，映射为当前等价状态标签） ===
+  QC_FAIL: '质检不合格（返工中）',
+  COA_PENDING: 'CoA已提交',       // → 映射为 COA_SUBMITTED 的标签
+  COA_APPROVED: '已放行',          // → 映射为 RELEASED 的标签
+  HANDOVER: '交接中（已废弃）',
   REJECTED: '已退回',
 }
 
 // ============================================
-// 状态 Tailwind 徽标颜色（16 种状态）
+// 状态 Tailwind 徽标颜色（含废弃状态）
 // ============================================
 
 const STATUS_COLORS: Record<string, string> = {
+  // === 通用（v3.0 活跃状态） ===
   NEW: 'bg-gray-100 text-gray-800',
   IN_PRODUCTION: 'bg-blue-100 text-blue-800',
   QC_PENDING: 'bg-yellow-100 text-yellow-800',
   QC_IN_PROGRESS: 'bg-orange-100 text-orange-800',
   QC_PASS: 'bg-emerald-100 text-emerald-800',
-  QC_FAIL: 'bg-red-100 text-red-800',
-  COA_PENDING: 'bg-violet-100 text-violet-800',
   COA_SUBMITTED: 'bg-sky-100 text-sky-800',
-  COA_APPROVED: 'bg-teal-100 text-teal-800',
   RELEASED: 'bg-green-100 text-green-800',
   SCRAPPED: 'bg-stone-100 text-stone-600',
-  // 服务项目
+  // === 服务项目特有 ===
   SAMPLE_RECEIVED: 'bg-blue-100 text-blue-800',
-  HANDOVER: 'bg-amber-100 text-amber-800',
   IDENTIFICATION: 'bg-indigo-100 text-indigo-800',
   REPORT_PENDING: 'bg-purple-100 text-purple-800',
-  // 试剂盒
+  TERMINATED: 'bg-amber-100 text-amber-800',
+  // === 试剂盒特有 ===
   MATERIAL_PREP: 'bg-cyan-100 text-cyan-800',
-  // 已废弃
+  // === 已废弃 ===
+  QC_FAIL: 'bg-red-100 text-red-800',
+  COA_PENDING: 'bg-sky-100 text-sky-800',
+  COA_APPROVED: 'bg-teal-100 text-teal-800',
+  HANDOVER: 'bg-amber-100 text-amber-800',
   REJECTED: 'bg-stone-100 text-stone-600',
 }
 
@@ -283,18 +308,25 @@ export function getAvailableActions(productLine: ProductLine, currentStatus: str
   if (!rules) return []
 
   return rules
-    .filter((r) => r.roles.some(r => userRoles.includes(r as Role)) && r.roles[0] !== 'SYSTEM')
+    .filter((r) => {
+      // 过滤掉系统自动操作
+      if (r.roles[0] === 'SYSTEM') return false
+      // 检查用户是否拥有所需角色
+      return r.roles.some(role => userRoles.includes(role as string))
+    })
     .map((r) => ({
       targetStatus: r.to,
       action: r.action,
       label: r.label,
       auto: r.auto,
+      requiresReason: r.requiresReason,
+      requiresTerminationReason: r.requiresTerminationReason,
     }))
 }
 
 /**
  * 为批次创建 CoA 草稿（如果尚未存在）
- * 被多个转换场景复用：generate_coa, submit_report
+ * 被多个转换场景复用
  */
 async function createCoaIfNeeded(
   batch: { batchNo: string; productCode: string; productName: string; specification: string | null; seedBatchNo: string | null; seedPassage: string | null; currentPassage: string | null; plannedQuantity: number | null; actualQuantity: number | null; storageLocation: string | null },
@@ -350,18 +382,33 @@ async function createCoaIfNeeded(
 }
 
 /**
+ * transition() 函数的可选选项
+ */
+export interface TransitionOptions {
+  /** 报废原因（scrap 操作必填） */
+  reason?: string;
+  /** 终止原因分类（terminate 操作必填） */
+  terminationReason?: string;
+}
+
+/**
  * 执行批次状态转换（核心函数）
  *
- * 完整流程:
+ * v3.0 完整流程:
  *  1. 查找批次，校验存在性
  *  2. 从批次 productLine 获取对应的转换规则
  *  3. 从当前状态查找匹配 action 的转换规则
- *  4. 校验操作员角色权限
- *  5. 执行转换：
- *     - QC_PASS → COA_PENDING: 自动创建 CoA 草稿
+ *  4. 校验操作员角色权限（由上层 API 完成，此处仅检查 SYSTEM）
+ *  5. 校验必填字段（reason, terminationReason）
+ *  6. 执行转换：
+ *     - pass_qc: QC_IN_PROGRESS → QC_PASS（自动生成 CoA 草稿）
+ *     - submit_coa: QC_PASS → COA_SUBMITTED（QC 提交 CoA）
+ *     - resubmit_coa: COA_SUBMITTED → COA_SUBMITTED（退回后重新提交）
+ *     - submit_report: 服务项目报告提交 → COA_SUBMITTED（自动生成 CoA + 提交）
+ *     - approve: COA_SUBMITTED → 自动放行 RELEASED
+ *     - scrap: 记录报废原因
+ *     - terminate: 记录终止原因
  *     - start_production: 设置 actualStartDate
- *     - RELEASED: 设置 actualEndDate
- *  6. 同步更新 CoA 状态（如适用）
  *  7. 更新数据库
  *  8. 返回结果
  *
@@ -369,16 +416,19 @@ async function createCoaIfNeeded(
  * @param action - 动作编码，如 'start_production'
  * @param operatorId - 操作员 ID
  * @param operatorName - 操作员姓名
- * @param reason - 可选的操作原因（报废等场景）
- * @returns 转换结果，包含 success / previousState / newState / message
+ * @param options - 可选参数（reason, terminationReason）
+ * @returns 转换结果
  */
 export async function transition(
   batchId: string,
   action: string,
   operatorId: string,
   operatorName: string,
-  reason?: string,
+  options?: TransitionOptions,
 ): Promise<TransitionResult> {
+  const reason = options?.reason
+  const terminationReason = options?.terminationReason
+
   // 1. 查找批次
   const batch = await db.batch.findUnique({
     where: { id: batchId },
@@ -421,9 +471,6 @@ export async function transition(
 
   // 3. 角色权限校验
   if (matchedRule.roles[0] !== 'SYSTEM') {
-    // 对于非 SYSTEM 操作，需要校验操作员角色
-    // 注意：此函数不直接校验角色，由调用方传入 operatorId，角色校验在上层 API 中完成
-    // 这里只做最小校验：确保不是 SYSTEM 角色但提供了操作员信息
     if (!operatorId || !operatorName) {
       return {
         success: false,
@@ -434,53 +481,39 @@ export async function transition(
     }
   }
 
-  // 4. 执行转换
+  // 4. 校验必填字段
+  if (matchedRule.requiresReason && !reason) {
+    return {
+      success: false,
+      previousState,
+      newState: '',
+      message: '此操作必须提供原因（reason）',
+    }
+  }
+  if (matchedRule.requiresTerminationReason && !terminationReason) {
+    return {
+      success: false,
+      previousState,
+      newState: '',
+      message: '终止操作必须提供终止原因分类（terminationReason）',
+    }
+  }
+
+  // 5. 执行转换
   try {
-    // 4a. 处理 QC_PASS → COA_PENDING 自动创建 CoA 草稿
-    if (action === 'generate_coa' && newState === 'COA_PENDING') {
-      await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
-    }
-
-    // 4a2. 处理 SERVICE submit_report → COA_SUBMITTED 自动创建 CoA
-    if (action === 'submit_report' && newState === 'COA_SUBMITTED') {
-      const existingCoa = await db.coa.findUnique({ where: { batchId } })
-      if (!existingCoa) {
-        await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
-      }
-      // 创建后直接提交
-      await db.coa.update({
-        where: { batchId },
-        data: {
-          status: 'SUBMITTED',
-          submittedBy: operatorId,
-          submittedAt: new Date(),
-        },
-      })
-    }
-
-    // 4b. 处理开始生产时设置 actualStartDate
     const updateData: Record<string, unknown> = {
       status: newState as BatchStatus,
     }
 
-    if (action === 'start_production') {
-      updateData.actualStartDate = new Date()
+    // 5a. pass_qc: 质检合格时自动生成 CoA 草稿（batch 仍处于 QC_PASS）
+    if (action === 'pass_qc') {
+      // 仅对 CELL_PRODUCT/KIT 自动生成 CoA（SERVICE 无 QC 流程）
+      if (productLine === 'CELL_PRODUCT' || productLine === 'KIT') {
+        await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
+      }
     }
 
-    // 4c. 处理放行时设置 actualEndDate
-    if (action === 'release') {
-      updateData.actualEndDate = new Date()
-    }
-
-    // 4d. 报废原因记录在审计日志中（不直接存储在批次表）
-
-    // 5. 更新批次状态
-    await db.batch.update({
-      where: { id: batchId },
-      data: updateData,
-    })
-
-    // 6. 如果涉及 CoA 状态转换，同步更新 CoA
+    // 5a2. submit_coa: QC 提交 CoA（QC_PASS → COA_SUBMITTED）
     if (action === 'submit_coa') {
       await db.coa.update({
         where: { batchId },
@@ -490,30 +523,10 @@ export async function transition(
           submittedAt: new Date(),
         },
       })
-    } else if (action === 'approve_coa') {
-      await db.coa.update({
-        where: { batchId },
-        data: {
-          status: 'APPROVED',
-          approvedBy: operatorId,
-          approvedByName: operatorName,
-          approvedAt: new Date(),
-        },
-      })
-    } else if (action === 'reject_coa') {
-      // CoA rejection: status → DRAFT (not REJECTED), batch stays COA_SUBMITTED
-      await db.coa.update({
-        where: { batchId },
-        data: {
-          status: 'DRAFT',
-          reviewedBy: operatorId,
-          reviewedByName: operatorName,
-          reviewComment: reason ?? '',
-          reviewedAt: new Date(),
-        },
-      })
-    } else if (action === 'resubmit_coa') {
-      // CoA resubmit: CoA status DRAFT/REJECTED → SUBMITTED, batch stays COA_SUBMITTED
+    }
+
+    // 5a3. resubmit_coa: CoA 被退回后重新提交（COA_SUBMITTED 自环）
+    if (action === 'resubmit_coa') {
       await db.coa.update({
         where: { batchId },
         data: {
@@ -523,6 +536,59 @@ export async function transition(
         },
       })
     }
+
+    // 5b. SERVICE submit_report → COA_SUBMITTED: 自动生成 CoA 并提交
+    if (action === 'submit_report' && newState === 'COA_SUBMITTED') {
+      const existingCoa = await db.coa.findUnique({ where: { batchId } })
+      if (!existingCoa) {
+        await createCoaIfNeeded(batch, batchId, operatorId, operatorName)
+      }
+      await db.coa.update({
+        where: { batchId },
+        data: {
+          status: 'SUBMITTED',
+          submittedBy: operatorId,
+          submittedAt: new Date(),
+        },
+      })
+    }
+
+    // 5c. approve: COA_SUBMITTED → RELEASED（批准 CoA = 自动放行）
+    if (action === 'approve' && newState === 'RELEASED') {
+      updateData.actualEndDate = new Date()
+      // 同步更新 CoA 状态为 APPROVED
+      await db.coa.update({
+        where: { batchId },
+        data: {
+          status: 'APPROVED',
+          approvedBy: operatorId,
+          approvedByName: operatorName,
+          approvedAt: new Date(),
+        },
+      })
+    }
+
+    // 5d. start_production: 设置 actualStartDate
+    if (action === 'start_production') {
+      updateData.actualStartDate = new Date()
+    }
+
+    // 5e. scrap: 记录报废原因
+    if (action === 'scrap') {
+      updateData.scrapReason = reason
+    }
+
+    // 5f. terminate: 记录终止原因
+    if (action === 'terminate') {
+      updateData.terminationReason = terminationReason
+      // 终止也记录在 scrapReason 字段（用于统一查询），或使用 terminationReason
+    }
+
+    // 6. 更新批次状态
+    await db.batch.update({
+      where: { id: batchId },
+      data: updateData,
+    })
 
     const label = STATUS_LABELS[newState] ?? newState
 

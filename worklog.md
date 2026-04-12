@@ -2049,3 +2049,85 @@ Stage Summary:
 P0: 批次预指派、四眼原则、转交机制、报废原因、CoA简化、去HANDOVER、TERMINATED、QC严格分离
 P1: 分化诱导、服务项目任务模板、采样记录、任务重做机制
 P2: 各产品线专属表单
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: 文档结构重组 + Git 云端保存
+
+Work Log:
+- 读取 PROJECT_DOCS.md、流程重构实施计划 v3.0、多产品线扩展计划、测试状态清单等全部核心文档
+- 分析文档替代关系：v2.2 的 §2.3/§2.8 被 v3.0 替代，§2.6/§2.7 仍有效
+- 创建 docs/testing/ 和 docs/decisions/ 文件夹
+- 移动 测试状态清单-v1.0.md 到 docs/testing/
+- 更新 多产品线扩展计划头部：标注替代关系、关联文档引用
+- 更新 流程重构实施计划 v3.0 头部：标记为当前活跃计划、更新前置文档引用
+- 更新 测试状态清单引用路径
+- 重写 PROJECT_DOCS.md：新增 testing 分类、decisions 预留、文档关系图、完整状态清单
+- Git commit + push 成功
+
+Stage Summary:
+- 新增目录：docs/testing/、docs/decisions/
+- 移动文件：测试状态清单 → docs/testing/
+- 更新文件：PROJECT_DOCS.md（重写）、多产品线扩展计划（替代标注）、流程重构实施计划 v3.0（状态标注）
+- Git 已推送：https://github.com/startnow-j/iPSC-flow.git
+- 当前活跃计划：流程重构实施计划 v3.0（Phase 3A/3B/3C）
+- 下一步：启动 Phase 3A 流程基础重构开发
+
+---
+
+## 2025-01-XX Phase 3A.1 — 状态机重构 + 数据库 Schema 变更
+
+### 变更范围
+
+#### 1. Prisma Schema (prisma/schema.prisma)
+- **BatchStatus 枚举**: 新增 `TERMINATED`（服务项目终止）；`QC_FAIL` 移入废弃区；保留 `COA_PENDING`/`COA_APPROVED`/`HANDOVER`/`REJECTED` 兼容历史数据
+- **TaskStatus 枚举**: 新增 `FAILED`（服务项目任务重做场景）
+- **Batch 表**: 新增 `productionOperatorId`/`Name`、`qcOperatorId`/`Name`、`terminationReason`、`scrapReason` 字段
+- **Batch 关联**: 新增 `productionOperator`（BatchProductionOperator）、`qcOperator`（BatchQcOperator）
+- **User 反向关联**: 新增 `productionBatches`、`qcBatches`
+- 数据库已同步（`bun run db:push` 成功）
+
+#### 2. 状态机重写 (src/lib/services/state-machine.ts)
+- **CELL_PRODUCT/KIT**: NEW→IN_PRODUCTION→QC_PENDING→QC_IN_PROGRESS→QC_PASS→COA_SUBMITTED→RELEASED + SCRAPPED
+  - `pass_qc` 自动生成 CoA 草稿（batch 仍处 QC_PASS）
+  - `submit_coa` 为 QC 手动操作（QC_PASS→COA_SUBMITTED）
+  - `resubmit_coa` 支持退回后重新提交（COA_SUBMITTED 自环）
+  - `approve` 合并批准+放行（COA_SUBMITTED→RELEASED）
+- **SERVICE**: NEW→SAMPLE_RECEIVED→IN_PRODUCTION→IDENTIFICATION→REPORT_PENDING→COA_SUBMITTED→RELEASED
+  - 去除 HANDOVER 状态（人员交接通过转交机制）
+  - 新增 TERMINATED 终止状态（客户取消/样本问题/服务失败）
+  - IN_PRODUCTION→TERMINATED（终止）+ IDENTIFICATION→IN_PRODUCTION（返工）
+- **QC 角色严格分离**: start_qc/pass_qc/submit_coa/resubmit_coa 仅限 QC 角色
+- **新增**: `TERMINATION_REASONS` 枚举、`TERMINATION_REASON_LABELS`、`TransitionOptions` 接口
+- **向后兼容**: getStatusLabel/getStatusColor 对废弃状态返回映射标签
+
+#### 3. Transition API (src/app/api/batches/[id]/transition/route.ts)
+- scrap 操作强制校验 reason 字段
+- 新增 terminate 操作，强制校验 reason + terminationReason
+- 移除废弃动作（approve_coa → approve, generate_coa → pass_qc auto-generates）
+- submit_coa/resubmit_coa 归入 OPERATIONAL_ACTIONS（QC 角色产品级授权）
+- transition() 调用改用 TransitionOptions 对象传参
+
+#### 4. CoA API (src/app/api/coa/[coaId]/route.ts)
+- submit: 根据批次状态自动选择 submit_coa/resubmit_coa/submit_report
+- approve: 统一使用 'approve' 动作（合并 approve_coa + release）
+- reject: 统一处理（CoA→DRAFT，batch 保持 COA_SUBMITTED），去除 SERVICE 特殊的 reject transition
+
+#### 5. 任务模板 (src/lib/services/task-templates.ts)
+- CELL_PRODUCT: 新增 DIFFERENTIATION（分化诱导，阶段型，sequenceNo: 3）
+- SERVICE: 扩展为 5 步（样本处理→重编程→克隆挑取→扩增培养→冻存）
+- 新增 CATEGORY_TASK_TEMPLATES: EDIT（基因编辑）、DIFF_SERVICE（分化服务）差异化模板
+- 新增 getTaskTemplates(productLine, action, category?) 函数
+- 新增 taskType 字段（single/phase/redoable）
+- 新增 POTENCY 到 IDENTIFICATION_OPTIONS
+
+### 质量检查
+- ESLint: 所有修改文件零错误
+- TypeScript: 所有修改文件零新增错误（28 个 pre-existing errors 不在修改范围内）
+- 数据库同步: 成功
+
+### 不在本次范围
+- 前端组件适配（Phase 3A.3）
+- seed.ts 修改
+- 指派机制 UI（Phase 3A.2）

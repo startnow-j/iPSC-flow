@@ -29,7 +29,8 @@ enum Role {
   OPERATOR    // 生产操作员 — 产品级，需具体产品授权
 }
 
-/// 批次状态（15种，状态机驱动，按产品线分组）
+/// 批次状态（状态机驱动，按产品线分组）
+/// v3.0: 简化 CoA 流程，新增 TERMINATED，保留废弃状态兼容历史数据
 enum BatchStatus {
   // === 通用状态 ===
   NEW              // 新建
@@ -37,21 +38,25 @@ enum BatchStatus {
   QC_PENDING       // 待质检
   QC_IN_PROGRESS   // 质检中
   QC_PASS          // 质检合格
-  QC_FAIL          // 质检不合格
-  COA_PENDING      // 待生成CoA
-  COA_SUBMITTED    // CoA已提交审核
-  COA_APPROVED     // CoA已批准
-  RELEASED         // 已放行
+  COA_SUBMITTED    // CoA已提交（v3.0: 合并原 COA_PENDING，QC合格后自动生成CoA并直接设为SUBMITTED）
+  RELEASED         // 已放行（v3.0: 合并原 COA_APPROVED，批准CoA自动放行）
   SCRAPPED         // 已报废
 
   // === 服务项目特有 ===
   SAMPLE_RECEIVED  // 样本已接收
-  HANDOVER         // 交接中
   IDENTIFICATION   // 鉴定中
   REPORT_PENDING   // 待生成报告
+  TERMINATED       // v3.0新增: 服务项目终止（客户取消/样本问题/服务失败）
 
   // === 试剂盒特有 ===
   MATERIAL_PREP    // 物料准备中
+
+  // === 已废弃（保留兼容历史数据，新批次不再使用） ===
+  COA_PENDING      // v3.0废弃 → 映射为 COA_SUBMITTED
+  COA_APPROVED     // v3.0废弃 → 映射为 RELEASED
+  HANDOVER         // v3.0废弃 → 已去除，人员交接通过转交机制
+  REJECTED         // 已废弃
+  QC_FAIL          // v3.0: 返工/报废路径直接处理，不再单独存在此状态
 }
 
 /// 生产任务状态
@@ -60,6 +65,7 @@ enum TaskStatus {
   IN_PROGRESS  // 进行中
   COMPLETED    // 已完成
   REVIEWED     // 已复核（复核人确认）
+  FAILED       // v3.0新增: 任务失败（服务项目重做场景）
   SKIPPED      // 已跳过
 }
 
@@ -94,6 +100,8 @@ model User {
   updatedAt   DateTime @updatedAt
 
   createdBatches    Batch[]  @relation("CreatedBatches")
+  productionBatches  Batch[]  @relation("BatchProductionOperator")
+  qcBatches          Batch[]  @relation("BatchQcOperator")
   productionTasks   ProductionTask[]
   reviewedTasks     ProductionTask[] @relation("TaskReviewer")
   qcRecords         QcRecord[]
@@ -154,6 +162,16 @@ model Batch {
   // 状态
   status          BatchStatus @default(NEW)
 
+  // 预指派人员（v3.0新增）
+  productionOperatorId   String?
+  productionOperatorName String?
+  qcOperatorId           String?
+  qcOperatorName         String?
+
+  // 终止/报废原因（v3.0新增）
+  terminationReason      String?   // CUSTOMER_CANCEL / SAMPLE_ISSUE / REQUIREMENT_CHANGE / SERVICE_FAILURE / OTHER
+  scrapReason            String?   // 报废原因（通用，必填）
+
   // 数量
   plannedQuantity Int?
   actualQuantity  Int?
@@ -179,13 +197,15 @@ model Batch {
   updatedAt       DateTime    @updatedAt
 
   // 关联
-  product         Product     @relation(fields: [productId], references: [id])
-  creator         User        @relation("CreatedBatches", fields: [createdBy], references: [id])
-  tasks           ProductionTask[]
-  qcRecords       QcRecord[]
-  coa             Coa?
-  auditLogs       AuditLog[]
-  conversations   Conversation[]
+  product              Product     @relation(fields: [productId], references: [id])
+  creator              User        @relation("CreatedBatches", fields: [createdBy], references: [id])
+  productionOperator   User?       @relation("BatchProductionOperator", fields: [productionOperatorId], references: [id])
+  qcOperator           User?       @relation("BatchQcOperator", fields: [qcOperatorId], references: [id])
+  tasks                ProductionTask[]
+  qcRecords            QcRecord[]
+  coa                  Coa?
+  auditLogs            AuditLog[]
+  conversations        Conversation[]
 
   @@map("batch")
 }

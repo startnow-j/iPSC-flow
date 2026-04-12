@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { canManage, canOperate } from '@/lib/roles'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
+import type { TransitionOptions } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
 import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
 // ============================================
-// 操作权限映射
+// 操作权限映射（v3.0 更新）
 // 管理类操作 → canManage（需要产品线归属）
 // 操作类操作 → canOperate（需要产品级授权）
 // ============================================
@@ -16,16 +17,18 @@ const MANAGEMENT_ACTIONS: Record<string, string[]> = {
   start_production: ['SUPERVISOR'],
   start_material_prep: ['SUPERVISOR'],
   start_identification: ['SUPERVISOR'],
-  approve_coa: ['SUPERVISOR', 'QA'],
-  submit_coa: ['SUPERVISOR', 'QA'],
+  approve: ['SUPERVISOR', 'QA'],
   submit_report: ['SUPERVISOR', 'QA'],
   scrap: ['SUPERVISOR'],
-  reject_coa: ['SUPERVISOR', 'QA'],
+  terminate: ['SUPERVISOR'],
+  rework: ['SUPERVISOR'],
 }
 
 const OPERATIONAL_ACTIONS: Record<string, string[]> = {
+  start_qc: ['QC'],
   pass_qc: ['QC'],
-  fail_qc: ['QC'],
+  submit_coa: ['QC'],
+  resubmit_coa: ['QC'],
 }
 
 // ============================================
@@ -48,10 +51,29 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { action, reason } = body
+    const { action, reason, terminationReason } = body
 
     if (!action) {
       return NextResponse.json({ error: '缺少 action 参数' }, { status: 400 })
+    }
+
+    // ============================================
+    // v3.0: 报废操作必须传入 reason
+    // ============================================
+    if (action === 'scrap' && !reason) {
+      return NextResponse.json({ error: '报废操作必须提供原因（reason）' }, { status: 400 })
+    }
+
+    // ============================================
+    // v3.0: 终止操作必须传入 reason + terminationReason
+    // ============================================
+    if (action === 'terminate') {
+      if (!reason) {
+        return NextResponse.json({ error: '终止操作必须提供原因说明（reason）' }, { status: 400 })
+      }
+      if (!terminationReason) {
+        return NextResponse.json({ error: '终止操作必须提供终止原因分类（terminationReason）' }, { status: 400 })
+      }
     }
 
     // ============================================
@@ -100,8 +122,7 @@ export async function POST(
     }
 
     // ============================================
-    // Special: reject_coa — CoA 退回
-    // REJECTED batch status 已移除。CoA 退回现在在 CoA 表层面处理（status → DRAFT），
+    // CoA 退回 — CoA 表层面处理（status → DRAFT），
     // 批次状态保持 COA_SUBMITTED 不变。
     // ============================================
     if (action === 'reject_coa') {
@@ -115,7 +136,7 @@ export async function POST(
         return NextResponse.json({ error: 'CoA不存在' }, { status: 404 })
       }
 
-      // Update CoA status to DRAFT (not REJECTED)
+      // Update CoA status to DRAFT
       await db.coa.update({
         where: { batchId: id },
         data: {
@@ -154,7 +175,6 @@ export async function POST(
     // ============================================
     // 基于任务模板的自动任务创建
     // 支持 start_production / start_material_prep / start_identification
-    // 根据产品线 (productLine) 和动作 (action) 查找对应模板
     // ============================================
     if (action === 'start_production' || action === 'start_material_prep' || action === 'start_identification') {
       const batch = await db.batch.findUnique({
@@ -207,10 +227,8 @@ export async function POST(
 
         // ============================================
         // SERVICE 产品线 start_identification：动态创建鉴定任务
-        // 根据 batch.identificationRequirements (JSON 数组) 生成鉴定任务
         // ============================================
         if (action === 'start_identification' && productLine === 'SERVICE') {
-          // 检查是否已有鉴定任务（taskCode 前缀 ID_）
           const hasIdTasks = batch.tasks.some((t) => t.taskCode.startsWith('ID_'))
 
           if (!hasIdTasks) {
@@ -222,7 +240,6 @@ export async function POST(
             }
 
             if (requirements.length > 0) {
-              // 获取已有任务的最大 sequenceNo
               const maxSeq = batch.tasks.reduce((max: number, t) => Math.max(max, t.sequenceNo || 0), 0)
 
               const idTasksData = requirements
@@ -245,7 +262,6 @@ export async function POST(
               if (idTasksData.length > 0) {
                 await db.productionTask.createMany({ data: idTasksData })
 
-                // 记录审计日志：自动创建鉴定任务
                 await createAuditLog({
                   eventType: 'BATCH_STATUS_CHANGED',
                   targetType: 'BATCH',
@@ -271,14 +287,22 @@ export async function POST(
       }
     }
 
-    // 执行状态转换（包括新动作: receive_sample, request_handover, accept_handover,
-    // start_identification, complete_identification, submit_report, start_material_prep）
+    // ============================================
+    // 构建 transition options
+    // ============================================
+    const transitionOptions: TransitionOptions = {}
+    if (reason) transitionOptions.reason = reason
+    if (terminationReason) transitionOptions.terminationReason = terminationReason
+
+    // ============================================
+    // 执行状态转换
+    // ============================================
     const result = await transition(
       id,
       action,
       payload.userId,
       payload.name,
-      reason
+      transitionOptions,
     )
 
     if (!result.success) {
@@ -286,7 +310,6 @@ export async function POST(
     }
 
     // 记录审计日志
-    // 查询批次编号用于 targetBatchNo
     const batchForLog = await db.batch.findUnique({ where: { id }, select: { batchNo: true } })
     await createAuditLog({
       eventType: 'BATCH_STATUS_CHANGED',
@@ -301,6 +324,7 @@ export async function POST(
         action,
         statusLabel: getStatusLabel(result.newState),
         ...(reason ? { reason } : {}),
+        ...(terminationReason ? { terminationReason } : {}),
       },
     })
 
