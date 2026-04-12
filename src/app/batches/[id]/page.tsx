@@ -41,12 +41,14 @@ import {
   CheckCircle2,
 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
 import { GenericTaskList } from '@/components/ebpr/generic-task-list'
 import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
 import { ProductLineBadge } from '@/components/shared/product-line-badge'
+import { BatchReassignDialog } from '@/components/batches/batch-reassign-dialog'
 import { AssignTaskDialog } from '@/components/batches/assign-task-dialog'
 
 // ============================================
@@ -78,6 +80,11 @@ interface BatchDetail {
   createdByName: string
   createdAt: string
   updatedAt: string
+  // v3.0 pre-assignment
+  productionOperatorId?: string | null
+  productionOperatorName?: string | null
+  qcOperatorId?: string | null
+  qcOperatorName?: string | null
 }
 
 interface QcRecord {
@@ -444,6 +451,11 @@ export default function BatchDetailPage({
   // Assign task dialog
   const [assignDialog, setAssignDialog] = useState({ open: false, taskId: '', taskName: '', productId: '' })
 
+  // Batch reassign dialog (v3.0)
+  const [reassignDialog, setReassignDialog] = useState(false)
+  const { user } = useAuthStore()
+  const isSupervisorOrAdmin = user?.roles?.some((r) => r === 'SUPERVISOR' || r === 'ADMIN')
+
   const fetchBatchDetail = useCallback(async () => {
     try {
       const res = await authFetch(`/api/batches/${id}`)
@@ -784,6 +796,40 @@ export default function BatchDetailPage({
                     value={`${totalConsumedVials} ${batch.unit}`}
                   />
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Assignment Info (v3.0) */}
+            <Card>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                    <User className="h-4 w-4 text-primary" />
+                    指派信息
+                  </CardTitle>
+                  {isSupervisorOrAdmin && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs"
+                      onClick={() => setReassignDialog(true)}
+                    >
+                      重新指派
+                    </Button>
+                  )}
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-0">
+                <InfoRow
+                  icon={User}
+                  label="生产操作员"
+                  value={batch.productionOperatorName}
+                />
+                <InfoRow
+                  icon={ClipboardCheck}
+                  label="质检员"
+                  value={batch.qcOperatorName}
+                />
               </CardContent>
             </Card>
 
@@ -1128,6 +1174,22 @@ export default function BatchDetailPage({
         taskName={assignDialog.taskName}
         productId={assignDialog.productId}
         onSuccess={handleAssignTask}
+      />
+
+      {/* ============================================ */}
+      {/* Batch Reassign Dialog (v3.0) */}
+      {/* ============================================ */}
+      <BatchReassignDialog
+        open={reassignDialog}
+        onOpenChange={setReassignDialog}
+        batchId={id}
+        batchNo={batch.batchNo}
+        productId={batch.productId}
+        currentProductionOperatorId={batch.productionOperatorId}
+        currentProductionOperatorName={batch.productionOperatorName}
+        currentQcOperatorId={batch.qcOperatorId}
+        currentQcOperatorName={batch.qcOperatorName}
+        onSuccess={handleProductionUpdate}
       />
 
       {/* ============================================ */}

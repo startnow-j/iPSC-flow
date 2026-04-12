@@ -1,0 +1,184 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canManage } from '@/lib/roles'
+import { createAuditLog } from '@/lib/services/audit-log'
+import { db } from '@/lib/db'
+
+// ============================================
+// PATCH /api/batches/[id]/reassign — 批次级重新指派
+// SUPERVISOR/ADMIN 可修改批次的预指派人员
+// 四眼原则：生产员 ≠ 质检员
+// 自动更新所有未完成任务的 assigneeId
+// ============================================
+export async function PATCH(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    // 认证检查
+    const token = getTokenFromRequest(request)
+    if (!token) {
+      return NextResponse.json({ error: '未登录' }, { status: 401 })
+    }
+    const payload = await verifyToken(token)
+    if (!payload) {
+      return NextResponse.json({ error: '登录已过期，请重新登录' }, { status: 401 })
+    }
+
+    const { id } = await params
+    const body = await request.json()
+    const {
+      productionOperatorId,
+      productionOperatorName,
+      qcOperatorId,
+      qcOperatorName,
+    } = body
+
+    // 至少提供一个人员变更
+    if (!productionOperatorId && !qcOperatorId) {
+      return NextResponse.json(
+        { error: '请至少提供一个要变更的指派人员' },
+        { status: 400 }
+      )
+    }
+
+    // 查询批次
+    const batch = await db.batch.findUnique({
+      where: { id },
+      select: {
+        id: true,
+        batchNo: true,
+        productLine: true,
+        productId: true,
+        productionOperatorId: true,
+        productionOperatorName: true,
+        qcOperatorId: true,
+        qcOperatorName: true,
+      },
+    })
+
+    if (!batch) {
+      return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    // 权限检查：SUPERVISOR/ADMIN
+    const roles = getRolesFromPayload(payload)
+    const userWithPermissions = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        productLines: { select: { productLine: true } },
+      },
+    })
+    const userProductLines = userWithPermissions?.productLines.map(pl => pl.productLine) || []
+    if (!canManage(roles, userProductLines, batch.productLine as string, ['SUPERVISOR', 'ADMIN'])) {
+      return NextResponse.json({ error: '无权限修改指派信息' }, { status: 403 })
+    }
+
+    // 四眼原则校验
+    const newProdId = productionOperatorId ?? batch.productionOperatorId
+    const newQcId = qcOperatorId ?? batch.qcOperatorId
+    if (newProdId && newQcId && newProdId === newQcId) {
+      return NextResponse.json(
+        { error: '四眼原则：生产操作员和质检员不能是同一人' },
+        { status: 400 }
+      )
+    }
+
+    // 构建更新数据
+    const updateData: Record<string, unknown> = {}
+    if (productionOperatorId !== undefined) {
+      updateData.productionOperatorId = productionOperatorId || null
+      updateData.productionOperatorName = productionOperatorName || null
+    }
+    if (qcOperatorId !== undefined) {
+      updateData.qcOperatorId = qcOperatorId || null
+      updateData.qcOperatorName = qcOperatorName || null
+    }
+
+    // 记录变更前快照
+    const dataBefore = {
+      productionOperatorId: batch.productionOperatorId,
+      productionOperatorName: batch.productionOperatorName,
+      qcOperatorId: batch.qcOperatorId,
+      qcOperatorName: batch.qcOperatorName,
+    }
+
+    // 更新批次指派信息
+    await db.batch.update({
+      where: { id },
+      data: updateData,
+    })
+
+    // 更新所有未完成任务(PENDING/IN_PROGRESS)的 assigneeId
+    // 仅当生产操作员发生变更时更新
+    if (productionOperatorId !== undefined) {
+      const updatedCount = await db.productionTask.updateMany({
+        where: {
+          batchId: id,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+        },
+        data: {
+          assigneeId: productionOperatorId || null,
+          assigneeName: productionOperatorName || null,
+        },
+      })
+
+      if (updatedCount.count > 0) {
+        // 记录任务级更新的审计日志
+        const pendingTasks = await db.productionTask.findMany({
+          where: {
+            batchId: id,
+            status: { in: ['PENDING', 'IN_PROGRESS'] },
+          },
+          select: { id: true, taskCode: true },
+        })
+
+        for (const task of pendingTasks) {
+          await createAuditLog({
+            eventType: 'TASK_UPDATED',
+            targetType: 'TASK',
+            targetId: task.id,
+            targetBatchNo: batch.batchNo,
+            operatorId: payload.userId,
+            operatorName: payload.name,
+            dataBefore: {
+              taskCode: task.taskCode,
+              assigneeId: batch.productionOperatorId,
+              assigneeName: batch.productionOperatorName,
+            },
+            dataAfter: {
+              taskCode: task.taskCode,
+              assigneeId: productionOperatorId,
+              assigneeName: productionOperatorName,
+            },
+          })
+        }
+      }
+    }
+
+    // 记录审计日志
+    await createAuditLog({
+      eventType: 'BATCH_UPDATED',
+      targetType: 'BATCH',
+      targetId: id,
+      targetBatchNo: batch.batchNo,
+      operatorId: payload.userId,
+      operatorName: payload.name,
+      dataBefore,
+      dataAfter: updateData,
+    })
+
+    // 获取更新后的批次
+    const updatedBatch = await db.batch.findUnique({
+      where: { id },
+    })
+
+    return NextResponse.json({
+      batch: updatedBatch,
+      message: '指派信息已更新',
+    })
+  } catch (error) {
+    console.error('PATCH /api/batches/[id]/reassign error:', error)
+    return NextResponse.json({ error: '服务器错误' }, { status: 500 })
+  }
+}

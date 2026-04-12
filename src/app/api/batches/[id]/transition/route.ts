@@ -51,7 +51,15 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { action, reason, terminationReason } = body
+    const {
+      action,
+      reason,
+      terminationReason,
+      productionOperatorId,
+      productionOperatorName,
+      qcOperatorId,
+      qcOperatorName,
+    } = body
 
     if (!action) {
       return NextResponse.json({ error: '缺少 action 参数' }, { status: 400 })
@@ -62,6 +70,16 @@ export async function POST(
     // ============================================
     if (action === 'scrap' && !reason) {
       return NextResponse.json({ error: '报废操作必须提供原因（reason）' }, { status: 400 })
+    }
+
+    // ============================================
+    // v3.0: 四眼原则校验 — 仅在提供指派人员时校验
+    // ============================================
+    if (productionOperatorId && qcOperatorId && productionOperatorId === qcOperatorId) {
+      return NextResponse.json(
+        { error: '四眼原则：生产操作员和质检员不能是同一人' },
+        { status: 400 }
+      )
     }
 
     // ============================================
@@ -173,8 +191,59 @@ export async function POST(
     }
 
     // ============================================
+    // v3.0: 预指派人员更新（start_production / start_material_prep 时可选）
+    // ============================================
+    if ((action === 'start_production' || action === 'start_material_prep') &&
+        (productionOperatorId || qcOperatorId)) {
+      const batchForAssign = await db.batch.findUnique({
+        where: { id },
+        select: {
+          batchNo: true,
+          productionOperatorId: true,
+          productionOperatorName: true,
+          qcOperatorId: true,
+          qcOperatorName: true,
+        },
+      })
+
+      if (batchForAssign) {
+        const assignUpdateData: Record<string, unknown> = {}
+        if (productionOperatorId) {
+          assignUpdateData.productionOperatorId = productionOperatorId
+          assignUpdateData.productionOperatorName = productionOperatorName || null
+        }
+        if (qcOperatorId) {
+          assignUpdateData.qcOperatorId = qcOperatorId
+          assignUpdateData.qcOperatorName = qcOperatorName || null
+        }
+
+        if (Object.keys(assignUpdateData).length > 0) {
+          await db.batch.update({ where: { id }, data: assignUpdateData })
+
+          // 记录审计日志
+          await createAuditLog({
+            eventType: 'BATCH_UPDATED',
+            targetType: 'BATCH',
+            targetId: id,
+            targetBatchNo: batchForAssign.batchNo,
+            operatorId: payload.userId,
+            operatorName: payload.name,
+            dataBefore: {
+              productionOperatorId: batchForAssign.productionOperatorId,
+              productionOperatorName: batchForAssign.productionOperatorName,
+              qcOperatorId: batchForAssign.qcOperatorId,
+              qcOperatorName: batchForAssign.qcOperatorName,
+            },
+            dataAfter: assignUpdateData,
+          })
+        }
+      }
+    }
+
+    // ============================================
     // 基于任务模板的自动任务创建
     // 支持 start_production / start_material_prep / start_identification
+    // v3.0: 创建任务时自动继承 batch.productionOperatorId
     // ============================================
     if (action === 'start_production' || action === 'start_material_prep' || action === 'start_identification') {
       const batch = await db.batch.findUnique({
@@ -197,8 +266,8 @@ export async function POST(
               sequenceNo: t.sequenceNo,
               stepGroup: t.stepGroup || null,
               status: 'PENDING' as const,
-              assigneeId: null as null,
-              assigneeName: null as null,
+              assigneeId: batch.productionOperatorId || null,
+              assigneeName: batch.productionOperatorName || null,
             }))
 
             await db.productionTask.createMany({ data: tasksData })
@@ -254,8 +323,8 @@ export async function POST(
                     sequenceNo: maxSeq + idx + 1,
                     stepGroup: 'IDENTIFICATION' as const,
                     status: 'PENDING' as const,
-                    assigneeId: null as null,
-                    assigneeName: null as null,
+                    assigneeId: batch.productionOperatorId || null,
+                    assigneeName: batch.productionOperatorName || null,
                   }
                 })
 

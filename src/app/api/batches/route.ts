@@ -134,6 +134,10 @@ export async function POST(request: NextRequest) {
       seedPassage,
       orderNo,
       identificationRequirements,
+      productionOperatorId,
+      productionOperatorName,
+      qcOperatorId,
+      qcOperatorName,
     } = body
 
     // 校验
@@ -164,6 +168,16 @@ export async function POST(request: NextRequest) {
     if (!product) {
       return NextResponse.json(
         { error: `产品不存在` },
+        { status: 400 }
+      )
+    }
+
+    // ============================================
+    // 四眼原则校验：生产员 ≠ 质检员
+    // ============================================
+    if (productionOperatorId && qcOperatorId && productionOperatorId === qcOperatorId) {
+      return NextResponse.json(
+        { error: '四眼原则：生产操作员和质检员不能是同一人' },
         { status: 400 }
       )
     }
@@ -247,6 +261,11 @@ export async function POST(request: NextRequest) {
           : '[]',
         createdBy: payload.userId,
         createdByName: payload.name,
+        // 预指派人员（v3.0）
+        productionOperatorId: productionOperatorId || null,
+        productionOperatorName: productionOperatorName || null,
+        qcOperatorId: qcOperatorId || null,
+        qcOperatorName: qcOperatorName || null,
       },
     })
 
@@ -266,6 +285,10 @@ export async function POST(request: NextRequest) {
         orderNo: batch.orderNo,
         seedBatchNo: batch.seedBatchNo,
         seedPassage: batch.seedPassage,
+        productionOperatorId: batch.productionOperatorId,
+        productionOperatorName: batch.productionOperatorName,
+        qcOperatorId: batch.qcOperatorId,
+        qcOperatorName: batch.qcOperatorName,
       },
     })
 

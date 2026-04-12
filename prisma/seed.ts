@@ -267,6 +267,55 @@ async function main() {
   console.log(`  User-Product Lines: ${USER_PRODUCT_LINES.length} 条归属`)
   console.log(`  User-Product Roles: ${USER_PRODUCT_ROLES.length} 条关联`)
   console.log('  Default password: 123456')
+
+  // ============================================
+  // 3A.2: Create a test batch with pre-assignment
+  // ============================================
+  console.log('\n  ── 测试批次（预指派） ──')
+  const adminUser = await db.user.findUnique({ where: { email: 'admin@ipsc.com' } })
+  const operatorUser = await db.user.findUnique({ where: { email: 'operator@ipsc.com' } })
+  const qcUser = await db.user.findUnique({ where: { email: 'qc@ipsc.com' } })
+  const ipscProduct = await db.product.findUnique({ where: { productCode: 'IPSC-WT-001' } })
+
+  if (adminUser && operatorUser && qcUser && ipscProduct) {
+    const now = new Date()
+    const dateStr =
+      String(now.getFullYear()).slice(-2) +
+      String(now.getMonth() + 1).padStart(2, '0') +
+      String(now.getDate()).padStart(2, '0')
+
+    const testBatchNo = `IPSC-${dateStr}-001`
+
+    try {
+      await db.batch.create({
+        data: {
+          batchNo: testBatchNo,
+          productCode: ipscProduct.productCode,
+          productName: ipscProduct.productName,
+          productId: ipscProduct.id,
+          productLine: 'CELL_PRODUCT',
+          specification: ipscProduct.specification,
+          unit: ipscProduct.unit,
+          status: 'NEW',
+          plannedQuantity: 10,
+          seedBatchNo: 'IPSC-WSB-2601-001',
+          seedPassage: 'P3',
+          currentPassage: 'P3',
+          createdBy: adminUser.id,
+          createdByName: adminUser.name,
+          // v3.0 预指派
+          productionOperatorId: operatorUser.id,
+          productionOperatorName: operatorUser.name,
+          qcOperatorId: qcUser.id,
+          qcOperatorName: qcUser.name,
+        },
+      })
+      console.log(`    ✓ 测试批次 ${testBatchNo}（生产员: ${operatorUser.name}, 质检员: ${qcUser.name}）`)
+    } catch {
+      // Batch may already exist (idempotent)
+      console.log(`    ⚭ 测试批次 ${testBatchNo} 已存在，跳过`)
+    }
+  }
 }
 
 main()

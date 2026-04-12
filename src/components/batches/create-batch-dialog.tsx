@@ -30,7 +30,7 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IDENTIFICATION_OPTIONS, DEFAULT_IDENTIFICATION_REQUIREMENTS } from '@/lib/services/task-templates'
-import { FlaskConical, Loader2, ShoppingCart, ClipboardCheck } from 'lucide-react'
+import { FlaskConical, Loader2, ShoppingCart, ClipboardCheck, User, ShieldCheck, AlertTriangle } from 'lucide-react'
 
 interface Product {
   id: string
@@ -39,6 +39,13 @@ interface Product {
   specification: string
   unit: string
   productLine?: string
+}
+
+interface AvailableUser {
+  id: string
+  name: string
+  email: string
+  roles: string[]
 }
 
 // 产品线显示顺序
@@ -73,6 +80,13 @@ export function CreateBatchDialog({
   const [plannedEndDate, setPlannedEndDate] = useState('')
   const [orderNo, setOrderNo] = useState('') // 订单号（仅服务项目）
   const [identificationRequirements, setIdentificationRequirements] = useState<string[]>([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
+
+  // Pre-assignment state (v3.0)
+  const [operators, setOperators] = useState<AvailableUser[]>([])
+  const [qcUsers, setQcUsers] = useState<AvailableUser[]>([])
+  const [assignLoading, setAssignLoading] = useState(false)
+  const [selectedOperatorId, setSelectedOperatorId] = useState('')
+  const [selectedQcId, setSelectedQcId] = useState('')
 
   // Derive selected product
   const selectedProduct = products.find((p) => p.productCode === productCode)
@@ -137,6 +151,37 @@ export function CreateBatchDialog({
     }
   }, [defaultProductLine])
 
+  // Fetch available users when product is selected
+  useEffect(() => {
+    if (!open || !selectedProduct) return
+    setAssignLoading(true)
+    setSelectedOperatorId('')
+    setSelectedQcId('')
+
+    const fetchUsers = async () => {
+      try {
+        const [opRes, qcRes] = await Promise.all([
+          authFetch(`/api/product-roles/available-users?productId=${selectedProduct.id}&role=operator`),
+          authFetch(`/api/product-roles/available-users?productId=${selectedProduct.id}&role=qc`),
+        ])
+        if (opRes.ok) {
+          const opData = await opRes.json()
+          setOperators(opData.users || [])
+        }
+        if (qcRes.ok) {
+          const qcData = await qcRes.json()
+          setQcUsers(qcData.users || [])
+        }
+      } catch {
+        // Silently fail — assignment is optional
+      } finally {
+        setAssignLoading(false)
+      }
+    }
+
+    fetchUsers()
+  }, [open, selectedProduct?.id])
+
   useEffect(() => {
     if (open) {
       fetchProducts()
@@ -151,6 +196,10 @@ export function CreateBatchDialog({
     setPlannedEndDate('')
     setOrderNo('')
     setIdentificationRequirements([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
+    setSelectedOperatorId('')
+    setSelectedQcId('')
+    setOperators([])
+    setQcUsers([])
     setError('')
   }
 
@@ -180,6 +229,17 @@ export function CreateBatchDialog({
       // Add orderNo for SERVICE products
       if (isServiceProduct && orderNo.trim()) {
         body.orderNo = orderNo.trim()
+      }
+      // Pre-assignment (v3.0)
+      if (selectedOperatorId) {
+        body.productionOperatorId = selectedOperatorId
+        const op = operators.find(u => u.id === selectedOperatorId)
+        if (op) body.productionOperatorName = op.name
+      }
+      if (selectedQcId) {
+        body.qcOperatorId = selectedQcId
+        const qc = qcUsers.find(u => u.id === selectedQcId)
+        if (qc) body.qcOperatorName = qc.name
       }
       // Add identificationRequirements for SERVICE products
       if (isServiceProduct) {
@@ -360,6 +420,81 @@ export function CreateBatchDialog({
 
           <Separator />
 
+          {/* Pre-assignment (v3.0) — shown when product is selected */}
+          {selectedProduct && (
+            <div className="space-y-3">
+              <Label className="flex items-center gap-1.5">
+                <User className="h-3.5 w-3.5" />
+                预指派人员
+                <span className="text-xs text-muted-foreground font-normal">（可选）</span>
+              </Label>
+
+              {/* Four-eye warning */}
+              {selectedOperatorId && selectedQcId && selectedOperatorId === selectedQcId && (
+                <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  四眼原则：生产操作员和质检员不能是同一人
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-3">
+                {/* Production Operator */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <User className="h-3 w-3" />
+                    生产操作员
+                  </Label>
+                  {assignLoading ? (
+                    <Skeleton className="h-9 w-full" />
+                  ) : (
+                    <Select value={selectedOperatorId} onValueChange={setSelectedOperatorId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择操作员" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {operators.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无可用操作员</div>
+                        ) : operators.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+
+                {/* QC Operator */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground flex items-center gap-1">
+                    <ShieldCheck className="h-3 w-3" />
+                    质检员
+                  </Label>
+                  {assignLoading ? (
+                    <Skeleton className="h-9 w-full" />
+                  ) : (
+                    <Select value={selectedQcId} onValueChange={setSelectedQcId}>
+                      <SelectTrigger className="w-full">
+                        <SelectValue placeholder="选择质检员" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {qcUsers.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">暂无可用质检员</div>
+                        ) : qcUsers.map(u => (
+                          <SelectItem key={u.id} value={u.id}>{u.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
+                </div>
+              </div>
+
+              <p className="text-[11px] text-muted-foreground/70">
+                可选填，SUPERVISOR 后续可在批次详情页重新指派
+              </p>
+            </div>
+          )}
+
+          <Separator />
+
           {/* Planned Quantity */}
           <div className="space-y-2">
             <Label htmlFor="quantity">计划数量</Label>
@@ -421,7 +556,7 @@ export function CreateBatchDialog({
           <Button variant="outline" onClick={() => handleOpenChange(false)}>
             取消
           </Button>
-          <Button onClick={handleSubmit} disabled={submitting || !productCode}>
+          <Button onClick={handleSubmit} disabled={submitting || !productCode || (selectedOperatorId === selectedQcId && !!selectedOperatorId)}>
             {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             确认创建
           </Button>

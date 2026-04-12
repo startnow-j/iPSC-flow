@@ -2131,3 +2131,85 @@ Stage Summary:
 - 前端组件适配（Phase 3A.3）
 - seed.ts 修改
 - 指派机制 UI（Phase 3A.2）
+
+---
+Task ID: 3A.2
+Agent: Main Agent
+Task: Phase 3A.2 — 批次级预指派机制
+
+Work Log:
+- 读取 9 个参考文件了解现有代码上下文
+- 分析 Batch 表已有 productionOperatorId/Name, qcOperatorId/Name 字段（3A.1 已添加）
+- 分析现有认证模式（getTokenFromRequest + verifyToken + getRolesFromPayload）
+
+**1. POST /api/batches — 创建批次时可选预指派**
+- 新增请求体字段：productionOperatorId, productionOperatorName, qcOperatorId, qcOperatorName
+- 四眼原则校验：productionOperatorId !== qcOperatorId（同时指定时）
+- 创建批次时保存预指派人员到 Batch 表
+- 审计日志记录预指派信息
+
+**2. POST /api/batches/[id]/transition — 开始生产时可指派**
+- 新增请求体字段（同上）
+- start_production / start_material_prep 时可选更新指派人员
+- 四眼原则校验
+- 创建任务时 assigneeId 自动继承 batch.productionOperatorId（含 start_identification 鉴定任务）
+- 指派变更记录审计日志
+
+**3. PATCH /api/batches/[id]/reassign — 转交机制（新 API）**
+- 新建 `src/app/api/batches/[id]/reassign/route.ts`
+- SUPERVISOR/ADMIN 可修改批次预指派人员
+- 四眼原则校验（含已有人+新指定人员的组合检查）
+- 更新所有未完成任务（PENDING/IN_PROGRESS）的 assigneeId 为新生产员
+- 每个被更新任务记录审计日志
+- 批次级审计日志记录变更前后快照
+
+**4. GET /api/product-roles/available-users — 新增 role 查询参数**
+- 新增 `role` 查询参数（operator/qc），用于区分查询生产员还是质检员
+- 过滤逻辑：全局角色 + 产品级角色双重过滤
+- 向后兼容：不传 role 时返回全部操作类用户
+
+**5. create-batch-dialog.tsx — 新建批次对话框增加指派**
+- 产品选择后显示"预指派人员"区域
+- 两个下拉框：生产操作员（role=operator）和质检员（role=qc）
+- 数据来源：`/api/product-roles/available-users?productId=xxx&role=operator`
+- 四眼原则：选择相同人员时显示警告（amber 边框 + AlertTriangle 图标）
+- 提交按钮在违反四眼原则时禁用
+- 提示文案：可选填，SUPERVISOR 后续可再指派
+
+**6. batches/[id]/page.tsx — 批次详情页显示指派信息**
+- BatchDetail 接口新增 productionOperatorId/Name, qcOperatorId/Name
+- 概览 Tab 新增"指派信息"卡片（在基础信息之后、种子信息之前）
+- 显示生产操作员和质检员姓名
+- SUPERVISOR/ADMIN 可看到"重新指派"按钮（ghost 样式）
+- 集成 BatchReassignDialog 组件
+- 引入 useAuthStore 获取当前用户角色判断权限
+
+**7. batch-reassign-dialog.tsx — 批次级指派对话框（新组件）**
+- 新建 `src/components/batches/batch-reassign-dialog.tsx`
+- 两个下拉框：生产操作员和质检员，支持"不指定"选项
+- 预填充当前指派人员
+- 显示当前指派信息提示框
+- 四眼原则警告
+- 提交调用 PATCH /api/batches/[id]/reassign
+- toast 通知反馈
+
+**8. prisma/seed.ts — 测试数据**
+- 新增创建一个带预指派的测试批次（IPSC-{YYMMDD}-001）
+- 生产员：张三（operator@ipsc.com），质检员：李质检（qc@ipsc.com）
+- 幂等处理：批次编号冲突时跳过
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，本任务零新增）
+- Build 编译成功，所有 API 路由和页面正常生成
+
+Stage Summary:
+- 新增文件：src/app/api/batches/[id]/reassign/route.ts（转交 API）
+- 新增文件：src/components/batches/batch-reassign-dialog.tsx（指派对话框）
+- 修改文件：src/app/api/batches/route.ts（创建批次 + 预指派）
+- 修改文件：src/app/api/batches/[id]/transition/route.ts（开始生产 + 预指派 + 任务继承）
+- 修改文件：src/app/api/product-roles/available-users/route.ts（role 查询参数）
+- 修改文件：src/components/batches/create-batch-dialog.tsx（预指派 UI）
+- 修改文件：src/app/batches/[id]/page.tsx（指派信息卡片 + 重新指派）
+- 修改文件：prisma/seed.ts（测试批次 + 预指派数据）
+- 指派机制：批次级预指派 → 任务自动继承 → 转交更新未完成任务
+- 四眼原则：创建批次/开始生产/转交 三个入口均有校验
+- 审计追踪：所有指派变更均有审计日志

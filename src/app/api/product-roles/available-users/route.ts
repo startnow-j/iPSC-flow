@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
     }
 
     const productId = request.nextUrl.searchParams.get('productId')
+    const role = request.nextUrl.searchParams.get('role') // 'operator' | 'qc' — v3.0 预指派过滤
 
     // Determine which product lines the requestor can manage
     let manageableProductLines: string[] = []
@@ -116,11 +117,20 @@ export async function GET(request: NextRequest) {
       // 1. Has at least one OPERATIONAL global role (OPERATOR or QC)
       // 2. AND has a UserProductRole record for this specific product with OPERATOR/QC role
       //    OR has a management global role (ADMIN/SUPERVISOR/QA) — they manage all products in their line
+      // 3. v3.0: Optional role filter (operator → only show OPERATOR users, qc → only show QC users)
       const filteredUsers = usersInLine.filter((u) => {
         const parsedGlobalRoles = parseRoles(u.roles, u.role)
 
         // Must have at least one operational role in global roles
         if (!parsedGlobalRoles.some((r) => ['OPERATOR', 'QC'].includes(r))) {
+          return false
+        }
+
+        // v3.0: role filter
+        if (role === 'operator' && !parsedGlobalRoles.some((r) => r === 'OPERATOR')) {
+          return false
+        }
+        if (role === 'qc' && !parsedGlobalRoles.some((r) => r === 'QC')) {
           return false
         }
 
@@ -132,7 +142,20 @@ export async function GET(request: NextRequest) {
 
         // Operational users: must have explicit UserProductRole for this product
         const productRoles = userProductRolesMap.get(u.id) || []
-        return productRoles.some((r) => ['OPERATOR', 'QC'].includes(r))
+        const hasProductRole = productRoles.some((r) => ['OPERATOR', 'QC'].includes(r))
+        if (!hasProductRole) {
+          return false
+        }
+
+        // v3.0: role filter on product-level roles too
+        if (role === 'operator' && !productRoles.some((r) => r === 'OPERATOR')) {
+          return false
+        }
+        if (role === 'qc' && !productRoles.some((r) => r === 'QC')) {
+          return false
+        }
+
+        return true
       })
 
       const formattedUsers = filteredUsers.map((u) => ({
