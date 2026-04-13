@@ -120,6 +120,39 @@ export function getTaskTemplates(
 }
 
 /**
+ * 判断 CELL_PRODUCT 批次是否需要 DIFFERENTIATION 步骤
+ *
+ * 判断依据（多信号源，容错设计）:
+ *   1. 产品 category 匹配分化类标识（NPC/CM/DIFF_KIT/DIFF_SERVICE）
+ *   2. 批次编号前缀匹配（兼容 category 未设置的旧数据）
+ *
+ * @param category - 产品分类（可选）
+ * @param batchNo - 批次编号（可选，用于回退判断）
+ * @returns true 表示需要 DIFFERENTIATION 步骤
+ */
+export function shouldIncludeDifferentiation(
+  category?: string | null,
+  batchNo?: string | null,
+): boolean {
+  const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+
+  // 1. 优先通过 category 判断
+  if (category && diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+    return true
+  }
+
+  // 2. 回退：通过批次编号前缀判断（兼容旧数据）
+  if (batchNo) {
+    const prefix = batchNo.split('-')[0]?.toUpperCase()
+    if (prefix && diffCategories.includes(prefix)) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
  * 鉴定任务定义映射
  * 用于 SERVICE 产品线的 start_identification 动作
  * 根据 batch.identificationRequirements (JSON 数组) 动态创建鉴定任务

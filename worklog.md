@@ -2708,3 +2708,32 @@ Stage Summary:
 - 统一操作员显示逻辑：优先显示任务指派操作员（assigneeName），回退到当前登录用户（user.name）
 - 符合 GMP 规范：表单中显示的应为被指派执行该任务的操作员
 - 代码零新增 ESLint error/warning
+---
+Task ID: Bugfix-1
+Agent: Main Agent
+Task: 修复待办显示问题 + 分化诱导 DIFFERENTIATION 指派遗漏
+
+Work Log:
+- 用户报告刘六待办中显示已放行批次 NPC-260411-002，张三待办中 NPC-260413-001 批次同时显示4个任务步骤
+- 排查 my-tasks API（src/app/api/tasks/my-tasks/route.ts），发现两个根因：
+  1. Prisma 查询未过滤终态批次（RELEASED/SCRAPPED/TERMINATED）
+  2. toExecute 列表返回所有 PENDING/IN_PROGRESS 任务，无前驱步骤完成检查
+- 修复 my-tasks API：
+  - 添加 batch.status notIn 终态过滤
+  - 添加按批次筛选当前可执行任务逻辑（sequenceNo 最小的未完成任务）
+- 修复分化诱导 DIFFERENTIATION 指派遗漏问题：
+  - 根因：transition/reassign/tasks 三个路由中的 DIFFERENTIATION 过滤逻辑仅检查 product.category，当 category 为 null 时（旧数据），DIFFERENTIATION 步骤不会被创建
+  - 在 task-templates.ts 新增 shouldIncludeDifferentiation(category, batchNo) 辅助函数
+  - 支持两个信号源判断：(1) product.category 匹配分化类 (2) 批次编号前缀回退判断（如 NPC-xxx）
+  - 更新 transition/route.ts、reassign/route.ts、tasks/route.ts 统一使用新函数
+- ESLint 检查通过（仅预存 generate-plan.js 错误）
+- Dev server 编译成功
+
+Stage Summary:
+- 修改文件：src/app/api/tasks/my-tasks/route.ts（过滤终态批次 + 按步骤顺序筛选）
+- 修改文件：src/lib/services/task-templates.ts（新增 shouldIncludeDifferentiation 函数）
+- 修改文件：src/app/api/batches/[id]/transition/route.ts（使用 shouldIncludeDifferentiation）
+- 修改文件：src/app/api/batches/[id]/reassign/route.ts（使用 shouldIncludeDifferentiation）
+- 修改文件：src/app/api/batches/[id]/tasks/route.ts（使用 shouldIncludeDifferentiation）
+- 待办修复：已放行/已报废/已终止批次不再出现在待办列表；NPC 批次仅显示当前需要执行的步骤
+- DIFFERENTIATION 修复：通过批次编号前缀回退判断，兼容 category 未设置的旧数据

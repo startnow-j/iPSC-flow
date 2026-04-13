@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { canManage } from '@/lib/roles'
 import { createAuditLog } from '@/lib/services/audit-log'
-import { getTaskTemplates } from '@/lib/services/task-templates'
+import { getTaskTemplates, shouldIncludeDifferentiation } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
@@ -130,10 +130,10 @@ export async function PATCH(
       const templates = getTaskTemplates(productLine, 'start_production', category)
 
       if (templates && templates.length > 0) {
-        const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+        // v3.0 fix: 使用 shouldIncludeDifferentiation 统一判断（支持批次编号回退）
         let filteredTemplates = templates
         if (productLine === 'CELL_PRODUCT') {
-          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+          if (!shouldIncludeDifferentiation(category, batchForTaskRepair.batchNo)) {
             filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
           }
         }

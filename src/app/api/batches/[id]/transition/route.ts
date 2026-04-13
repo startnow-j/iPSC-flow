@@ -4,7 +4,7 @@ import { canManage, canOperate } from '@/lib/roles'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import type { TransitionOptions } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
-import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS, getTaskTemplates } from '@/lib/services/task-templates'
+import { TASK_TEMPLATES, IDENTIFICATION_TASK_DEFS, getTaskTemplates, shouldIncludeDifferentiation } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
@@ -260,10 +260,10 @@ export async function POST(
         const templates = getTaskTemplates(productLine, action, category)
 
         // CELL_PRODUCT: 纯 iPSC 扩增产品跳过 DIFFERENTIATION 步骤
+        // v3.0 fix: 使用 shouldIncludeDifferentiation 统一判断（支持批次编号回退）
         let filteredTemplates = templates
         if (filteredTemplates && productLine === 'CELL_PRODUCT') {
-          const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
-          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+          if (!shouldIncludeDifferentiation(category, batch.batchNo)) {
             filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
           }
         }

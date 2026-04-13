@@ -3,7 +3,7 @@ import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { validateProductionTask } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
-import { getTaskTemplates } from '@/lib/services/task-templates'
+import { getTaskTemplates, shouldIncludeDifferentiation } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 
 // ============================================
@@ -47,10 +47,10 @@ export async function GET(
       const templates = getTaskTemplates(productLine, action, category)
 
       if (templates && templates.length > 0) {
-        const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+        // v3.0 fix: 使用 shouldIncludeDifferentiation 统一判断（支持批次编号回退）
         let filteredTemplates = templates
         if (productLine === 'CELL_PRODUCT') {
-          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+          if (!shouldIncludeDifferentiation(category, batch.batchNo)) {
             filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
           }
         }
