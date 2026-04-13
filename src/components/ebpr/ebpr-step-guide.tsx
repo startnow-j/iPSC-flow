@@ -472,18 +472,22 @@ export function EbprStepGuide({
     seedPrepCompleted && expansionCompleted && differentiationCompleted && harvestCompleted
 
   // Compute pending phase tasks for assignment check
-  const pendingExpansionTasks = tasks.filter(
-    (t) => t.taskCode === 'EXPANSION' && (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+  const allExpansionTasks = tasks.filter((t) => t.taskCode === 'EXPANSION')
+  const pendingExpansionTasks = allExpansionTasks.filter(
+    (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
   const showExpansionForm =
+    allExpansionTasks.length > 0 &&
     pendingExpansionTasks.length === 0 &&
     getStepStatus('EXPANSION', tasks) !== 'completed'
 
-  const pendingDifferentiationTasks = tasks.filter(
-    (t) => t.taskCode === 'DIFFERENTIATION' && (t.status === 'PENDING' || t.status === 'IN_PROGRESS')
+  const allDifferentiationTasks = tasks.filter((t) => t.taskCode === 'DIFFERENTIATION')
+  const pendingDifferentiationTasks = allDifferentiationTasks.filter(
+    (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
   const showDifferentiationForm =
     showDifferentiation &&
+    allDifferentiationTasks.length > 0 &&
     pendingDifferentiationTasks.length === 0 &&
     getStepStatus('DIFFERENTIATION', tasks) !== 'completed'
 
@@ -524,7 +528,19 @@ export function EbprStepGuide({
             ))}
 
           {/* Expansion: show form or assignment cards */}
-          {showExpansionForm ? (
+          {allExpansionTasks.length === 0 && getStepStatus('EXPANSION', tasks) !== 'completed' ? (
+            <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+                  <UserPlus className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-base font-medium mb-1">等待指派</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+                  扩增培养任务尚未创建或尚未指派操作员。
+                </p>
+              </CardContent>
+            </Card>
+          ) : showExpansionForm ? (
             <ExpansionSection
               batch={batch}
               allTasks={tasks}
@@ -563,7 +579,19 @@ export function EbprStepGuide({
             ))}
 
           {/* Differentiation: show form or assignment cards */}
-          {showDifferentiationForm ? (
+          {allDifferentiationTasks.length === 0 && getStepStatus('DIFFERENTIATION', tasks) !== 'completed' ? (
+            <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+              <CardContent className="flex flex-col items-center justify-center py-10">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+                  <UserPlus className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                </div>
+                <h3 className="text-base font-medium mb-1">等待指派</h3>
+                <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
+                  分化诱导任务尚未创建或尚未指派操作员。
+                </p>
+              </CardContent>
+            </Card>
+          ) : showDifferentiationForm ? (
             <DifferentiationSection
               batch={batch}
               allTasks={tasks}
