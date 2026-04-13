@@ -2660,3 +2660,51 @@ Stage Summary:
   - src/components/ebpr/ebpr-step-guide.tsx (文案统一)
 - "提交质检"按钮现在改名为"完成生产"，且仅在生产任务全部完成时才显示
 - 同时覆盖了鉴定流程的"鉴定完成"按钮（complete_identification）
+
+---
+Task ID: 2
+Agent: Main Agent
+Task: 修复操作员显示不一致 — 种子复苏/收获冻存使用当前登录用户，应改为使用指派操作员
+
+Work Log:
+- 用户反馈：种子复苏和收获冻存页面的操作员字段显示当前登录用户（supervisor登录时显示supervisor，operator登录时显示operator），而扩增培养和分化诱导页面显示的是指派的操作员
+- 分析四个表单组件的代码，发现所有四个表单都使用 `user?.name`（当前登录用户）来显示操作员
+- 修复策略：操作员字段应优先显示任务的指派操作员（`assigneeName`），无指派时回退到当前登录用户
+- 修改文件：
+
+**1. seed-prep-form.tsx**
+- task 接口增加 `assigneeName: string | null`
+- 新增 `displayOperator = task.assigneeName || user?.name`
+- 操作员显示区域改用 `displayOperator`
+
+**2. harvest-form.tsx**
+- task 接口增加 `assigneeName: string | null`
+- 新增 `displayOperator = task.assigneeName || user?.name`
+- 操作员显示区域改用 `displayOperator`
+
+**3. expansion-form.tsx**
+- 接口新增 `assignedOperatorName?: string` prop
+- 新增 `displayOperator = assignedOperatorName || user?.name`
+- 操作员显示区域改用 `displayOperator`
+
+**4. differentiation-form.tsx**
+- 接口新增 `assignedOperatorName?: string` prop
+- 新增 `displayOperator = assignedOperatorName || user?.name`
+- 操作员显示区域改用 `displayOperator`
+
+**5. task-form-wrapper.tsx**
+- EXPANSION case: 从 task 和 allTasks 推导 assignedOperatorName，传递给 ExpansionForm
+- DIFFERENTIATION case: 从 task 和 allTasks 推导 assignedOperatorName，传递给 DifferentiationForm
+
+**6. ebpr-step-guide.tsx**
+- ExpansionSection: 从 allTasks 推导 assignedOperatorName，传递给 ExpansionForm
+- DifferentiationSection: 从 allTasks 推导 assignedOperatorName，传递给 DifferentiationForm
+
+- ESLint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：6 个（seed-prep-form、harvest-form、expansion-form、differentiation-form、task-form-wrapper、ebpr-step-guide）
+- 统一操作员显示逻辑：优先显示任务指派操作员（assigneeName），回退到当前登录用户（user.name）
+- 符合 GMP 规范：表单中显示的应为被指派执行该任务的操作员
+- 代码零新增 ESLint error/warning

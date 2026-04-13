@@ -39,6 +39,7 @@ interface ExpansionFormProps {
     createdAt: string
     assigneeName: string | null
   }>
+  assignedOperatorName?: string
   onSuccess: () => void
 }
 
@@ -138,10 +139,12 @@ function PassageHistory({
 export function ExpansionForm({
   batch,
   existingExpansions,
+  assignedOperatorName,
   onSuccess,
 }: ExpansionFormProps) {
   const { user } = useAuthStore()
   const [saving, setSaving] = useState(false)
+  const displayOperator = assignedOperatorName || user?.name
   const [passageDate, setPassageDate] = useState<string>(
     new Date().toISOString().split('T')[0]
   )
@@ -283,7 +286,7 @@ export function ExpansionForm({
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">操作员</Label>
-            <Input value={user?.name ?? ''} disabled className="bg-muted w-fit" />
+            <Input value={displayOperator ?? ''} disabled className="bg-muted w-fit" />
           </div>
 
           <div className="h-px bg-border" />

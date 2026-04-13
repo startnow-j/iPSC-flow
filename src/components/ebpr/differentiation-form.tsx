@@ -39,6 +39,7 @@ interface DifferentiationFormProps {
     createdAt: string
     assigneeName: string | null
   }>
+  assignedOperatorName?: string
   onSuccess: () => void
 }
 
@@ -147,10 +148,12 @@ function DifferentiationHistory({
 export function DifferentiationForm({
   batch,
   existingDifferentiations,
+  assignedOperatorName,
   onSuccess,
 }: DifferentiationFormProps) {
   const { user } = useAuthStore()
   const [saving, setSaving] = useState(false)
+  const displayOperator = assignedOperatorName || user?.name
   const [diffStage, setDiffStage] = useState<string>('')
   const [diffDate, setDiffDate] = useState<string>(
     new Date().toISOString().split('T')[0]
@@ -274,7 +277,7 @@ export function DifferentiationForm({
 
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">操作员</Label>
-            <Input value={user?.name ?? ''} disabled className="bg-muted w-fit" />
+            <Input value={displayOperator ?? ''} disabled className="bg-muted w-fit" />
           </div>
 
           <div className="h-px bg-border" />

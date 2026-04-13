@@ -29,6 +29,7 @@ interface SeedPrepFormProps {
     batchId: string
     taskCode: string
     status: string
+    assigneeName: string | null
     formData: Record<string, any> | null
   }
   batch: {
@@ -46,6 +47,7 @@ interface SeedPrepFormProps {
 export function SeedPrepForm({ task, batch, onSuccess }: SeedPrepFormProps) {
   const { user } = useAuthStore()
   const [saving, setSaving] = useState(false)
+  const displayOperator = task.assigneeName || user?.name
   const [recoveryTime, setRecoveryTime] = useState<string>(
     task.formData?.recovery_time?.toString() ?? ''
   )
@@ -145,7 +147,7 @@ export function SeedPrepForm({ task, batch, onSuccess }: SeedPrepFormProps) {
 
         <div className="space-y-1">
           <Label className="text-xs text-muted-foreground">操作员</Label>
-          <p className="text-sm font-medium">{user?.name ?? '-'}</p>
+          <p className="text-sm font-medium">{displayOperator ?? '-'}</p>
         </div>
 
         <div className="h-px bg-border" />
@@ -213,7 +215,7 @@ export function SeedPrepForm({ task, batch, onSuccess }: SeedPrepFormProps) {
 
           <div className="space-y-2">
             <Label>操作员</Label>
-            <Input value={user?.name ?? ''} disabled className="bg-muted" />
+            <Input value={displayOperator ?? ''} disabled className="bg-muted" />
           </div>
         </div>
 

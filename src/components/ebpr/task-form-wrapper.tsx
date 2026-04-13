@@ -114,10 +114,13 @@ export function TaskFormWrapper({
       const existingExpansions = allTasks.filter(
         (t) => t.taskCode === 'EXPANSION' && t.status === 'COMPLETED'
       )
+      // Derive assigned operator from any expansion task with assigneeName
+      const assignedOp = task.assigneeName || allTasks.find(t => t.assigneeName)?.assigneeName || null
       return (
         <ExpansionForm
           batch={batch}
           existingExpansions={existingExpansions}
+          assignedOperatorName={assignedOp}
           onSuccess={() => handleSuccess()}
         />
       )
@@ -128,10 +131,13 @@ export function TaskFormWrapper({
       const existingDifferentiations = allTasks.filter(
         (t) => t.taskCode === 'DIFFERENTIATION' && t.status === 'COMPLETED'
       )
+      // Derive assigned operator from any differentiation task with assigneeName
+      const assignedOp = task.assigneeName || allTasks.find(t => t.assigneeName)?.assigneeName || null
       return (
         <DifferentiationForm
           batch={batch}
           existingDifferentiations={existingDifferentiations}
+          assignedOperatorName={assignedOp}
           onSuccess={() => handleSuccess()}
         />
       )

@@ -1088,11 +1088,14 @@ function ExpansionSection({
   const completedExpansions = allTasks.filter(
     (t) => t.taskCode === 'EXPANSION' && t.status === 'COMPLETED'
   )
+  // Derive assigned operator from any task with assigneeName
+  const assignedOperatorName = allTasks.find(t => t.assigneeName)?.assigneeName || undefined
 
   return (
     <ExpansionForm
       batch={batch}
       existingExpansions={completedExpansions}
+      assignedOperatorName={assignedOperatorName}
       onSuccess={onTaskUpdated}
     />
   )
@@ -1114,11 +1117,14 @@ function DifferentiationSection({
   const completedDifferentiations = allTasks.filter(
     (t) => t.taskCode === 'DIFFERENTIATION' && t.status === 'COMPLETED'
   )
+  // Derive assigned operator from any task with assigneeName
+  const assignedOperatorName = allTasks.find(t => t.assigneeName)?.assigneeName || undefined
 
   return (
     <DifferentiationForm
       batch={batch}
       existingDifferentiations={completedDifferentiations}
+      assignedOperatorName={assignedOperatorName}
       onSuccess={onTaskUpdated}
     />
   )

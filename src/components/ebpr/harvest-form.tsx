@@ -22,6 +22,7 @@ interface HarvestFormProps {
     batchId: string
     taskCode: string
     status: string
+    assigneeName: string | null
     formData: Record<string, any> | null
   }
   batch: {
@@ -60,6 +61,7 @@ function parseVialSpec(spec: string): number | null {
 export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
   const { user } = useAuthStore()
   const [saving, setSaving] = useState(false)
+  const displayOperator = task.assigneeName || user?.name
   const [totalCells, setTotalCells] = useState<string>(
     task.formData?.total_cells?.toString() ?? ''
   )
@@ -184,7 +186,7 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">操作员</Label>
-            <p className="text-sm font-medium">{user?.name ?? '-'}</p>
+            <p className="text-sm font-medium">{displayOperator ?? '-'}</p>
           </div>
         </div>
 
