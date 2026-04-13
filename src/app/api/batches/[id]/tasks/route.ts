@@ -198,9 +198,13 @@ export async function POST(
 
     const config = taskConfig[resolvedTaskCode]
 
-    // 查询当前已有的同类任务数量
+    // 查询当前已有的同类已完成任务数量（排除 PENDING/IN_PROGRESS 模板任务）
     const existingTasks = await db.productionTask.findMany({
-      where: { batchId: id, taskCode: resolvedTaskCode },
+      where: {
+        batchId: id,
+        taskCode: resolvedTaskCode,
+        status: { in: ['COMPLETED', 'FAILED', 'REVIEWED'] },
+      },
       orderBy: { createdAt: 'asc' },
     })
 
