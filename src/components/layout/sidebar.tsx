@@ -47,7 +47,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Button } from '@/components/ui/button'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { BatchStatusOverview } from '@/components/batches/batch-status-overview'
+
 
 // Navigation items — Main
 const mainNavItems = [
@@ -224,16 +224,6 @@ export function AppSidebar() {
                 </SidebarMenuItem>
               ))}
             </SidebarMenu>
-          </SidebarGroupContent>
-        </SidebarGroup>
-
-        {/* Batch Status Overview */}
-        <SidebarGroup>
-          <SidebarGroupLabel>批次状态概览</SidebarGroupLabel>
-          <SidebarGroupContent>
-            <div className="px-2 py-1 group-data-[collapsible=icon]:hidden">
-              <BatchStatusOverview maxItems={6} />
-            </div>
           </SidebarGroupContent>
         </SidebarGroup>
 
