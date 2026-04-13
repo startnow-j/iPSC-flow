@@ -2757,3 +2757,25 @@ Stage Summary:
 - 修改文件：src/components/ebpr/ebpr-step-guide.tsx（auto-select 守卫 + pending 优先 + showForm 逻辑）
 - 修改文件：src/app/api/batches/[id]/tasks/route.ts（POST PENDING 清理 + GET auto-repair 清理）
 - 三个修复点协同工作：(1) 用户手动选择步骤不再被覆盖 (2) PENDING 模板任务不干扰轮次计数和表单显示 (3) 阶段型步骤支持多轮次持续添加
+
+---
+Task ID: 6
+Agent: Main Agent
+Task: 在远期开发计划中添加"产品级任务表单配置引擎"详细规划
+
+Work Log:
+- 与用户讨论确认：分化记录的"轮次"模式不适用于实际业务（不同分化协议阶段不同、操作不同、需要不同的表单字段）
+- 用户确认 Phase 1/2（临时改进）不需要开发，直接规划到 Phase 3（远期）
+- 在 docs/plans/流程重构实施计划-v3.0.md §7.1 新增完整的远期规划，包含：
+  - §7.1.1 核心概念（协议模板 → 阶段 → 字段的层次结构）
+  - §7.1.2 数据模型设计草案（ProtocolTemplate / ProtocolStage / ProtocolField / ReagentLibrary）
+  - §7.1.3 关键功能需求清单（10项，P0/P1/P2 优先级）
+  - §7.1.4 暂存机制设计（DRAFT 状态 + TaskDraftSnapshot 审计表）
+  - §7.1.5 前端动态表单引擎架构草案（DynamicFormRenderer）
+  - §7.1.6 实施路径建议（Phase 4A → 4B → 4C → 4D）
+  - §7.1.7 对现有系统的影响评估与迁移策略
+- 更新文档修订记录（v3.0++++）和最后更新日期
+
+Stage Summary:
+- 修改文件：docs/plans/流程重构实施计划-v3.0.md
+- 新增 §7.1 节约 240 行，涵盖动机、数据模型、功能需求、暂存机制、前端架构、实施路径、迁移策略
