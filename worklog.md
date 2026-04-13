@@ -2737,3 +2737,23 @@ Stage Summary:
 - 修改文件：src/app/api/batches/[id]/tasks/route.ts（使用 shouldIncludeDifferentiation）
 - 待办修复：已放行/已报废/已终止批次不再出现在待办列表；NPC 批次仅显示当前需要执行的步骤
 - DIFFERENTIATION 修复：通过批次编号前缀回退判断，兼容 category 未设置的旧数据
+
+---
+Task ID: 5
+Agent: Main Agent
+Task: 修复分化记录页面跳转错误 + 轮次偏移 bug
+
+Work Log:
+- 分析两个 bug 的根本原因：
+  1. **跳转到扩增培养**：ebpr-step-guide.tsx 中的 auto-select useEffect 在 tasks 变化时重新运行，如果扩增培养步骤有 IN_PROGRESS 任务会覆盖用户手动选择的分化诱导步骤
+  2. **轮次从第二轮开始**：POST 创建 COMPLETED 分化记录后，PENDING 模板任务未被清理，导致 existingDifferentiations 计数偏移
+- Fix 1: 在 auto-select useEffect 中增加 userSelectedRef 守卫，用户手动点击步骤后不再自动覆盖；同时优化 auto-select 逻辑优先选择 pending 步骤（而非回退到上一个 completed 步骤）
+- Fix 2: 在 POST /api/batches/[id]/tasks 中，创建阶段型任务（EXPANSION/DIFFERENTIATION/CLONE_PICKING/CLONE_SCREENING）的 COMPLETED 记录前，清理残留的 PENDING 模板任务
+- Fix 3: 在 GET /api/batches/[id]/tasks 的 auto-repair 中，增加阶段型任务的 orphaned PENDING 清理逻辑（兼容旧数据）
+- Fix 4: 更新 showExpansionForm/showDifferentiationForm 逻辑，移除 getStepStatus !== 'completed' 检查，允许阶段型步骤在已完成状态下仍显示表单以添加更多轮次
+- Lint 检查通过
+
+Stage Summary:
+- 修改文件：src/components/ebpr/ebpr-step-guide.tsx（auto-select 守卫 + pending 优先 + showForm 逻辑）
+- 修改文件：src/app/api/batches/[id]/tasks/route.ts（POST PENDING 清理 + GET auto-repair 清理）
+- 三个修复点协同工作：(1) 用户手动选择步骤不再被覆盖 (2) PENDING 模板任务不干扰轮次计数和表单显示 (3) 阶段型步骤支持多轮次持续添加

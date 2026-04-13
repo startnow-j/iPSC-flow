@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { useAuthStore } from '@/stores/auth-store'
 import { hasAnyRole } from '@/lib/roles'
@@ -345,6 +345,9 @@ export function EbprStepGuide({
   const [activeStep, setActiveStep] = useState<StepCode | null>(null)
   const [submittingQc, setSubmittingQc] = useState(false)
 
+  // Track whether the user has manually clicked a step — prevent auto-select from overriding
+  const userSelectedRef = useRef(false)
+
   const fetchTasks = useCallback(async () => {
     try {
       const res = await authFetch(`/api/batches/${batchId}/tasks`)
@@ -364,14 +367,24 @@ export function EbprStepGuide({
   }, [fetchTasks])
 
   // Auto-select current step on mount and after task updates
+  // Once the user manually clicks a step, auto-select is disabled
   useEffect(() => {
     if (tasks.length === 0) return
+    // Don't override user's manual selection
+    if (userSelectedRef.current) return
 
     // Find the first non-completed step
     for (const step of steps) {
       const status = getStepStatus(step.code, tasks)
       if (status === 'current') {
         setActiveStep(step.code)
+        userSelectedRef.current = true
+        return
+      }
+      // Also prefer pending steps over going back to completed steps
+      if (status === 'pending') {
+        setActiveStep(step.code)
+        userSelectedRef.current = true
         return
       }
     }
@@ -382,14 +395,17 @@ export function EbprStepGuide({
     )
     if (lastCompleted) {
       setActiveStep(lastCompleted.code)
+      userSelectedRef.current = true
       return
     }
 
     // Default to first step
     setActiveStep(steps[0]?.code ?? 'SEED_PREP')
+    userSelectedRef.current = true
   }, [tasks, steps])
 
   const handleStepClick = (code: StepCode) => {
+    userSelectedRef.current = true
     setActiveStep(code)
   }
 
@@ -472,14 +488,16 @@ export function EbprStepGuide({
     seedPrepCompleted && expansionCompleted && differentiationCompleted && harvestCompleted
 
   // Compute pending phase tasks for assignment check
+  // Phase-type tasks (EXPANSION / DIFFERENTIATION) can have multiple rounds.
+  // Show the inline form when there are tasks but no pending/in-progress ones needing attention.
+  // This allows adding new rounds even after previous rounds are completed.
   const allExpansionTasks = tasks.filter((t) => t.taskCode === 'EXPANSION')
   const pendingExpansionTasks = allExpansionTasks.filter(
     (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
   const showExpansionForm =
     allExpansionTasks.length > 0 &&
-    pendingExpansionTasks.length === 0 &&
-    getStepStatus('EXPANSION', tasks) !== 'completed'
+    pendingExpansionTasks.length === 0
 
   const allDifferentiationTasks = tasks.filter((t) => t.taskCode === 'DIFFERENTIATION')
   const pendingDifferentiationTasks = allDifferentiationTasks.filter(
@@ -488,8 +506,7 @@ export function EbprStepGuide({
   const showDifferentiationForm =
     showDifferentiation &&
     allDifferentiationTasks.length > 0 &&
-    pendingDifferentiationTasks.length === 0 &&
-    getStepStatus('DIFFERENTIATION', tasks) !== 'completed'
+    pendingDifferentiationTasks.length === 0
 
   // Check if already submitted for QC
   const isQcSubmitted = batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS'

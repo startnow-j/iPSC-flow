@@ -55,12 +55,35 @@ export async function GET(
           }
         }
 
+        // Phase-type taskCodes: these support multiple rounds via POST-created COMPLETED records.
+        // A PENDING template task is no longer needed once a COMPLETED record exists.
+        const PHASE_TASK_CODES = ['EXPANSION', 'DIFFERENTIATION', 'CLONE_PICKING', 'CLONE_SCREENING']
+
         const existingTasks = await db.productionTask.findMany({
+          where: { batchId: id },
+          select: { taskCode: true, status: true },
+        })
+        const existingTaskCodes = new Set(existingTasks.map(t => t.taskCode))
+
+        // Clean up orphaned PENDING template tasks for phase-type steps that already have COMPLETED records.
+        // This handles legacy data where PENDING tasks were left behind after POST-created records.
+        for (const phaseCode of PHASE_TASK_CODES) {
+          if (!existingTaskCodes.has(phaseCode)) continue
+          const hasCompleted = existingTasks.some(t => t.taskCode === phaseCode && (t.status === 'COMPLETED' || t.status === 'REVIEWED'))
+          if (hasCompleted) {
+            await db.productionTask.deleteMany({
+              where: { batchId: id, taskCode: phaseCode, status: 'PENDING' },
+            })
+          }
+        }
+
+        // Re-query after cleanup to get accurate taskCodes
+        const currentTasks = await db.productionTask.findMany({
           where: { batchId: id },
           select: { taskCode: true },
         })
-        const existingTaskCodes = new Set(existingTasks.map(t => t.taskCode))
-        const missingTemplates = filteredTemplates.filter(t => !existingTaskCodes.has(t.taskCode))
+        const currentTaskCodes = new Set(currentTasks.map(t => t.taskCode))
+        const missingTemplates = filteredTemplates.filter(t => !currentTaskCodes.has(t.taskCode))
 
         if (missingTemplates.length > 0) {
           const tasksData = missingTemplates.map((t: TaskTemplate) => ({
@@ -210,6 +233,22 @@ export async function POST(
 
     // 构建 stepGroup
     const stepGroup = config.buildStepGroup(formData ?? {}, existingTasks.length)
+
+    // 阶段型任务（EXPANSION / DIFFERENTIATION / CLONE_PICKING / CLONE_SCREENING）：
+    // 创建新记录前，清理残留的 PENDING 模板任务，避免：
+    //   1. PENDING 任务阻止 complete_production
+    //   2. PENDING 任务干扰 showDifferentiationForm / showExpansionForm 逻辑
+    //   3. 轮次编号偏移（existingDifferentiations 误计）
+    const PHASE_TASK_CODES = ['EXPANSION', 'DIFFERENTIATION', 'CLONE_PICKING', 'CLONE_SCREENING']
+    if (PHASE_TASK_CODES.includes(resolvedTaskCode)) {
+      await db.productionTask.deleteMany({
+        where: {
+          batchId: id,
+          taskCode: resolvedTaskCode,
+          status: 'PENDING',
+        },
+      })
+    }
 
     // 创建新的生产任务
     const task = await db.productionTask.create({
