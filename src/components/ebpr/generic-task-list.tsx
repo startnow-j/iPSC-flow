@@ -151,7 +151,7 @@ function formatDate(dateStr: string | null): string {
 // Single Task Card
 // ============================================
 
-function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks }: { task: ProductionTask; allTasks: ProductionTask[]; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean; onRefreshTasks: () => void }) {
+function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks, productId }: { task: ProductionTask; allTasks: ProductionTask[]; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean; onRefreshTasks: () => void; productId: string }) {
   const isCompleted = task.status === 'COMPLETED'
   const isReviewed = task.status === 'REVIEWED'
   const isSkipped = task.status === 'SKIPPED'
@@ -207,7 +207,7 @@ function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks }: {
                   onClick={() => onAssignTask?.({
                     taskId: task.id,
                     taskName: task.taskName,
-                    productId: '',
+                    productId,
                   })}
                 >
                   <UserPlus className="h-3.5 w-3.5" />
@@ -412,7 +412,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
             </Badge>
           </div>
           {regularTasks.map(task => (
-            <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} />
+            <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} />
           ))}
         </div>
       )}
@@ -430,7 +430,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
               </Badge>
             </div>
             {identificationTasks.map(task => (
-              <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} />
+              <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} />
             ))}
           </div>
         </>

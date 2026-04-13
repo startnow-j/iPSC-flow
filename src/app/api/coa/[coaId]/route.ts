@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getTokenFromRequest, verifyToken } from '@/lib/auth'
+import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
+import { canManage, canOperate } from '@/lib/roles'
 import { db } from '@/lib/db'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
@@ -97,7 +98,7 @@ export async function PATCH(
     // 查询批次获取 productLine
     const batch = await db.batch.findUnique({
       where: { id: existingCoa.batchId },
-      select: { productLine: true, status: true, batchNo: true },
+      select: { productLine: true, productId: true, status: true, batchNo: true },
     })
 
     if (!batch) {
@@ -105,6 +106,46 @@ export async function PATCH(
     }
 
     const productLine = batch.productLine as ProductLine
+
+    // ============================================
+    // 产品级权限检查（与 transition route 一致）
+    // ============================================
+    const userWithPermissions = await db.user.findUnique({
+      where: { id: payload.userId },
+      select: {
+        productLines: { select: { productLine: true } },
+        productRoles: {
+          where: { product: { active: true } },
+          select: { productId: true, roles: true },
+        },
+      },
+    })
+    const userProductLines = userWithPermissions?.productLines.map(pl => pl.productLine) || []
+    const userProductRoles = userWithPermissions?.productRoles.map(pr => ({
+      productId: pr.productId,
+      roles: JSON.parse(pr.roles || '[]'),
+    })) || []
+    const roles = getRolesFromPayload(payload)
+
+    if (action === 'submit') {
+      // submit_coa / resubmit_coa → QC (operational, product-level)
+      // submit_report → OPERATOR + SUPERVISOR (management, productLine-level)
+      if (productLine === 'SERVICE' && batch.status === 'REPORT_PENDING') {
+        if (!canManage(roles, userProductLines, productLine, ['OPERATOR', 'SUPERVISOR'])) {
+          return NextResponse.json({ error: '无权限提交报告' }, { status: 403 })
+        }
+      } else {
+        // CELL_PRODUCT/KIT: submit_coa / resubmit_coa
+        if (!canOperate(roles, userProductRoles, batch.productId, ['QC'])) {
+          return NextResponse.json({ error: '无权限提交CoA' }, { status: 403 })
+        }
+      }
+    } else if (action === 'approve' || action === 'reject') {
+      // approve / reject → SUPERVISOR + QA (management, productLine-level)
+      if (!canManage(roles, userProductLines, productLine, ['SUPERVISOR', 'QA'])) {
+        return NextResponse.json({ error: '无权限审核CoA' }, { status: 403 })
+      }
+    }
 
     // ============================================
     // Submit (DRAFT → SUBMITTED)

@@ -573,15 +573,19 @@ export async function transition(
       updateData.actualStartDate = new Date()
     }
 
-    // 5e. scrap: 记录报废原因
+    // 5e. scrap: 记录报废原因 + 设置实际结束日期
     if (action === 'scrap') {
       updateData.scrapReason = reason
+      updateData.actualEndDate = new Date()
     }
 
-    // 5f. terminate: 记录终止原因
+    // 5f. terminate: 记录终止原因 + 详细原因 + 设置实际结束日期
     if (action === 'terminate') {
       updateData.terminationReason = terminationReason
-      // 终止也记录在 scrapReason 字段（用于统一查询），或使用 terminationReason
+      if (reason) {
+        updateData.scrapReason = reason // Store detailed reason text in scrapReason
+      }
+      updateData.actualEndDate = new Date()
     }
 
     // 6. 更新批次状态

@@ -457,34 +457,11 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
                 ) : (
                   <Card key={record.id}>
                     <CardContent className="pt-0">
-                      <div className="space-y-2">
-                        {routineRecords.slice(1).map((r) => (
-                          <div
-                            key={r.id}
-                            className="flex items-center justify-between rounded-md border px-3 py-2"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Badge
-                                variant="secondary"
-                                className={
-                                  r.overallJudgment === 'PASS'
-                                    ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs'
-                                    : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs'
-                                }
-                              >
-                                {r.overallJudgment === 'PASS' ? '合格' : '不合格'}
-                              </Badge>
-                              <span className="text-sm text-muted-foreground">
-                                {formatDate(r.createdAt)}
-                              </span>
-                              {r.operatorName && (
-                                <span className="text-xs text-muted-foreground">
-                                  · {r.operatorName}
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        ))}
+                      <div className="flex items-center justify-between rounded-md border px-3 py-2">
+                        <div>
+                          <p className="text-sm font-medium">{record.overallJudgment === 'PASS' ? '合格' : '不合格'}</p>
+                          <p className="text-xs text-muted-foreground">{formatDateShort(record.createdAt)}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>

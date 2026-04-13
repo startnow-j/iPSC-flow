@@ -609,7 +609,7 @@ export function EbprStepGuide({
       )}
 
       {/* Submit QC Prompt */}
-      {harvestCompleted && !isQcSubmitted && (
+      {allStepsCompleted && !isQcSubmitted && (
         <Card className="border-primary/30 bg-primary/5">
           <CardContent className="p-4 sm:p-6">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">

@@ -95,13 +95,16 @@ export function BatchReassignDialog({
     fetchUsers()
   }, [open, productId, currentProductionOperatorId, currentQcOperatorId])
 
-  const hasFourEyeViolation = selectedOperatorId && selectedQcId && selectedOperatorId === selectedQcId
+  const hasFourEyeViolation =
+    selectedOperatorId && selectedOperatorId !== 'none' &&
+    selectedQcId && selectedQcId !== 'none' &&
+    selectedOperatorId === selectedQcId
 
   const handleSubmit = async () => {
     // Build body with only changed fields (or all if explicitly selected)
     const body: Record<string, unknown> = {}
 
-    if (selectedOperatorId) {
+    if (selectedOperatorId && selectedOperatorId !== 'none') {
       const op = operators.find(u => u.id === selectedOperatorId)
       body.productionOperatorId = selectedOperatorId
       body.productionOperatorName = op?.name || null
@@ -110,7 +113,7 @@ export function BatchReassignDialog({
       body.productionOperatorName = null
     }
 
-    if (selectedQcId) {
+    if (selectedQcId && selectedQcId !== 'none') {
       const qc = qcUsers.find(u => u.id === selectedQcId)
       body.qcOperatorId = selectedQcId
       body.qcOperatorName = qc?.name || null

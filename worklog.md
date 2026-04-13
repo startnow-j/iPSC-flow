@@ -2384,3 +2384,256 @@ Stage Summary:
 - 阶段型任务(POST 新建)支持扩展到 CLONE_PICKING 和 CLONE_SCREENING
 - GenericTaskList 从"占位符"升级为"实际表单"
 - v3.0 全部三阶段（3A + 3B + 3C）已完成
+
+---
+Task ID: Bugfix-1
+Agent: Main Agent
+Task: 修复 4 个关键 Bug — KIT 任务创建 / 报废对话框 / 终止原因丢失 / QC 闭包过期
+
+Work Log:
+- 读取 worklog.md 最后 100 行和 3 个待修改文件，确认现有代码结构
+
+**Bug 1: KIT 第二批任务从未创建 (CRITICAL)**
+- 文件：`src/app/api/batches/[id]/transition/route.ts`
+- 问题：start_material_prep 已创建 1 个任务(MATERIAL_PREP)，start_production 时检查 `batch.tasks.length === 0` 失败，PREPARATION/DISPENSING 任务不会被创建
+- 修复：将防重复逻辑从 `batch.tasks.length === 0` 改为按 taskCode 去重
+  - 构建 `existingTaskCodes = new Set(batch.tasks.map(t => t.taskCode))`
+  - 过滤 `newTemplates = filteredTemplates.filter(t => !existingTaskCodes.has(t.taskCode))`
+  - 仅当 `newTemplates.length > 0` 时创建任务
+
+**Bug 2: 报废操作始终失败 — 无原因输入框 (CRITICAL)**
+- 文件：`src/app/batches/[id]/page.tsx`
+- 问题：API 要求 scrap 必须传 reason，但前端只有 AlertDialog 确认框，没有原因输入框
+- 修复：
+  - 新增 `scrapDialogOpen` 和 `scrapReason` 状态
+  - handleTransition 中将 scrap 路由到独立对话框（与 terminate 模式一致）
+  - 新增 handleScrap 函数，发送 `{ action: 'scrap', reason: scrapReason.trim() }`
+  - 新增 Scrap Dialog JSX：含必填 Textarea + 确认/取消按钮
+
+**Bug 3: 终止详细原因数据丢失 (CRITICAL)**
+- 文件：`src/lib/services/state-machine.ts`
+- 问题：terminate 时 API 传了 reason(详细文本) 和 terminationReason(分类)，但状态机只存 terminationReason，reason 被丢弃
+- 修复：
+  - terminate 处理器中新增 `if (reason) updateData.scrapReason = reason`，将详细原因存入 scrapReason 字段
+  - 前端 TERMINATED 横幅已读取 `batch.scrapReason` 显示"详细原因"，无需修改
+  - 同时为 scrap 和 terminate 添加 `updateData.actualEndDate = new Date()`
+
+**Bug 4: handleQcSubmitted 闭包过期 (CRITICAL)**
+- 文件：`src/app/batches/[id]/page.tsx`
+- 问题：handleQcSubmitted 调用 `await fetchBatchDetail()` 后检查 `if (batch?.status === 'QC_PASS')`，但 batch 来自旧闭包，永远为 false
+- 修复：直接使用 fetch 返回的 data，不依赖闭包中的 batch 变量
+  - `const res = await authFetch(...)` → `const data = await res.json()` → `if (data.batch.status === 'QC_PASS')`
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，本次修改零新增）
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：3 个（transition/route.ts、state-machine.ts、batches/[id]/page.tsx）
+- Bug 1：KIT 产品线 start_production 现在能正确创建 PREPARATION + DISPENSING 任务
+- Bug 2：报废操作现在有专用对话框，必须输入原因才能提交
+- Bug 3：终止操作的详细原因现在存储在 scrapReason 字段中，前端可正确展示
+- Bug 3 补充：scrap 和 terminate 均自动设置 actualEndDate
+- Bug 4：QC 提交后 CoA 现在能正确自动加载
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: validation-field-fix
+Agent: Main Agent
+Task: 修复 SERVICE/KIT eBPR 表单与 validation.ts 的字段名不匹配问题（9处）
+
+Work Log:
+- 读取 worklog.md 了解项目背景
+- 读取 validation.ts 了解当前 9 个校验函数的字段定义
+- 逐一读取 9 个 eBPR 表单组件，确认表单实际发送的字段名
+- 对比发现 9 处字段名不匹配，全部在 validation.ts 中修正
+
+**修复详情：**
+
+1. **REPROGRAM** (reprogram-form.tsx → validateReprogram)
+   - `reprogram_date` → `transduction_date`（表单发送转导日期而非重编程日期）
+   - 移除 `vector_type` 必填要求（表单发送 `vector_name`/`vector_batch`，非必填）
+   - 新增 `operation_result` 必填校验（表单必填）
+
+2. **FREEZE** (freeze-form.tsx → validateFreeze)
+   - `total_cells` → `cell_count`（字段名统一为表单使用的 cell_count）
+
+3. **CELL_REVIVAL** (cell-revival-form.tsx → validateCellRevival)
+   - `revival_method` → `recovery_method`（表单使用 recovery 前缀）
+   - `revival_status` → `recovery_status`
+   - 移除 `revival_date` 必填要求（表单无单独日期字段）
+   - 新增 `recovery_time` 非必填校验（有值时必须为非负数值）
+
+4. **GENE_EDITING** (gene-editing-form.tsx → validateGeneEditing)
+   - `editing_method` → `editing_tool`（表单使用编辑工具名称）
+   - `editing_date` → `transfection_date`（表单发送转染日期）
+   - 移除 `efficiency` 可选校验（表单不发送此字段）
+   - 新增 `operation_result` 必填校验
+
+5. **CLONE_PICKING** (clone-picking-form.tsx → validateClonePicking)
+   - `picking_date` → `pick_date`
+   - 移除 `well_position` 必填要求（表单不发送此字段）
+   - 新增 `culture_vessel` 和 `morphology` 必填校验（表单必填）
+
+6. **CLONE_SCREENING** (clone-screening-form.tsx → validateCloneScreening)
+   - `screening_date` → `screen_date`
+   - `screening_method` → `screen_method`
+   - `result` → `screen_result`
+   - 新增 `clone_count` 可选校验（有值时必须 > 0）
+
+7. **MATERIAL_PREP** (material-prep-form.tsx → validateMaterialPrep)
+   - 完全重写：移除 `material_name`/`material_code`/`lot_no`/`prep_date`/`prep_status`
+   - 新增：`material_list`（物料清单）、`batch_numbers`（批号登记）、`environment_check`（环境检查）
+
+8. **PREPARATION** (preparation-form.tsx → validatePreparation)
+   - 移除 `prep_formula` 和 `operator` 必填要求
+   - 新增 `prep_batch_no`（配制批次号）、`kit_spec`（试剂盒规格）、`prep_quantity`（配制数量 > 0）校验
+   - 保留 `prep_date` 和 `prep_result`
+
+9. **DISPENSING** (dispensing-form.tsx → validateDispensing)
+   - `dispensing_date` → `dispense_date`
+   - `dispensing_count` → `dispense_quantity`
+   - `specification` → `dispense_spec`
+   - `storage_condition` → `appearance_check`
+
+- 更新 validateProductionTask 函数的 JSDoc 注释，反映所有校验字段
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，无新增）
+
+Stage Summary:
+- 修改文件：1 个（src/lib/services/validation.ts）
+- 修复范围：9 个表单校验函数，涉及 SERVICE 产品线 6 个 + KIT 产品线 3 个
+- 修复策略：以表单实际字段名为准，更新 validation.ts 匹配
+- 新增校验：operation_result、culture_vessel、morphology、prep_batch_no、kit_spec、prep_quantity 等
+- 移除无效校验：vector_type、well_position、prep_formula、operator、efficiency 等
+- 代码零新增 ESLint error/warning
+---
+Task ID: 7
+Agent: Main Agent
+Task: 修复 7 个关键 Bug — 重新指派对话框 + 权限检查
+
+Work Log:
+- 读取 worklog.md（最后100行）和 4 个待修复文件，了解现有代码结构
+- 逐个修复 7 个 Bug：
+
+**Bug 1: 重新指派对话框发送 "none" 字符串而非 null (CRITICAL)**
+- 文件：`src/components/batches/batch-reassign-dialog.tsx`
+- 问题：SelectItem value="none" 导致 selectedOperatorId 为 "none"，提交时发送 `productionOperatorId: "none"` → 500 错误
+- 修复：在 handleSubmit 中，对 selectedOperatorId 和 selectedQcId 检查 `!== "none"`，不满足条件时发送 null
+
+**Bug 2: 四眼原则误报 — 两个字段都选 "none" 时触发 (Bug 1 关联)**
+- 文件：`src/components/batches/batch-reassign-dialog.tsx`
+- 问题：`selectedOperatorId === selectedQcId` 在两者均为 "none" 时为 true
+- 修复：hasFourEyeViolation 增加 `!== "none"` 条件
+
+**Bug 3: 重新指派 API 阻止单字段清除 (HIGH)**
+- 文件：`src/app/api/batches/[id]/reassign/route.ts`
+- 问题：`if (!productionOperatorId && !qcOperatorId)` — 客户端发送 `{ productionOperatorId: null }` 清除操作员时，`!null === true`，检查不通过
+- 修复：改为 `if (productionOperatorId === undefined && qcOperatorId === undefined)`，用 undefined 区分"未发送"和"显式清除"
+
+**Bug 4: 三个操作绕过权限检查 (CRITICAL)**
+- 文件：`src/app/api/batches/[id]/transition/route.ts`
+- 问题：`complete_production`、`receive_sample`、`complete_identification` 不在 MANAGEMENT_ACTIONS 或 OPERATIONAL_ACTIONS 中，权限检查被跳过
+- 修复：
+  - `complete_production: ["OPERATOR", "SUPERVISOR"]` 加入 MANAGEMENT_ACTIONS
+  - `complete_identification: ["OPERATOR", "SUPERVISOR"]` 加入 MANAGEMENT_ACTIONS
+  - `receive_sample: ["OPERATOR"]` 加入 OPERATIONAL_ACTIONS
+  - `start_identification` 从 `["SUPERVISOR"]` 改为 `["OPERATOR", "SUPERVISOR"]`
+
+**Bug 5: submit_report 权限不匹配 (HIGH)**
+- 文件：`src/app/api/batches/[id]/transition/route.ts`
+- 问题：路由有 `submit_report: ["SUPERVISOR", "QA"]`，但状态机定义 `["OPERATOR", "SUPERVISOR"]`。OPERATOR 被阻止，QA 被错误允许
+- 修复：改为 `submit_report: ["OPERATOR", "SUPERVISOR"]`
+
+**Bug 6: start_production / start_material_prep OPERATOR 被 KIT 产品线阻止 (HIGH)**
+- 文件：`src/app/api/batches/[id]/transition/route.ts`
+- 问题：路由仅要求 SUPERVISOR，但状态机允许 OPERATOR 执行这些操作
+- 修复：改为 `["OPERATOR", "SUPERVISOR"]`
+
+**Bug 7: CoA API 缺少权限检查 (HIGH)**
+- 文件：`src/app/api/coa/[coaId]/route.ts`
+- 问题：PATCH 端点直接调用 transition()，未检查用户角色和产品级权限
+- 修复：
+  - 新增 import：`getRolesFromPayload` from auth、`canManage`/`canOperate` from roles
+  - 查询用户 productLines 和 productRoles
+  - submit action：SERVICE+REPORT_PENDING → canManage(OPERATOR+SUPERVISOR)；其他 → canOperate(QC)
+  - approve/reject action：canManage(SUPERVISOR+QA)
+  - 查询批次时增加 productId 字段
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，无新增）
+
+Stage Summary:
+- 修改文件：4 个
+  - `src/components/batches/batch-reassign-dialog.tsx`（Bug 1 + Bug 2）
+  - `src/app/api/batches/[id]/reassign/route.ts`（Bug 3）
+  - `src/app/api/batches/[id]/transition/route.ts`（Bug 4 + Bug 5 + Bug 6）
+  - `src/app/api/coa/[coaId]/route.ts`（Bug 7）
+- 权限映射完整度：MANAGEMENT_ACTIONS 11 个操作，OPERATIONAL_ACTIONS 5 个操作
+- 修复效果：
+  - "none" 字符串不再发送到 API，null 正确传递
+  - 四眼原则不再在两者都选"不指定"时误报
+  - 单字段清除（显式传 null）不再被阻止
+  - 所有状态转换操作均有权限检查覆盖
+  - CoA 提交/批准/退回操作增加产品级权限验证
+- 代码零新增 ESLint error/warning
+
+---
+Task ID: Bug Fix Batch 1
+Agent: Main Agent
+Task: 修复 10 个 HIGH/MEDIUM 优先级 UI/UX 和质检系统 Bug
+
+Work Log:
+- 读取 worklog.md 和所有 5 个待修改文件，了解现有代码结构
+- 修复 10 个 Bug，涉及 4 个文件：
+
+**Bug 1 (HIGH)**: `src/components/ebpr/ebpr-step-guide.tsx`
+- 问题：QC 提交按钮仅检查 harvestCompleted，忽略了 expansion/differentiation 步骤
+- 修复：将 `harvestCompleted` 改为 `allStepsCompleted`
+
+**Bug 2 (HIGH)**: `src/components/ebpr/sampling-record.tsx`
+- 问题：表单 notes Textarea 在提交时重置，但 notes 未包含在 POST payload 中
+- 修复：在 payload 对象中添加 `notes: notes.trim() || null`
+
+**Bug 3 (HIGH)**: `src/components/qc/qc-results-summary.tsx`
+- 问题：routine records 渲染中，index > 0 的分支内部再次 `slice(1).map(...)` 导致记录重复渲染 N 次
+- 修复：else 分支改为仅渲染单条 record 卡片
+
+**Bug 4 (HIGH)**: `src/components/ebpr/generic-task-list.tsx`
+- 问题：onAssignTask 回调传递 `productId: ''` 而非实际的 productId prop
+- 修复：将 productId 作为 TaskCard prop 传入，回调中使用该 prop
+
+**Bug 5 (HIGH)**: `src/app/batches/[id]/page.tsx`
+- 问题：TERMINATED 有 amber banner 显示原因，SCRAPPED 无等效 banner
+- 修复：添加红色 SCRAPPED banner，显示报废原因
+
+**Bug 6 (HIGH)**: `src/app/batches/[id]/page.tsx`
+- 问题：重新指派按钮无状态检查，终端状态批次仍可显示
+- 修复：添加 `!['RELEASED', 'SCRAPPED', 'TERMINATED'].includes(batch.status)` 条件守卫
+
+**Bug 7 (HIGH)**: `src/app/batches/[id]/page.tsx`
+- 问题：终止/报废操作需经过通用确认对话框 + 专用对话框两次确认
+- 修复：在 action button onClick 中直接路由 terminate/scrap 到专用对话框，绕过通用确认；清理 handleTransition 中不再需要的路由代码
+
+**Bug 8 (HIGH)**: `src/app/batches/[id]/page.tsx`
+- 问题：TERMINATED/SCRAPPED/RELEASED 批次的生产 tab 仍渲染 EbprStepGuide 和 GenericTaskList
+- 修复：添加终端状态检查，显示 PlaceholderCard "生产记录已锁定"
+
+**Bug 9 (MEDIUM)**: `src/app/batches/[id]/page.tsx`
+- 问题：MATERIAL_PREP 状态显示 "请先完成生产记录"（应为"物料准备"）；QC_PENDING 描述硬编码为 CELL_PRODUCT
+- 修复：将 MATERIAL_PREP 拆分为独立分支显示 "请先完成物料准备"；QC_PENDING 描述改为通用 "请完成质检流程"
+
+**Bug 10 (MEDIUM)**: `src/app/batches/[id]/page.tsx`
+- 问题：SCRAPPED/TERMINATED 批次的 CoA tab 显示 "暂无CoA" 和 "将在质检合格后自动生成" 的误导信息
+- 修复：在 CoA tab 添加 SCRAPPED 和 TERMINATED 的早期返回，显示 "无法生成CoA"
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，无新增）
+
+Stage Summary:
+- 修改文件：4 个（ebpr-step-guide.tsx、sampling-record.tsx、qc-results-summary.tsx、generic-task-list.tsx、batches/[id]/page.tsx）
+- 修复 Bug：10 个（8 HIGH + 2 MEDIUM）
+- 关键修复：
+  - QC 提交逻辑现在正确检查所有步骤完成
+  - 采样记录备注字段正确发送到 API
+  - 终检记录不再重复渲染
+  - 任务指派传递正确的 productId
+  - 报废/终止批次有清晰的视觉提示和状态守卫
+  - 终端状态批次的 production/QC/CoA tab 显示适当锁定信息
+  - 消除了 terminate/scrap 操作的双对话框问题

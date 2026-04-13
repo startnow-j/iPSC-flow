@@ -168,7 +168,59 @@ export async function validateBatchCreation(
  *   - vial_per_spec: 必填，每支规格
  *   - storage_location: 必填，存储位置
  *
- * @param taskCode - 任务编码（SEED_PREP / EXPANSION / HARVEST）
+ * - **REPROGRAM**（重编程）:
+ *   - reprogram_method: 必填，重编程方式
+ *   - transduction_date: 必填，转导日期
+ *   - operation_result: 必填，操作结果
+ *
+ * - **FREEZE**（冻存）:
+ *   - freeze_date: 必填，冻存日期
+ *   - cell_count: 必填，冻存细胞数（> 0）
+ *   - viability: 必填，存活率（0~100）
+ *   - storage_location: 必填，存储位置
+ *
+ * - **CELL_REVIVAL**（细胞复苏）:
+ *   - recovery_method: 必填，复苏方式
+ *   - recovery_status: 必填，复苏状态
+ *   - recovery_time: 如有值，必须为非负数值
+ *
+ * - **GENE_EDITING**（基因编辑）:
+ *   - editing_tool: 必填，编辑工具
+ *   - target_gene: 必填，靶基因
+ *   - transfection_date: 必填，转染日期
+ *   - operation_result: 必填，操作结果
+ *
+ * - **CLONE_PICKING**（克隆挑取）:
+ *   - pick_date: 必填，挑取日期
+ *   - clone_count: 必填，挑取克隆数（> 0）
+ *   - culture_vessel: 必填，培养皿规格
+ *   - morphology: 必填，细胞形态
+ *
+ * - **CLONE_SCREENING**（单克隆筛选）:
+ *   - screen_date: 必填，筛选日期
+ *   - screen_method: 必填，筛选方法
+ *   - screen_result: 必填，筛选结果
+ *   - clone_count: 如有值，必须 > 0
+ *
+ * - **MATERIAL_PREP**（物料准备）:
+ *   - material_list: 必填，物料清单
+ *   - batch_numbers: 必填，批号登记
+ *   - environment_check: 必填，环境检查结果
+ *
+ * - **PREPARATION**（配制）:
+ *   - prep_date: 必填，配制日期
+ *   - prep_batch_no: 必填，配制批次号
+ *   - kit_spec: 必填，试剂盒规格
+ *   - prep_quantity: 必填，配制数量（> 0）
+ *   - prep_result: 必填，配制结果
+ *
+ * - **DISPENSING**（分装）:
+ *   - dispense_date: 必填，分装日期
+ *   - dispense_quantity: 必填，分装数量（> 0）
+ *   - dispense_spec: 必填，分装规格
+ *   - appearance_check: 必填，外观检查结果
+ *
+ * @param taskCode - 任务编码
  * @param formData - 表单数据对象
  * @returns 校验结果
  */
@@ -421,16 +473,16 @@ function validateReprogram(data: Record<string, any>, result: ValidationResult):
   if (!data.reprogram_method || typeof data.reprogram_method !== 'string') {
     addError(result, 'reprogram_method', 'REQUIRED', '重编程方式不能为空')
   }
-  if (!data.reprogram_date) {
-    addError(result, 'reprogram_date', 'REQUIRED', '重编程日期不能为空')
+  if (!data.transduction_date) {
+    addError(result, 'transduction_date', 'REQUIRED', '转导日期不能为空')
   } else {
-    const d = new Date(data.reprogram_date)
+    const d = new Date(data.transduction_date)
     if (isNaN(d.getTime())) {
-      addError(result, 'reprogram_date', 'INVALID_DATE', '重编程日期格式无效')
+      addError(result, 'transduction_date', 'INVALID_DATE', '转导日期格式无效')
     }
   }
-  if (!data.vector_type) {
-    addError(result, 'vector_type', 'REQUIRED', '载体类型不能为空')
+  if (!data.operation_result) {
+    addError(result, 'operation_result', 'REQUIRED', '操作结果不能为空')
   }
   if (data.colony_count !== undefined && data.colony_count !== null) {
     const count = Number(data.colony_count)
@@ -453,12 +505,12 @@ function validateFreeze(data: Record<string, any>, result: ValidationResult): vo
       addError(result, 'freeze_date', 'INVALID_DATE', '冻存日期格式无效')
     }
   }
-  if (data.total_cells === undefined || data.total_cells === null) {
-    addError(result, 'total_cells', 'REQUIRED', '总细胞数不能为空')
+  if (data.cell_count === undefined || data.cell_count === null) {
+    addError(result, 'cell_count', 'REQUIRED', '冻存细胞数不能为空')
   } else {
-    const cells = Number(data.total_cells)
+    const cells = Number(data.cell_count)
     if (isNaN(cells) || cells <= 0) {
-      addError(result, 'total_cells', 'OUT_OF_RANGE', '总细胞数必须大于 0')
+      addError(result, 'cell_count', 'OUT_OF_RANGE', '冻存细胞数必须大于 0')
     }
   }
   if (data.viability === undefined || data.viability === null) {
@@ -479,19 +531,17 @@ function validateFreeze(data: Record<string, any>, result: ValidationResult): vo
 // ============================================
 
 function validateCellRevival(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.revival_date) {
-    addError(result, 'revival_date', 'REQUIRED', '复苏日期不能为空')
-  } else {
-    const d = new Date(data.revival_date)
-    if (isNaN(d.getTime())) {
-      addError(result, 'revival_date', 'INVALID_DATE', '复苏日期格式无效')
+  if (!data.recovery_method || typeof data.recovery_method !== 'string') {
+    addError(result, 'recovery_method', 'REQUIRED', '复苏方式不能为空')
+  }
+  if (!data.recovery_status) {
+    addError(result, 'recovery_status', 'REQUIRED', '复苏状态不能为空')
+  }
+  if (data.recovery_time !== undefined && data.recovery_time !== null) {
+    const time = Number(data.recovery_time)
+    if (isNaN(time) || time < 0) {
+      addError(result, 'recovery_time', 'INVALID', '复苏耗时必须为非负数值')
     }
-  }
-  if (!data.revival_method || typeof data.revival_method !== 'string') {
-    addError(result, 'revival_method', 'REQUIRED', '复苏方式不能为空')
-  }
-  if (!data.revival_status) {
-    addError(result, 'revival_status', 'REQUIRED', '复苏状态不能为空')
   }
 }
 
@@ -500,25 +550,22 @@ function validateCellRevival(data: Record<string, any>, result: ValidationResult
 // ============================================
 
 function validateGeneEditing(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.editing_method || typeof data.editing_method !== 'string') {
-    addError(result, 'editing_method', 'REQUIRED', '编辑方式不能为空')
+  if (!data.editing_tool || typeof data.editing_tool !== 'string') {
+    addError(result, 'editing_tool', 'REQUIRED', '编辑工具不能为空')
   }
   if (!data.target_gene || typeof data.target_gene !== 'string') {
     addError(result, 'target_gene', 'REQUIRED', '靶基因不能为空')
   }
-  if (!data.editing_date) {
-    addError(result, 'editing_date', 'REQUIRED', '编辑日期不能为空')
+  if (!data.transfection_date) {
+    addError(result, 'transfection_date', 'REQUIRED', '转染日期不能为空')
   } else {
-    const d = new Date(data.editing_date)
+    const d = new Date(data.transfection_date)
     if (isNaN(d.getTime())) {
-      addError(result, 'editing_date', 'INVALID_DATE', '编辑日期格式无效')
+      addError(result, 'transfection_date', 'INVALID_DATE', '转染日期格式无效')
     }
   }
-  if (data.efficiency !== undefined && data.efficiency !== null) {
-    const eff = Number(data.efficiency)
-    if (isNaN(eff) || eff < 0 || eff > 100) {
-      addError(result, 'efficiency', 'OUT_OF_RANGE', '编辑效率必须在 0~100 之间')
-    }
+  if (!data.operation_result) {
+    addError(result, 'operation_result', 'REQUIRED', '操作结果不能为空')
   }
 }
 
@@ -527,12 +574,12 @@ function validateGeneEditing(data: Record<string, any>, result: ValidationResult
 // ============================================
 
 function validateClonePicking(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.picking_date) {
-    addError(result, 'picking_date', 'REQUIRED', '挑取日期不能为空')
+  if (!data.pick_date) {
+    addError(result, 'pick_date', 'REQUIRED', '挑取日期不能为空')
   } else {
-    const d = new Date(data.picking_date)
+    const d = new Date(data.pick_date)
     if (isNaN(d.getTime())) {
-      addError(result, 'picking_date', 'INVALID_DATE', '挑取日期格式无效')
+      addError(result, 'pick_date', 'INVALID_DATE', '挑取日期格式无效')
     }
   }
   if (data.clone_count === undefined || data.clone_count === null) {
@@ -543,8 +590,11 @@ function validateClonePicking(data: Record<string, any>, result: ValidationResul
       addError(result, 'clone_count', 'OUT_OF_RANGE', '挑取克隆数必须大于 0')
     }
   }
-  if (!data.well_position || typeof data.well_position !== 'string') {
-    addError(result, 'well_position', 'REQUIRED', '孔位信息不能为空')
+  if (!data.culture_vessel) {
+    addError(result, 'culture_vessel', 'REQUIRED', '培养皿规格不能为空')
+  }
+  if (!data.morphology) {
+    addError(result, 'morphology', 'REQUIRED', '细胞形态不能为空')
   }
 }
 
@@ -553,19 +603,25 @@ function validateClonePicking(data: Record<string, any>, result: ValidationResul
 // ============================================
 
 function validateCloneScreening(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.screening_date) {
-    addError(result, 'screening_date', 'REQUIRED', '筛选日期不能为空')
+  if (!data.screen_date) {
+    addError(result, 'screen_date', 'REQUIRED', '筛选日期不能为空')
   } else {
-    const d = new Date(data.screening_date)
+    const d = new Date(data.screen_date)
     if (isNaN(d.getTime())) {
-      addError(result, 'screening_date', 'INVALID_DATE', '筛选日期格式无效')
+      addError(result, 'screen_date', 'INVALID_DATE', '筛选日期格式无效')
     }
   }
-  if (!data.screening_method || typeof data.screening_method !== 'string') {
-    addError(result, 'screening_method', 'REQUIRED', '筛选方法不能为空')
+  if (!data.screen_method || typeof data.screen_method !== 'string') {
+    addError(result, 'screen_method', 'REQUIRED', '筛选方法不能为空')
   }
-  if (!data.result || typeof data.result !== 'string') {
-    addError(result, 'result', 'REQUIRED', '筛选结果不能为空')
+  if (!data.screen_result || typeof data.screen_result !== 'string') {
+    addError(result, 'screen_result', 'REQUIRED', '筛选结果不能为空')
+  }
+  if (data.clone_count !== undefined && data.clone_count !== null) {
+    const count = Number(data.clone_count)
+    if (isNaN(count) || count <= 0) {
+      addError(result, 'clone_count', 'OUT_OF_RANGE', '筛选克隆数必须大于 0')
+    }
   }
 }
 
@@ -574,25 +630,14 @@ function validateCloneScreening(data: Record<string, any>, result: ValidationRes
 // ============================================
 
 function validateMaterialPrep(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.material_name || typeof data.material_name !== 'string') {
-    addError(result, 'material_name', 'REQUIRED', '物料名称不能为空')
+  if (!data.material_list || typeof data.material_list !== 'string' || data.material_list.trim() === '') {
+    addError(result, 'material_list', 'REQUIRED', '物料清单不能为空')
   }
-  if (!data.material_code || typeof data.material_code !== 'string') {
-    addError(result, 'material_code', 'REQUIRED', '物料编码不能为空')
+  if (!data.batch_numbers || typeof data.batch_numbers !== 'string' || data.batch_numbers.trim() === '') {
+    addError(result, 'batch_numbers', 'REQUIRED', '批号登记不能为空')
   }
-  if (!data.lot_no || typeof data.lot_no !== 'string') {
-    addError(result, 'lot_no', 'REQUIRED', '批号不能为空')
-  }
-  if (!data.prep_date) {
-    addError(result, 'prep_date', 'REQUIRED', '准备日期不能为空')
-  } else {
-    const d = new Date(data.prep_date)
-    if (isNaN(d.getTime())) {
-      addError(result, 'prep_date', 'INVALID_DATE', '准备日期格式无效')
-    }
-  }
-  if (!data.prep_status) {
-    addError(result, 'prep_status', 'REQUIRED', '准备状态不能为空')
+  if (!data.environment_check) {
+    addError(result, 'environment_check', 'REQUIRED', '环境检查结果不能为空')
   }
 }
 
@@ -601,9 +646,6 @@ function validateMaterialPrep(data: Record<string, any>, result: ValidationResul
 // ============================================
 
 function validatePreparation(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.prep_formula || typeof data.prep_formula !== 'string') {
-    addError(result, 'prep_formula', 'REQUIRED', '配制配方不能为空')
-  }
   if (!data.prep_date) {
     addError(result, 'prep_date', 'REQUIRED', '配制日期不能为空')
   } else {
@@ -612,8 +654,19 @@ function validatePreparation(data: Record<string, any>, result: ValidationResult
       addError(result, 'prep_date', 'INVALID_DATE', '配制日期格式无效')
     }
   }
-  if (!data.operator) {
-    addError(result, 'operator', 'REQUIRED', '操作人不能为空')
+  if (!data.prep_batch_no || typeof data.prep_batch_no !== 'string' || data.prep_batch_no.trim() === '') {
+    addError(result, 'prep_batch_no', 'REQUIRED', '配制批次号不能为空')
+  }
+  if (!data.kit_spec || typeof data.kit_spec !== 'string' || data.kit_spec.trim() === '') {
+    addError(result, 'kit_spec', 'REQUIRED', '试剂盒规格不能为空')
+  }
+  if (data.prep_quantity === undefined || data.prep_quantity === null) {
+    addError(result, 'prep_quantity', 'REQUIRED', '配制数量不能为空')
+  } else {
+    const qty = Number(data.prep_quantity)
+    if (isNaN(qty) || qty <= 0) {
+      addError(result, 'prep_quantity', 'OUT_OF_RANGE', '配制数量必须大于 0')
+    }
   }
   if (!data.prep_result) {
     addError(result, 'prep_result', 'REQUIRED', '配制结果不能为空')
@@ -625,27 +678,27 @@ function validatePreparation(data: Record<string, any>, result: ValidationResult
 // ============================================
 
 function validateDispensing(data: Record<string, any>, result: ValidationResult): void {
-  if (!data.dispensing_date) {
-    addError(result, 'dispensing_date', 'REQUIRED', '分装日期不能为空')
+  if (!data.dispense_date) {
+    addError(result, 'dispense_date', 'REQUIRED', '分装日期不能为空')
   } else {
-    const d = new Date(data.dispensing_date)
+    const d = new Date(data.dispense_date)
     if (isNaN(d.getTime())) {
-      addError(result, 'dispensing_date', 'INVALID_DATE', '分装日期格式无效')
+      addError(result, 'dispense_date', 'INVALID_DATE', '分装日期格式无效')
     }
   }
-  if (data.dispensing_count === undefined || data.dispensing_count === null) {
-    addError(result, 'dispensing_count', 'REQUIRED', '分装数量不能为空')
+  if (data.dispense_quantity === undefined || data.dispense_quantity === null) {
+    addError(result, 'dispense_quantity', 'REQUIRED', '分装数量不能为空')
   } else {
-    const count = Number(data.dispensing_count)
-    if (isNaN(count) || count <= 0) {
-      addError(result, 'dispensing_count', 'OUT_OF_RANGE', '分装数量必须大于 0')
+    const qty = Number(data.dispense_quantity)
+    if (isNaN(qty) || qty <= 0) {
+      addError(result, 'dispense_quantity', 'OUT_OF_RANGE', '分装数量必须大于 0')
     }
   }
-  if (!data.specification || typeof data.specification !== 'string') {
-    addError(result, 'specification', 'REQUIRED', '分装规格不能为空')
+  if (!data.dispense_spec || typeof data.dispense_spec !== 'string' || data.dispense_spec.trim() === '') {
+    addError(result, 'dispense_spec', 'REQUIRED', '分装规格不能为空')
   }
-  if (!data.storage_condition) {
-    addError(result, 'storage_condition', 'REQUIRED', '存储条件不能为空')
+  if (!data.appearance_check) {
+    addError(result, 'appearance_check', 'REQUIRED', '外观检查结果不能为空')
   }
 }
 

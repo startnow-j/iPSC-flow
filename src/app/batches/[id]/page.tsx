@@ -476,6 +476,10 @@ export default function BatchDetailPage({
   const [terminateCategory, setTerminateCategory] = useState('')
   const [terminateReason, setTerminateReason] = useState('')
 
+  // Scrap dialog (all product lines)
+  const [scrapDialogOpen, setScrapDialogOpen] = useState(false)
+  const [scrapReason, setScrapReason] = useState('')
+
   // Assign task dialog
   const [assignDialog, setAssignDialog] = useState({ open: false, taskId: '', taskName: '', productId: '' })
 
@@ -569,12 +573,18 @@ export default function BatchDetailPage({
   }, [id])
 
   const handleQcSubmitted = async () => {
-    await fetchBatchDetail()
-    fetchTimeline()
-    // v3.0: After QC pass, CoA draft is auto-generated, fetch it
-    if (batch?.status === 'QC_PASS' || batch?.status === 'COA_SUBMITTED') {
-      fetchCoa()
+    const res = await authFetch(`/api/batches/${id}`)
+    if (res.ok) {
+      const data = await res.json()
+      setBatch(data.batch)
+      setAvailableActions(data.availableActions || [])
+      setRemainingQuantity(data.remainingQuantity ?? null)
+      setTotalConsumedVials(data.totalConsumedVials ?? 0)
+      if (data.batch.status === 'QC_PASS' || data.batch.status === 'COA_SUBMITTED') {
+        fetchCoa()
+      }
     }
+    fetchTimeline()
   }
 
   const handleCoaUpdated = async () => {
@@ -615,15 +625,6 @@ export default function BatchDetailPage({
   const handleTransition = async () => {
     if (!confirmAction) return
 
-    // Route terminate actions to the terminate dialog
-    if (confirmAction.action === 'terminate') {
-      setConfirmAction(null)
-      setTerminateCategory('')
-      setTerminateReason('')
-      setTerminateDialogOpen(true)
-      return
-    }
-
     setTransitioning(true)
     try {
       const res = await authFetch(`/api/batches/${id}/transition`, {
@@ -644,6 +645,42 @@ export default function BatchDetailPage({
       setConfirmAction(null)
       await fetchBatchDetail()
       // Also refresh timeline
+      fetchTimeline()
+    } catch {
+      toast.error('网络错误，请重试')
+    } finally {
+      setTransitioning(false)
+    }
+  }
+
+  const handleScrap = async () => {
+    if (!scrapReason.trim()) {
+      toast.error('请输入报废原因')
+      return
+    }
+
+    setTransitioning(true)
+    try {
+      const res = await authFetch(`/api/batches/${id}/transition`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'scrap',
+          reason: scrapReason.trim(),
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        toast.error(data.error || '报废操作失败')
+        return
+      }
+
+      toast.success('批次已报废')
+      setScrapDialogOpen(false)
+      setScrapReason('')
+      await fetchBatchDetail()
       fetchTimeline()
     } catch {
       toast.error('网络错误，请重试')
@@ -798,6 +835,19 @@ export default function BatchDetailPage({
           </div>
         )}
 
+        {/* SCRAPPED Status Banner */}
+        {batch.status === 'SCRAPPED' && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 mb-6">
+            <div className="flex items-center gap-2 text-red-700">
+              <TriangleAlert className="h-5 w-5" />
+              <span className="font-medium">该批次已报废</span>
+            </div>
+            {batch.scrapReason && (
+              <p className="mt-2 text-sm text-red-600">原因：{batch.scrapReason}</p>
+            )}
+          </div>
+        )}
+
         {/* Action Buttons — hidden when TERMINATED */}
         {availableActions.length > 0 && batch.status !== 'TERMINATED' && (
           <div className="flex gap-2 flex-wrap">
@@ -810,7 +860,20 @@ export default function BatchDetailPage({
                     : 'default'
                 }
                 size="sm"
-                onClick={() => setConfirmAction(action)}
+                onClick={() => {
+                  if (action.action === 'terminate') {
+                    setTerminateCategory('')
+                    setTerminateReason('')
+                    setTerminateDialogOpen(true)
+                    return
+                  }
+                  if (action.action === 'scrap') {
+                    setScrapReason('')
+                    setScrapDialogOpen(true)
+                    return
+                  }
+                  setConfirmAction(action)
+                }}
               >
                 {action.label}
               </Button>
@@ -918,7 +981,8 @@ export default function BatchDetailPage({
                     <User className="h-4 w-4 text-primary" />
                     指派信息
                   </CardTitle>
-                  {isSupervisorOrAdmin && (
+                  {isSupervisorOrAdmin && 
+                    !['RELEASED', 'SCRAPPED', 'TERMINATED'].includes(batch.status) && (
                     <Button
                       variant="ghost"
                       size="sm"
@@ -1036,7 +1100,9 @@ export default function BatchDetailPage({
 
         {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
-          {batch.productLine === 'CELL_PRODUCT' ? (
+          {['TERMINATED', 'SCRAPPED', 'RELEASED'].includes(batch.status) ? (
+            <PlaceholderCard title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
+          ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
               batchId={id}
               batch={batch}
@@ -1143,11 +1209,19 @@ export default function BatchDetailPage({
           {batch.productLine !== 'SERVICE' && (
             <>
               {/* Status: before QC_PENDING — show message */}
-              {(['NEW', 'IN_PRODUCTION', 'MATERIAL_PREP'].includes(batch.status)) && (
+              {(['NEW', 'IN_PRODUCTION'].includes(batch.status)) && (
                 <PlaceholderCard
                   icon={ClipboardCheck}
                   title="请先完成生产记录"
                   description="完成所有生产步骤并提交后，方可进行质检。"
+                />
+              )}
+
+              {batch.status === 'MATERIAL_PREP' && (
+                <PlaceholderCard
+                  icon={ClipboardCheck}
+                  title="请先完成物料准备"
+                  description="完成物料准备后，方可进行质检。"
                 />
               )}
 
@@ -1160,7 +1234,7 @@ export default function BatchDetailPage({
                     </div>
                     <h3 className="text-base font-medium mb-2">准备质检</h3>
                     <p className="text-sm text-muted-foreground text-center max-w-xs mb-4">
-                      生产已完成，可以开始质检。质检将对复苏活率、细胞形态、支原体检测三个项目进行检验。
+                      生产已完成，可以开始质检。请完成质检流程。
                     </p>
                     <Button onClick={handleStartQc} disabled={transitioning}>
                       {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
@@ -1218,8 +1292,19 @@ export default function BatchDetailPage({
             <Skeleton className="h-96" />
           ) : coa ? (
             <CoaDetail coa={coa} onUpdated={handleCoaUpdated} />
-          ) : (
-            ['QC_PASS', 'COA_SUBMITTED', 'RELEASED', 'REPORT_PENDING'].includes(batch.status) ? (
+          ) : batch.status === 'SCRAPPED' ? (
+            <PlaceholderCard
+              icon={FileText}
+              title="无法生成CoA"
+              description="该批次已报废，无法生成分析证书。"
+            />
+          ) : batch.status === 'TERMINATED' ? (
+            <PlaceholderCard
+              icon={FileText}
+              title="无法生成CoA"
+              description="该批次已终止，无法生成分析证书。"
+            />
+          ) : ['QC_PASS', 'COA_SUBMITTED', 'RELEASED', 'REPORT_PENDING'].includes(batch.status) ? (
               <PlaceholderCard
                 icon={FileText}
                 title="CoA生成中"
@@ -1235,8 +1320,7 @@ export default function BatchDetailPage({
                   ? '分析证书（CoA）将在鉴定完成后生成，届时可在此查看、编辑、提交审核。'
                   : '分析证书（CoA）将在质检合格后自动生成，届时可在此查看、编辑、提交审核。'}
               />
-            )
-          )}
+            )}
         </TabsContent>
 
         {/* ============================================ */}
@@ -1385,6 +1469,57 @@ export default function BatchDetailPage({
             >
               {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               确认终止
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ============================================ */}
+      {/* Scrap Dialog (all product lines) */}
+      {/* ============================================ */}
+      <Dialog open={scrapDialogOpen} onOpenChange={(open) => {
+        if (!open) {
+          setScrapDialogOpen(false)
+          setScrapReason('')
+        }
+      }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>报废批次</DialogTitle>
+            <DialogDescription>
+              报废后，该批次将标记为已报废状态。此操作不可撤销。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <Label htmlFor="scrap-reason">
+                报废原因 <span className="text-destructive">*</span>
+              </Label>
+              <Textarea
+                id="scrap-reason"
+                placeholder="请输入报废原因..."
+                value={scrapReason}
+                onChange={(e) => setScrapReason(e.target.value)}
+                rows={3}
+                className="resize-none"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setScrapDialogOpen(false)}
+              disabled={transitioning}
+            >
+              取消
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleScrap}
+              disabled={transitioning || !scrapReason.trim()}
+            >
+              {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              确认报废
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -34,8 +34,8 @@ export async function PATCH(
       qcOperatorName,
     } = body
 
-    // 至少提供一个人员变更
-    if (!productionOperatorId && !qcOperatorId) {
+    // 至少提供一个人员变更（用 undefined 区分"未发送"和"显式清除"）
+    if (productionOperatorId === undefined && qcOperatorId === undefined) {
       return NextResponse.json(
         { error: '请至少提供一个要变更的指派人员' },
         { status: 400 }

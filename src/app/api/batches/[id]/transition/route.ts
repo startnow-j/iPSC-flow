@@ -14,11 +14,13 @@ import { db } from '@/lib/db'
 // 操作类操作 → canOperate（需要产品级授权）
 // ============================================
 const MANAGEMENT_ACTIONS: Record<string, string[]> = {
-  start_production: ['SUPERVISOR'],
-  start_material_prep: ['SUPERVISOR'],
-  start_identification: ['SUPERVISOR'],
+  start_production: ['OPERATOR', 'SUPERVISOR'],
+  start_material_prep: ['OPERATOR', 'SUPERVISOR'],
+  start_identification: ['OPERATOR', 'SUPERVISOR'],
+  complete_production: ['OPERATOR', 'SUPERVISOR'],
+  complete_identification: ['OPERATOR', 'SUPERVISOR'],
   approve: ['SUPERVISOR', 'QA'],
-  submit_report: ['SUPERVISOR', 'QA'],
+  submit_report: ['OPERATOR', 'SUPERVISOR'],
   scrap: ['SUPERVISOR'],
   terminate: ['SUPERVISOR'],
   rework: ['SUPERVISOR'],
@@ -29,6 +31,7 @@ const OPERATIONAL_ACTIONS: Record<string, string[]> = {
   pass_qc: ['QC'],
   submit_coa: ['QC'],
   resubmit_coa: ['QC'],
+  receive_sample: ['OPERATOR'],
 }
 
 // ============================================
@@ -266,9 +269,12 @@ export async function POST(
         }
 
         if (filteredTemplates && filteredTemplates.length > 0) {
-          // 仅在没有任务时创建（防重复）
-          if (batch.tasks.length === 0) {
-            const tasksData = filteredTemplates.map((t: TaskTemplate) => ({
+          // 防重复：仅创建尚不存在的任务（按 taskCode 去重）
+          const existingTaskCodes = new Set(batch.tasks.map((t: any) => t.taskCode))
+          const newTemplates = filteredTemplates.filter((t: any) => !existingTaskCodes.has(t.taskCode))
+
+          if (newTemplates.length > 0) {
+            const tasksData = newTemplates.map((t: TaskTemplate) => ({
               batchId: id,
               batchNo: batch.batchNo,
               taskCode: t.taskCode,

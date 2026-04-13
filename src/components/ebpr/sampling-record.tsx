@@ -219,6 +219,7 @@ function SamplingFormDialog({
           sampleTime: new Date(sampleTime).toISOString(),
           sampler: user?.name || '',
         },
+        notes: notes.trim() || null,
       }
 
       const res = await authFetch(`/api/batches/${batchId}/qc`, {
