@@ -214,7 +214,10 @@ export default function ProductRolesPage() {
   const toggleProductRole = (productId: string, role: string) => {
     if (!selectedUser) return
     // Check if user has this role globally
-    if (!selectedUser.roles.includes(role)) return
+    if (!selectedUser.roles.includes(role)) {
+      toast.warning(`${selectedUser.name} 没有 ${role} 全局角色，请先在用户管理中添加`)
+      return
+    }
 
     setAssignments((prev) => {
       const current = prev[productId]?.roles || []
@@ -557,6 +560,8 @@ export default function ProductRolesPage() {
                       const hasQcGlobally = selectedUser.roles.includes('QC')
                       const isOperatorChecked = productAssignment.includes('OPERATOR')
                       const isQcChecked = productAssignment.includes('QC')
+                      const isOperatorDisabled = !hasOperatorGlobally
+                      const isQcDisabled = !hasQcGlobally
 
                       return (
                         <TableRow key={product.id}>
@@ -577,10 +582,12 @@ export default function ProductRolesPage() {
                             <div className="flex justify-center">
                               <Checkbox
                                 checked={isOperatorChecked}
-                                disabled={!hasOperatorGlobally}
+                                disabled={isOperatorDisabled}
                                 onCheckedChange={() =>
                                   toggleProductRole(product.id, 'OPERATOR')
                                 }
+                                title={isOperatorDisabled ? '该用户无 OPERATOR 全局角色' : undefined}
+                                className={isOperatorDisabled ? 'opacity-40' : ''}
                               />
                             </div>
                           </TableCell>
@@ -588,10 +595,12 @@ export default function ProductRolesPage() {
                             <div className="flex justify-center">
                               <Checkbox
                                 checked={isQcChecked}
-                                disabled={!hasQcGlobally}
+                                disabled={isQcDisabled}
                                 onCheckedChange={() =>
                                   toggleProductRole(product.id, 'QC')
                                 }
+                                title={isQcDisabled ? '该用户无 QC 全局角色' : undefined}
+                                className={isQcDisabled ? 'opacity-40' : ''}
                               />
                             </div>
                           </TableCell>
