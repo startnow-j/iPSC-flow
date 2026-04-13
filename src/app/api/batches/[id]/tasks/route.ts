@@ -3,6 +3,8 @@ import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { validateProductionTask } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
+import { getTaskTemplates } from '@/lib/services/task-templates'
+import type { TaskTemplate } from '@/lib/services/task-templates'
 
 // ============================================
 // GET /api/batches/[id]/tasks — 列出批次的所有生产任务
@@ -27,9 +29,71 @@ export async function GET(
     // 检查批次是否存在
     const batch = await db.batch.findUnique({
       where: { id },
+      include: { product: { select: { category: true } } },
     })
     if (!batch) {
       return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+    }
+
+    // ============================================
+    // v3.0: 自动补建缺失的生产任务（兼容旧批次）
+    // 旧批次可能因代码迭代缺少某些任务模板（如 NPC 缺少 DIFFERENTIATION）
+    // 在 IN_PRODUCTION / IDENTIFICATION 状态下自动补建
+    // ============================================
+    if (batch.status === 'IN_PRODUCTION' || batch.status === 'IDENTIFICATION') {
+      const productLine = batch.productLine as string
+      const category = batch.product?.category || undefined
+      const action = productLine === 'SERVICE' ? 'start_production' : 'start_production'
+      const templates = getTaskTemplates(productLine, action, category)
+
+      if (templates && templates.length > 0) {
+        const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+        let filteredTemplates = templates
+        if (productLine === 'CELL_PRODUCT') {
+          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+            filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
+          }
+        }
+
+        const existingTasks = await db.productionTask.findMany({
+          where: { batchId: id },
+          select: { taskCode: true },
+        })
+        const existingTaskCodes = new Set(existingTasks.map(t => t.taskCode))
+        const missingTemplates = filteredTemplates.filter(t => !existingTaskCodes.has(t.taskCode))
+
+        if (missingTemplates.length > 0) {
+          const tasksData = missingTemplates.map((t: TaskTemplate) => ({
+            batchId: id,
+            batchNo: batch.batchNo,
+            taskCode: t.taskCode,
+            taskName: t.taskName,
+            sequenceNo: t.sequenceNo,
+            stepGroup: t.stepGroup || null,
+            status: 'PENDING' as const,
+            assigneeId: batch.productionOperatorId || null,
+            assigneeName: batch.productionOperatorName || null,
+          }))
+
+          await db.productionTask.createMany({ data: tasksData })
+
+          await createAuditLog({
+            eventType: 'BATCH_STATUS_CHANGED',
+            targetType: 'BATCH',
+            targetId: id,
+            targetBatchNo: batch.batchNo,
+            operatorId: 'SYSTEM',
+            operatorName: '系统',
+            dataAfter: {
+              action: 'auto_repair_missing_tasks',
+              tasks: tasksData.map(t => ({
+                taskCode: t.taskCode,
+                taskName: t.taskName,
+              })),
+            },
+          })
+        }
+      }
     }
 
     // 查询所有任务，按 sequenceNo 排序

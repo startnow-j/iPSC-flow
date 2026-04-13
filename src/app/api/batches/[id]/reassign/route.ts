@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { canManage } from '@/lib/roles'
 import { createAuditLog } from '@/lib/services/audit-log'
+import { getTaskTemplates } from '@/lib/services/task-templates'
+import type { TaskTemplate } from '@/lib/services/task-templates'
 import { db } from '@/lib/db'
 
 // ============================================
@@ -108,6 +110,74 @@ export async function PATCH(
       where: { id },
       data: updateData,
     })
+
+    // ============================================
+    // v3.0: 补建缺失的生产任务（兼容旧批次）
+    // 某些旧批次可能因代码更新导致任务模板不全（如 NPC 批次缺少 DIFFERENTIATION）
+    // 仅在生产中状态下补建
+    // ============================================
+    const batchForTaskRepair = await db.batch.findUnique({
+      where: { id },
+      include: {
+        product: { select: { category: true } },
+        tasks: { select: { taskCode: true } },
+      },
+    })
+
+    if (batchForTaskRepair && batchForTaskRepair.status === 'IN_PRODUCTION') {
+      const productLine = batchForTaskRepair.productLine as string
+      const category = batchForTaskRepair.product?.category || undefined
+      const templates = getTaskTemplates(productLine, 'start_production', category)
+
+      if (templates && templates.length > 0) {
+        const diffCategories = ['NPC', 'CM', 'DIFF_KIT', 'DIFF_SERVICE']
+        let filteredTemplates = templates
+        if (productLine === 'CELL_PRODUCT') {
+          if (!category || !diffCategories.some(c => category.startsWith(c) || category.includes('DIFF'))) {
+            filteredTemplates = filteredTemplates.filter(t => t.taskCode !== 'DIFFERENTIATION')
+          }
+        }
+
+        const existingTaskCodes = new Set(batchForTaskRepair.tasks.map(t => t.taskCode))
+        const missingTemplates = filteredTemplates.filter(t => !existingTaskCodes.has(t.taskCode))
+
+        if (missingTemplates.length > 0) {
+          const newOperatorId = productionOperatorId ?? batchForTaskRepair.productionOperatorId
+          const newOperatorName = productionOperatorName ?? batchForTaskRepair.productionOperatorName
+
+          const tasksData = missingTemplates.map((t: TaskTemplate) => ({
+            batchId: id,
+            batchNo: batchForTaskRepair.batchNo,
+            taskCode: t.taskCode,
+            taskName: t.taskName,
+            sequenceNo: t.sequenceNo,
+            stepGroup: t.stepGroup || null,
+            status: 'PENDING' as const,
+            assigneeId: newOperatorId || null,
+            assigneeName: newOperatorName || null,
+          }))
+
+          await db.productionTask.createMany({ data: tasksData })
+
+          await createAuditLog({
+            eventType: 'BATCH_STATUS_CHANGED',
+            targetType: 'BATCH',
+            targetId: id,
+            targetBatchNo: batchForTaskRepair.batchNo,
+            operatorId: payload.userId,
+            operatorName: payload.name,
+            dataAfter: {
+              action: 'reassign_repair_missing_tasks',
+              tasks: tasksData.map(t => ({
+                taskCode: t.taskCode,
+                taskName: t.taskName,
+                assigneeId: t.assigneeId,
+              })),
+            },
+          })
+        }
+      }
+    }
 
     // 更新所有未完成任务(PENDING/IN_PROGRESS)的 assigneeId
     // 仅当生产操作员发生变更时更新
