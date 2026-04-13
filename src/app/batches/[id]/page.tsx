@@ -57,6 +57,7 @@ import {
   PlayCircle,
   CheckCircle2,
   TriangleAlert,
+  Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
@@ -1101,7 +1102,7 @@ export default function BatchDetailPage({
         {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
           {['TERMINATED', 'SCRAPPED', 'RELEASED'].includes(batch.status) ? (
-            <PlaceholderCard title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
+            <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
               batchId={id}
