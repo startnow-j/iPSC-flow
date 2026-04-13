@@ -412,11 +412,11 @@ export function EbprStepGuide({
       const data = await res.json()
 
       if (!res.ok) {
-        toast.error(data.error || '提交质检失败')
+        toast.error(data.error || '完成生产操作失败')
         return
       }
 
-      toast.success('已提交质检，批次状态已更新')
+      toast.success('生产已完成，批次已进入待质检阶段')
       onBatchUpdated()
     } catch {
       toast.error('网络错误，请重试')
@@ -620,14 +620,14 @@ export function EbprStepGuide({
                 <div>
                   <h4 className="text-sm font-semibold">所有生产步骤已完成</h4>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    收获冻存已完成，请提交质检以进入下一阶段
+                    所有生产任务已完成，请点击完成生产以进入质检阶段
                   </p>
                 </div>
               </div>
               <Button onClick={handleSubmitQc} disabled={submittingQc}>
                 {submittingQc && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <Send className="mr-2 h-4 w-4" />
-                提交质检
+                完成生产
               </Button>
             </div>
           </CardContent>
@@ -644,10 +644,10 @@ export function EbprStepGuide({
               </div>
               <div>
                 <h4 className="text-sm font-semibold text-emerald-700">
-                  已提交质检
+                  生产已完成
                 </h4>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  批次已进入质检阶段，请前往质检标签页查看详情
+                  批次已进入待质检阶段，请前往质检标签页查看详情
                 </p>
               </div>
             </div>

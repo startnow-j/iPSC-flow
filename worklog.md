@@ -2637,3 +2637,26 @@ Stage Summary:
   - 报废/终止批次有清晰的视觉提示和状态守卫
   - 终端状态批次的 production/QC/CoA tab 显示适当锁定信息
   - 消除了 terminate/scrap 操作的双对话框问题
+---
+Task ID: Fix-QC-Button-Display
+Agent: Main Agent
+Task: 修复批次详情页"提交质检"按钮在生产未完成时仍显示的问题
+
+Work Log:
+- 分析状态机和API逻辑，定位到三个问题点：
+  1. 状态机中 `complete_production` 动作的 label 为"提交质检"，容易误解为QC操作
+  2. API 未校验生产任务完成状态就允许 `complete_production` 转换
+  3. 批次详情API返回 availableActions 时未过滤任务未完成的"完成生产"操作
+- 修改 state-machine.ts：将 CELL_PRODUCT 和 KIT 两条产品线的 `complete_production` label 从"提交质检"改为"完成生产"
+- 修改 transition route：添加 `complete_production` 前置校验，检查是否存在 PENDING/IN_PROGRESS 任务
+- 修改 batch detail GET route：当存在未完成任务时，从 availableActions 中过滤掉 `complete_production` 和 `complete_identification`
+- 修改 ebpr-step-guide.tsx：将生产步骤完成提示中的"提交质检"文案统一改为"完成生产"
+
+Stage Summary:
+- 修改文件：
+  - src/lib/services/state-machine.ts (label 修正)
+  - src/app/api/batches/[id]/transition/route.ts (后端任务完成校验)
+  - src/app/api/batches/[id]/route.ts (前端按钮可见性控制)
+  - src/components/ebpr/ebpr-step-guide.tsx (文案统一)
+- "提交质检"按钮现在改名为"完成生产"，且仅在生产任务全部完成时才显示
+- 同时覆盖了鉴定流程的"鉴定完成"按钮（complete_identification）

@@ -37,11 +37,37 @@ export async function GET(
     }
 
     // 获取当前用户可执行的操作
-    const availableActions = getAvailableActions(
+    let availableActions = getAvailableActions(
       batch.productLine as import('@prisma/client').ProductLine,
       batch.status as string,
       getRolesFromPayload(payload)
     )
+
+    // v3.0: 生产中状态下，如果尚有未完成的生产任务，则隐藏"完成生产"按钮
+    if (batch.status === 'IN_PRODUCTION' && availableActions.some(a => a.action === 'complete_production')) {
+      const pendingTaskCount = await db.productionTask.count({
+        where: {
+          batchId: id,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+        },
+      })
+      if (pendingTaskCount > 0) {
+        availableActions = availableActions.filter(a => a.action !== 'complete_production')
+      }
+    }
+
+    // v3.0: 鉴定中状态下，如果尚有未完成的鉴定任务，则隐藏"鉴定完成"按钮
+    if (batch.status === 'IDENTIFICATION' && availableActions.some(a => a.action === 'complete_identification')) {
+      const pendingTaskCount = await db.productionTask.count({
+        where: {
+          batchId: id,
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
+        },
+      })
+      if (pendingTaskCount > 0) {
+        availableActions = availableActions.filter(a => a.action !== 'complete_identification')
+      }
+    }
 
     // 计算剩余数量：生产数量 - 所有质检记录消耗的复苏支数
     const qcRecords = await db.qcRecord.findMany({

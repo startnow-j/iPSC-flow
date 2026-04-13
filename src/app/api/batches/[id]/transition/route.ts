@@ -374,6 +374,33 @@ export async function POST(
     }
 
     // ============================================
+    // v3.0: 完成生产前校验所有生产任务已完成
+    // 仅对 complete_production 操作生效
+    // ============================================
+    if (action === 'complete_production') {
+      const batchForTaskCheck = await db.batch.findUnique({
+        where: { id },
+        select: { productLine: true, status: true },
+      })
+
+      if (batchForTaskCheck) {
+        const pendingTasks = await db.productionTask.count({
+          where: {
+            batchId: id,
+            status: { in: ['PENDING', 'IN_PROGRESS'] },
+          },
+        })
+
+        if (pendingTasks > 0) {
+          return NextResponse.json(
+            { error: `尚有 ${pendingTasks} 个生产任务未完成，请先完成所有生产任务后再提交` },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
+    // ============================================
     // 构建 transition options
     // ============================================
     const transitionOptions: TransitionOptions = {}

@@ -106,7 +106,7 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [
-      { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交质检' },
+      { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '完成生产' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PENDING: [
@@ -185,7 +185,7 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [
-      { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '提交质检' },
+      { to: 'QC_PENDING', action: 'complete_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '完成生产' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     QC_PENDING: [
