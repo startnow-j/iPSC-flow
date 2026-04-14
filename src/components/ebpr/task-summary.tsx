@@ -183,7 +183,11 @@ function DifferentiationSummary({ formData, stepGroup }: { formData: Record<stri
 
 function HarvestSummary({ formData }: { formData: Record<string, any> }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-4 text-sm">
+    <div className="grid gap-2 sm:grid-cols-5 text-sm">
+      <div>
+        <span className="text-xs text-muted-foreground">细胞代次</span>
+        <p className="font-mono font-medium">{formData.cell_passage ?? '-'}</p>
+      </div>
       <div>
         <span className="text-xs text-muted-foreground">总细胞数</span>
         <p className="font-medium">

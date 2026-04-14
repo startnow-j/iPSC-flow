@@ -85,6 +85,29 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // ============================================
+    // 3.5: 查询用户作为质检员待质检的批次
+    // 当批次处于 QC_PENDING 状态且用户是预指派质检员时，
+    // 将该批次作为待执行任务展示
+    // ============================================
+    const qcPendingBatches = await db.batch.findMany({
+      where: {
+        qcOperatorId: userId,
+        status: 'QC_PENDING',
+      },
+      select: {
+        id: true,
+        batchNo: true,
+        productName: true,
+        productLine: true,
+        qcOperatorName: true,
+      },
+    })
+
+    const qcBatchIds = new Set(qcPendingBatches.map(b => b.id))
+    // Avoid showing QC batches that already have production tasks in the task list
+    // (they would be duplicated otherwise)
+
     for (const task of tasks) {
       const item = {
         taskId: task.id,
@@ -111,6 +134,55 @@ export async function GET(request: NextRequest) {
       if (task.reviewerId === userId && task.status === 'COMPLETED') {
         toReview.push(item)
       }
+    }
+
+    // Add QC pending batches as to-execute items
+    for (const batch of qcPendingBatches) {
+      toExecute.push({
+        taskId: 'qc_' + batch.id, // Virtual task ID for QC batches
+        batchId: batch.id,
+        batchNo: batch.batchNo,
+        taskCode: 'QC_PENDING',
+        taskName: '质检待处理',
+        productName: batch.productName,
+        productLine: batch.productLine,
+        assigneeName: batch.qcOperatorName,
+        reviewerName: null,
+        status: 'QC_PENDING',
+        sequenceNo: 999,
+      })
+    }
+
+    // ============================================
+    // 3.6: 查询 COA_SUBMITTED 批次（待 SUPERVISOR/QA 审核）
+    // ============================================
+    const coaPendingBatches = await db.batch.findMany({
+      where: {
+        status: 'COA_SUBMITTED',
+      },
+      select: {
+        id: true,
+        batchNo: true,
+        productName: true,
+        productLine: true,
+        qcOperatorName: true,
+      },
+    })
+
+    // Add CoA review batches as to-review items
+    for (const batch of coaPendingBatches) {
+      toReview.push({
+        taskId: 'coa_review_' + batch.id,
+        batchId: batch.id,
+        batchNo: batch.batchNo,
+        taskCode: 'COA_REVIEW',
+        taskName: 'CoA待审核',
+        productName: batch.productName,
+        productLine: batch.productLine,
+        assigneeName: batch.qcOperatorName,
+        reviewerName: null,
+        status: 'COA_SUBMITTED',
+      })
     }
 
     // 4. Limit to 20 per category

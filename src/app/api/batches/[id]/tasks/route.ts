@@ -65,14 +65,14 @@ export async function GET(
         })
         const existingTaskCodes = new Set(existingTasks.map(t => t.taskCode))
 
-        // Clean up orphaned PENDING template tasks for phase-type steps that already have COMPLETED records.
-        // This handles legacy data where PENDING tasks were left behind after POST-created records.
+        // Clean up orphaned PENDING/IN_PROGRESS template tasks for phase-type steps that already have COMPLETED records.
+        // This handles legacy data where template tasks were left behind after POST-created records.
         for (const phaseCode of PHASE_TASK_CODES) {
           if (!existingTaskCodes.has(phaseCode)) continue
           const hasCompleted = existingTasks.some(t => t.taskCode === phaseCode && (t.status === 'COMPLETED' || t.status === 'REVIEWED'))
           if (hasCompleted) {
             await db.productionTask.deleteMany({
-              where: { batchId: id, taskCode: phaseCode, status: 'PENDING' },
+              where: { batchId: id, taskCode: phaseCode, status: { in: ['PENDING', 'IN_PROGRESS'] } },
             })
           }
         }
@@ -186,6 +186,37 @@ export async function POST(
       )
     }
 
+    // v3.1: 单线生产流程锁定 — 后续步骤已开始时，禁止向更早步骤添加记录
+    const STEP_SEQ_MAP: Record<string, number> = {
+      SEED_PREP: 1,
+      EXPANSION: 2,
+      DIFFERENTIATION: 3,
+      CLONE_PICKING: 3,
+      CLONE_SCREENING: 3,
+      HARVEST: 4,
+    }
+    const currentStepSeq = STEP_SEQ_MAP[resolvedTaskCode]
+    if (currentStepSeq !== undefined) {
+      const allBatchTasks = await db.productionTask.findMany({
+        where: { batchId: id },
+        select: { taskCode: true, status: true },
+      })
+      const hasLaterActivity = allBatchTasks.some((t) => {
+        const tSeq = STEP_SEQ_MAP[t.taskCode]
+        return (
+          tSeq !== undefined &&
+          tSeq > currentStepSeq &&
+          ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
+        )
+      })
+      if (hasLaterActivity) {
+        return NextResponse.json(
+          { error: '后续步骤已开始，无法再添加该步骤的记录。如需修改请先联系生产主管。' },
+          { status: 400 }
+        )
+      }
+    }
+
     // 校验表单数据
     const validation = validateProductionTask(resolvedTaskCode, formData ?? {})
     if (!validation.valid) {
@@ -235,7 +266,7 @@ export async function POST(
     const stepGroup = config.buildStepGroup(formData ?? {}, existingTasks.length)
 
     // 阶段型任务（EXPANSION / DIFFERENTIATION / CLONE_PICKING / CLONE_SCREENING）：
-    // 创建新记录前，清理残留的 PENDING 模板任务，避免：
+    // 创建新记录前，清理残留的 PENDING/IN_PROGRESS 模板任务，避免：
     //   1. PENDING 任务阻止 complete_production
     //   2. PENDING 任务干扰 showDifferentiationForm / showExpansionForm 逻辑
     //   3. 轮次编号偏移（existingDifferentiations 误计）
@@ -245,7 +276,7 @@ export async function POST(
         where: {
           batchId: id,
           taskCode: resolvedTaskCode,
-          status: 'PENDING',
+          status: { in: ['PENDING', 'IN_PROGRESS'] },
         },
       })
     }

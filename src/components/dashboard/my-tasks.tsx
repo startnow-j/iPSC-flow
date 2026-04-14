@@ -46,12 +46,16 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   PENDING: '待开始',
   IN_PROGRESS: '进行中',
   COMPLETED: '已完成',
+  QC_PENDING: '待质检',
+  COA_SUBMITTED: 'CoA待审核',
 }
 
 const TASK_STATUS_COLORS: Record<string, string> = {
   PENDING: 'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
   IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  QC_PENDING: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  COA_SUBMITTED: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 }
 
 export function MyTasks() {
@@ -101,6 +105,10 @@ export function MyTasks() {
       if (!seen.has('qc-pending')) { actions.push({ label: '待质检批次', icon: ClipboardCheck, href: '/batches/all?status=QC_PENDING' }); seen.add('qc-pending') }
       if (!seen.has('coa-submit')) { actions.push({ label: '待提交CoA', icon: FileCheck, href: '/batches/all?status=COA_SUBMITTED' }); seen.add('coa-submit') }
     }
+    if (hasRoleCheck(userRoles, 'QA')) {
+      if (!seen.has('coa-review')) { actions.push({ label: '待审核CoA', icon: Eye, href: '/batches/all?status=COA_SUBMITTED' }); seen.add('coa-review') }
+      if (!seen.has('batches-all')) { actions.push({ label: '所有批次', icon: FlaskConical, href: '/batches/all' }); seen.add('batches-all') }
+    }
     if (hasRoleCheck(userRoles, 'OPERATOR') || hasRoleCheck(userRoles, 'SUPERVISOR') || hasRoleCheck(userRoles, 'ADMIN')) {
       if (!seen.has('new-batch')) { actions.unshift({ label: '新建批次', icon: Plus, href: '/batches' }); seen.add('new-batch') }
     }
@@ -148,7 +156,7 @@ export function MyTasks() {
                   </div>
                   <div className="space-y-1">
                     {data.toExecute.slice(0, 5).map((task) => (
-                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(`/batches/${task.batchId}`)} />
+                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(task.taskCode === 'QC_PENDING' ? `/batches/${task.batchId}?tab=qc` : task.taskCode === 'COA_REVIEW' ? `/batches/${task.batchId}?tab=coa` : `/batches/${task.batchId}`)} />
                     ))}
                     {data.toExecuteCount > 5 && (
                       <button
@@ -177,7 +185,7 @@ export function MyTasks() {
                   </div>
                   <div className="space-y-1">
                     {data.toReview.slice(0, 5).map((task) => (
-                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(`/batches/${task.batchId}`)} />
+                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(task.taskCode === 'COA_REVIEW' ? `/batches/${task.batchId}?tab=coa` : `/batches/${task.batchId}`)} />
                     ))}
                     {data.toReviewCount > 5 && (
                       <button

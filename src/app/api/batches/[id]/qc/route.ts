@@ -115,6 +115,7 @@ export async function POST(
     }
 
     // 操作类权限检查：只有 QC（在该产品上有授权）或 ADMIN 可以创建质检记录
+    // v3.1: 额外检查 — 必须是该批次指定的质检员（batch.qcOperatorId）
     const roles = getRolesFromPayload(payload)
     const userWithPermissions = await db.user.findUnique({
       where: { id: payload.userId },
@@ -131,6 +132,10 @@ export async function POST(
     })) || []
     if (!canOperate(roles, userProductRoles, batch.productId, ['QC'])) {
       return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
+    }
+    // 指定质检员检查：非 ADMIN 必须是该批次指定的质检员
+    if (!roles.includes('ADMIN') && batch.qcOperatorId && batch.qcOperatorId !== payload.userId) {
+      return NextResponse.json({ error: '您不是该批次指定的质检员，无法执行质检操作' }, { status: 403 })
     }
 
     // IN_PROCESS 类型允许在生产中进行状态下创建（过程监控）

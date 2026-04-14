@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback, use } from 'react'
+import { useState, useEffect, useCallback, use, useMemo } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { getStatusLabel, getStatusColor } from '@/lib/services'
 import { TERMINATION_REASONS, TERMINATION_REASON_LABELS } from '@/lib/services/state-machine'
 import type { AvailableAction } from '@/lib/services'
@@ -456,6 +456,10 @@ export default function BatchDetailPage({
 }) {
   const { id } = use(params)
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // Determine default tab from URL query param
+  const defaultTab = searchParams.get('tab') || 'overview'
 
   const [batch, setBatch] = useState<BatchDetail | null>(null)
   const [remainingQuantity, setRemainingQuantity] = useState<number | null>(null)
@@ -573,6 +577,17 @@ export default function BatchDetailPage({
     }
   }, [id])
 
+  // Fetch tab-specific data on mount based on URL query param
+  useEffect(() => {
+    if (defaultTab === 'qc') {
+      fetchQcRecords()
+    } else if (defaultTab === 'timeline') {
+      fetchTimeline()
+    } else if (defaultTab === 'coa') {
+      fetchCoa()
+    }
+  }, [defaultTab, fetchQcRecords, fetchTimeline, fetchCoa])
+
   const handleQcSubmitted = async () => {
     const res = await authFetch(`/api/batches/${id}`)
     if (res.ok) {
@@ -586,6 +601,8 @@ export default function BatchDetailPage({
       }
     }
     fetchTimeline()
+    // v3.1: Always refresh QC records after submission (needed for QC fail display)
+    fetchQcRecords()
   }
 
   const handleCoaUpdated = async () => {
@@ -610,6 +627,8 @@ export default function BatchDetailPage({
       toast.success('质检已开始')
       await fetchBatchDetail()
       fetchTimeline()
+      // v3.1: Refresh QC records to show any previous failed records
+      fetchQcRecords()
     } catch {
       toast.error('网络错误，请重试')
     } finally {
@@ -884,7 +903,7 @@ export default function BatchDetailPage({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" onValueChange={handleTabChange}>
+      <Tabs defaultValue={defaultTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="overview">概览</TabsTrigger>
           <TabsTrigger value="production">
@@ -1226,35 +1245,50 @@ export default function BatchDetailPage({
                 />
               )}
 
-              {/* Status: QC_PENDING — show start QC button */}
+              {/* Status: QC_PENDING — show start QC button + any previous QC records */}
               {batch.status === 'QC_PENDING' && (
-                <Card>
-                  <CardContent className="flex flex-col items-center justify-center py-12">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
-                      <ClipboardCheck className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                <div className="space-y-6">
+                  {/* v3.1: Show previous QC records (e.g., from failed attempts before rework) */}
+                  {qcRecords.length > 0 && (
+                    <div>
+                      <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                        历史质检记录（返工前）
+                      </h3>
+                      <QcResultsSummary key={`qc-pending-${qcRecords.length}`} batchId={id} />
                     </div>
-                    <h3 className="text-base font-medium mb-2">准备质检</h3>
-                    <p className="text-sm text-muted-foreground text-center max-w-xs mb-4">
-                      生产已完成，可以开始质检。请完成质检流程。
-                    </p>
-                    <Button onClick={handleStartQc} disabled={transitioning}>
-                      {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                      <PlayCircle className="mr-2 h-4 w-4" />
-                      开始质检
-                    </Button>
-                  </CardContent>
-                </Card>
+                  )}
+                  <Card>
+                    <CardContent className="flex flex-col items-center justify-center py-12">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30 mb-4">
+                        <ClipboardCheck className="h-7 w-7 text-amber-600 dark:text-amber-400" />
+                      </div>
+                      <h3 className="text-base font-medium mb-2">准备质检</h3>
+                      <p className="text-sm text-muted-foreground text-center max-w-xs mb-4">
+                        生产已完成，可以开始质检。请完成质检流程。
+                      </p>
+                      <Button onClick={handleStartQc} disabled={transitioning}>
+                        {transitioning && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                        <PlayCircle className="mr-2 h-4 w-4" />
+                        开始质检
+                      </Button>
+                    </CardContent>
+                  </Card>
+                </div>
               )}
 
-              {/* Status: QC_IN_PROGRESS — show QC form */}
+              {/* Status: QC_IN_PROGRESS — show existing QC records + QC form */}
               {batch.status === 'QC_IN_PROGRESS' && (
-                <QcForm
-                  batchId={id}
-                  batchNo={batch.batchNo}
-                  batchActualQuantity={remainingQuantity}
-                  batchUnit={batch.unit}
-                  onSubmitted={handleQcSubmitted}
-                />
+                <div className="space-y-6">
+                  {/* v3.1: Show previous QC records (e.g., failed attempts) */}
+                  <QcResultsSummary key={`qc-records-${qcRecords.length}`} batchId={id} />
+                  <QcForm
+                    batchId={id}
+                    batchNo={batch.batchNo}
+                    batchActualQuantity={remainingQuantity}
+                    batchUnit={batch.unit}
+                    onSubmitted={handleQcSubmitted}
+                  />
+                </div>
               )}
 
               {/* Post-QC statuses: show QC results summary */}

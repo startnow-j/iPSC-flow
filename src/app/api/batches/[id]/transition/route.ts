@@ -30,7 +30,6 @@ const OPERATIONAL_ACTIONS: Record<string, string[]> = {
   start_qc: ['QC'],
   pass_qc: ['QC'],
   submit_coa: ['QC'],
-  resubmit_coa: ['QC'],
   receive_sample: ['OPERATOR'],
 }
 
@@ -140,57 +139,17 @@ export async function POST(
       if (operationalRoles && !canOperate(roles, userProductRoles, batchForPerm.productId, operationalRoles)) {
         return NextResponse.json({ error: '无权限操作该产品' }, { status: 403 })
       }
-    }
 
-    // ============================================
-    // CoA 退回 — CoA 表层面处理（status → DRAFT），
-    // 批次状态保持 COA_SUBMITTED 不变。
-    // ============================================
-    if (action === 'reject_coa') {
-      const batch = await db.batch.findUnique({ where: { id } })
-      if (!batch) {
-        return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+      // v3.1: QC 操作（start_qc / pass_qc / submit_coa）额外检查指定质检员
+      if (operationalRoles && operationalRoles.includes('QC') && !roles.includes('ADMIN')) {
+        const batchForQcCheck = await db.batch.findUnique({
+          where: { id },
+          select: { qcOperatorId: true },
+        })
+        if (batchForQcCheck?.qcOperatorId && batchForQcCheck.qcOperatorId !== payload.userId) {
+          return NextResponse.json({ error: '您不是该批次指定的质检员，无法执行质检操作' }, { status: 403 })
+        }
       }
-
-      const coa = await db.coa.findUnique({ where: { batchId: id } })
-      if (!coa) {
-        return NextResponse.json({ error: 'CoA不存在' }, { status: 404 })
-      }
-
-      // Update CoA status to DRAFT
-      await db.coa.update({
-        where: { batchId: id },
-        data: {
-          status: 'DRAFT',
-          reviewedBy: payload.userId,
-          reviewedByName: payload.name,
-          reviewComment: reason ?? '',
-          reviewedAt: new Date(),
-        },
-      })
-
-      // Record audit log
-      await createAuditLog({
-        eventType: 'COA_REJECTED',
-        targetType: 'COA',
-        targetId: coa.id,
-        targetBatchNo: batch.batchNo,
-        operatorId: payload.userId,
-        operatorName: payload.name,
-        dataBefore: { coaStatus: 'SUBMITTED' },
-        dataAfter: {
-          coaStatus: 'DRAFT',
-          reviewComment: reason ?? '',
-          note: 'CoA退回为草稿，批次状态保持COA_SUBMITTED',
-        },
-      })
-
-      return NextResponse.json({
-        success: true,
-        message: `CoA已退回为草稿，批次状态保持 ${getStatusLabel(batch.status)}`,
-        previousState: batch.status,
-        newState: batch.status,
-      })
     }
 
     // ============================================

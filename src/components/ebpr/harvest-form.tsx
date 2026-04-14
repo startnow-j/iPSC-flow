@@ -62,6 +62,9 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
   const { user } = useAuthStore()
   const [saving, setSaving] = useState(false)
   const displayOperator = task.assigneeName || user?.name
+  const [cellPassage, setCellPassage] = useState<string>(
+    task.formData?.cell_passage ?? ''
+  )
   const [totalCells, setTotalCells] = useState<string>(
     task.formData?.total_cells?.toString() ?? ''
   )
@@ -91,6 +94,10 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
 
   const handleSubmit = async () => {
     // 前端校验
+    if (!cellPassage.trim()) {
+      toast.error('请填写细胞代次')
+      return
+    }
     if (!totalCells || Number(totalCells) <= 0) {
       toast.error('请填写有效的总细胞数')
       return
@@ -111,6 +118,7 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
     setSaving(true)
     try {
       const formData = {
+        cell_passage: cellPassage.trim(),
         total_cells: Number(totalCells),
         viability: Number(viability),
         vial_per_spec: vialPerSpec.trim(),
@@ -173,16 +181,10 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
       </CardHeader>
       <CardContent className="space-y-5">
         {/* Header Info */}
-        <div className="grid gap-3 sm:grid-cols-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">批次编号</Label>
             <p className="text-sm font-mono font-medium">{batch.batchNo}</p>
-          </div>
-          <div className="space-y-1">
-            <Label className="text-xs text-muted-foreground">当前代次</Label>
-            <Badge variant="secondary" className="font-mono">
-              {batch.currentPassage ?? '-'}
-            </Badge>
           </div>
           <div className="space-y-1">
             <Label className="text-xs text-muted-foreground">操作员</Label>
@@ -194,6 +196,20 @@ export function HarvestForm({ task, batch, onSuccess }: HarvestFormProps) {
 
         {/* Form Fields */}
         <div className="grid gap-4 sm:grid-cols-2">
+          <div className="space-y-2">
+            <Label htmlFor="cell-passage">
+              细胞代次 <span className="text-destructive">*</span>
+            </Label>
+            <Input
+              id="cell-passage"
+              type="text"
+              placeholder="如：P0、P2"
+              value={cellPassage}
+              onChange={(e) => setCellPassage(e.target.value)}
+              disabled={isCompleted}
+            />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="total-cells">
               总细胞数 <span className="text-destructive">*</span>

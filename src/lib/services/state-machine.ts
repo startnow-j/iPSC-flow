@@ -84,7 +84,7 @@ export const TERMINATION_REASON_LABELS: Record<string, string> = {
  *   中间状态 → SCRAPPED（强制原因）
  *   QC_PASS 时系统自动生成 CoA 草稿（batch 仍处于 QC_PASS）
  *   QC 角色手动提交 CoA（QC_PASS → COA_SUBMITTED）
- *   被退回的 CoA 可重新提交（COA_SUBMITTED 自环）
+ *   COA_SUBMITTED 可被报废（需原因）
  *
  * SERVICE — 服务项目（订单驱动）:
  *   NEW → SAMPLE_RECEIVED → IN_PRODUCTION → IDENTIFICATION → REPORT_PENDING → COA_SUBMITTED → RELEASED
@@ -126,8 +126,7 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
     COA_SUBMITTED: [
       // v3.0: 批准 CoA = 自动放行（合并 approve_coa + release）
       { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
-      // CoA 被退回后重新提交（batch 状态保持 COA_SUBMITTED）
-      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['QC'], label: '重新提交CoA' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     RELEASED: [],
     SCRAPPED: [],
@@ -166,6 +165,7 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
     COA_SUBMITTED: [
       // v3.0: 批准 CoA = 自动放行
       { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     RELEASED: [],
     TERMINATED: [],
@@ -204,8 +204,7 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
     COA_SUBMITTED: [
       // v3.0: 批准 CoA = 自动放行
       { to: 'RELEASED', action: 'approve', roles: ['SUPERVISOR', 'QA'], label: '批准并放行' },
-      // CoA 被退回后重新提交
-      { to: 'COA_SUBMITTED', action: 'resubmit_coa', roles: ['QC'], label: '重新提交CoA' },
+      { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     RELEASED: [],
     SCRAPPED: [],
@@ -403,7 +402,6 @@ export interface TransitionOptions {
  *  6. 执行转换：
  *     - pass_qc: QC_IN_PROGRESS → QC_PASS（自动生成 CoA 草稿）
  *     - submit_coa: QC_PASS → COA_SUBMITTED（QC 提交 CoA）
- *     - resubmit_coa: COA_SUBMITTED → COA_SUBMITTED（退回后重新提交）
  *     - submit_report: 服务项目报告提交 → COA_SUBMITTED（自动生成 CoA + 提交）
  *     - approve: COA_SUBMITTED → 自动放行 RELEASED
  *     - scrap: 记录报废原因
@@ -515,18 +513,6 @@ export async function transition(
 
     // 5a2. submit_coa: QC 提交 CoA（QC_PASS → COA_SUBMITTED）
     if (action === 'submit_coa') {
-      await db.coa.update({
-        where: { batchId },
-        data: {
-          status: 'SUBMITTED',
-          submittedBy: operatorId,
-          submittedAt: new Date(),
-        },
-      })
-    }
-
-    // 5a3. resubmit_coa: CoA 被退回后重新提交（COA_SUBMITTED 自环）
-    if (action === 'resubmit_coa') {
       await db.coa.update({
         where: { batchId },
         data: {

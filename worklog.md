@@ -2779,3 +2779,172 @@ Work Log:
 Stage Summary:
 - 修改文件：docs/plans/流程重构实施计划-v3.0.md
 - 新增 §7.1 节约 240 行，涵盖动机、数据模型、功能需求、暂存机制、前端架构、实施路径、迁移策略
+
+---
+Task ID: Bug Fix Session 3
+Agent: Main Agent
+Task: 修复三个生产流程问题 — 单线流程锁定、收获冻存代次字段、质检提交流程
+
+Work Log:
+- 分析了三个用户报告的问题，深入理解现有代码逻辑
+- 通过数据库查询定位 NPC-260413-001 批次的根本原因（orphaned IN_PROGRESS task）
+
+**问题1：单线生产流程锁定**
+- 发现 showExpansionForm/showDifferentiationForm 逻辑未考虑后续步骤状态
+- 在 ebpr-step-guide.tsx 中新增 hasLaterStepActivity() 函数
+- 当后续步骤有任何 PENDING/IN_PROGRESS/COMPLETED/REVIEWED 任务时，锁定前一步
+- 扩增培养和分化诱导步骤各增加"步骤已锁定"视觉提示（灰色盾牌图标）
+- 锁定后不显示添加记录表单
+
+**问题2：收获冻存细胞代次**
+- 收获冻存表单原来显示 batch.currentPassage（种子传代代次），对分化细胞不正确
+- 在 harvest-form.tsx 中新增 cell_passage 手动输入字段（必填，placeholder "如：P0、P2"）
+- 移除头部信息中的"当前代次"自动显示
+- 在 task-summary.tsx 的 HarvestSummary 中新增细胞代次展示列
+
+**问题3：质检提交流程修复**
+- 根因：EXPANSION 模板任务处于 IN_PROGRESS 状态未被清理，阻止 complete_production
+- 扩展 tasks/route.ts GET handler 的自动修复逻辑：清理 PENDING + IN_PROGRESS 两种孤立状态（原只清理 PENDING）
+- 扩展 tasks/route.ts POST handler 的清理逻辑：同样清理 IN_PROGRESS（原只清理 PENDING）
+- 新增 my-tasks 路由：查询 batch.qcOperatorId === userId 且 status === QC_PENDING 的批次
+- 质检员现在可以在"我的待办"中看到待质检批次
+- my-tasks.tsx 新增 QC_PENDING 状态标签和颜色（violet）
+- 点击质检待办任务直接跳转到批次的质检标签页（?tab=qc）
+- 批次详情页新增 useSearchParams 支持，根据 URL query param 设置默认标签页
+- 批次详情页新增初始加载时根据 tab 参数自动获取对应数据
+
+Stage Summary:
+- 修改文件：ebpr-step-guide.tsx（单线流程锁定 + 锁定提示UI）
+- 修改文件：harvest-form.tsx（新增细胞代次输入字段）
+- 修改文件：task-summary.tsx（收获摘要新增细胞代次展示）
+- 修改文件：tasks/route.ts GET+POST（IN_PROGRESS 孤立任务清理）
+- 修改文件：my-tasks/route.ts（质检员待质检批次查询）
+- 修改文件：my-tasks.tsx（QC_PENDING 状态展示 + 质检标签页导航）
+- 修改文件：batches/[id]/page.tsx（URL tab 参数 + 初始数据加载）
+- NPC-260413-001 批次孤立 IN_PROGRESS 任务已被自动修复逻辑清理
+- 用户刘六刷新后可点击"完成生产"按钮，陈五将在待办中看到待质检批次
+---
+Task ID: 6-1
+Agent: Main Agent
+Task: 修复质检权限控制 + 不合格记录不显示
+
+Work Log:
+- 分析质检权限问题：POST /api/batches/[id]/qc 和 transition 路由中仅检查产品级 QC 角色授权，未检查 batch.qcOperatorId 是否匹配当前用户
+- 修复 POST /api/batches/[id]/qc：在 canOperate 检查后新增指定质检员检查（非 ADMIN 必须 batch.qcOperatorId === payload.userId）
+- 修复 POST /api/batches/[id]/transition：对 QC 操作（start_qc / pass_qc / submit_coa / resubmit_coa）新增指定质检员检查
+- 分析质检不合格记录不显示问题：
+  - handleQcSubmitted 未调用 fetchQcRecords 导致父组件 qcRecords 不更新
+  - QC_IN_PROGRESS 状态下只显示 QcForm，不显示已有 QC 记录
+  - QcResultsSummary 有独立内部状态，仅 mount 时 fetch
+- 修复 handleQcSubmitted：新增 fetchQcRecords() 调用
+- 修复 QC_IN_PROGRESS 状态：同时显示 QcResultsSummary（历史记录）和 QcForm
+- 修复 QC_PENDING 状态（返工后）：也显示历史质检记录
+- 修复 handleStartQc：新增 fetchQcRecords() 以显示返工前的失败记录
+- 使用 key={qcRecords.length} 强制 QcResultsSummary 在新记录添加后重新 mount 和 fetch
+- Lint 检查通过（仅预存 generate-plan.js 2 error）
+
+Stage Summary:
+- 修改文件：src/app/api/batches/[id]/qc/route.ts（新增指定质检员检查）
+- 修改文件：src/app/api/batches/[id]/transition/route.ts（QC 操作新增指定质检员检查）
+- 修改文件：src/app/batches/[id]/page.tsx（QC_IN_PROGRESS/QC_PENDING 显示历史记录、handleQcSubmitted/handleStartQc 刷新 QC 记录）
+- 质检权限：非 ADMIN 用户必须是批次指定的质检员（qcOperatorId 匹配）才能执行质检相关操作
+- 质检不合格记录：质检中状态下显示历史质检记录（含不合格记录），返工后也可查看返工前的失败记录
+
+---
+Task ID: 6-2
+Agent: Main Agent
+Task: 修复步骤锁定后端检查 + 确认收获冻存代次已支持手动输入
+
+Work Log:
+- 阅读分析 ebpr-step-guide.tsx，确认前端已有完整的步骤锁定 UI（expansionLocked/differentiationLocked）
+- 阅读 POST /api/batches/[id]/tasks 路由，发现后端仅检查 batch.status=IN_PRODUCTION，未检查后续步骤是否已开始
+- 在后端 POST /api/batches/[id]/tasks 新增单线流程锁定检查：
+  - 定义 STEP_SEQ_MAP 映射各步骤的序号（SEED_PREP=1, EXPANSION=2, DIFFERENTIATION=3, HARVEST=4）
+  - 查询所有批次任务，检查是否存在序号更大且状态为 PENDING/IN_PROGRESS/COMPLETED/REVIEWED 的任务
+  - 如存在后续步骤活动，返回 400 错误 "后续步骤已开始，无法再添加该步骤的记录"
+- 确认 harvest-form.tsx 已支持手动填写细胞代次（cellPassage 字段，非自动填充）
+- Lint 检查通过（仅预存 generate-plan.js 2 error）
+
+Stage Summary:
+- 修改文件：src/app/api/batches/[id]/tasks/route.ts（新增后端步骤锁定检查）
+- 前端+后端双重锁定：前端显示"步骤已锁定"提示，后端返回 400 阻止绕过
+- 收获冻存细胞代次确认已为手动输入模式（cell_passage 字段，placeholder "如：P0、P2"）
+
+---
+Task ID: 6-investigate
+Agent: Main Agent (via sub-agent)
+Task: 调查 NPC-260413-001 批次当前状态
+
+Work Log:
+- 通过 SQLite 查询确认批次状态：QC_IN_PROGRESS（质检中）
+- 质检员指派为陈五，但实际质检由李质检执行（权限问题，已在本次修复）
+- 质检记录：1条 FAIL（复苏活率 80% < 85%标准）
+- 主管已执行 rework 返工并重新开始质检
+- "状态未正确转换"为瞬时客户端缓存问题，服务端状态机转换正确
+
+Stage Summary:
+- 当前批次状态：QC_IN_PROGRESS（返工后重新质检中）
+- 权限修复后，李质检将无法再对该批次执行质检操作（非指定质检员）
+- 状态转换和数据一致性问题已通过权限修复+QC记录刷新修复解决
+
+
+---
+Task ID: fix-resubmit-coa
+Agent: Main Agent
+Task: 修复 CoA 提交后错误显示"重新提交CoA"按钮的问题
+
+Work Log:
+- 分析 CoA 重新提交流程：状态机定义 resubmit_coa 为 COA_SUBMITTED→COA_SUBMITTED 自环
+- 发现问题：getAvailableActions 只检查批次状态（COA_SUBMITTED），不检查 CoA 当前状态
+- 正确行为：只有 CoA 被退回后（状态为 DRAFT），才应显示"重新提交CoA"按钮
+- 修改 src/app/api/batches/[id]/route.ts：在 availableActions 过滤逻辑中新增 CoA 状态检查
+  - 当批次状态为 COA_SUBMITTED 且存在 resubmit_coa action 时
+  - 查询 CoA 当前状态，仅当 CoA.status === 'DRAFT' 时保留 resubmit_coa action
+- Lint 检查通过，Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：src/app/api/batches/[id]/route.ts（新增 CoA 状态检查过滤逻辑）
+- 修复效果：质检员提交 CoA 后（CoA 状态为 SUBMITTED，等待审核），"重新提交CoA"按钮不再显示
+- 正确流程：CoA 被主管退回 → CoA 变为 DRAFT → 质检员修改后点击"提交审核" → API 自动识别为 resubmit_coa
+
+---
+Task ID: fix-coa-workflow-34512
+Agent: Main Agent + full-stack-developer sub-agent
+Task: 修复 CoA 工作流 5 个 Bug（问题 1-5）
+
+Work Log:
+- 分析 CoA 完整流程代码（状态机、CoA API、CoA 组件、批次详情页、待办任务）
+- 与用户讨论确认问题 4/5 方案：移除 CoA 退回机制 + COA_SUBMITTED 增加报废选项
+- 排查问题 3 根因：coa-detail.tsx DRAFT 状态"提交审核"按钮无角色限制
+- 批量修复 5 个问题：
+
+**Bug 3: supervisor 能提交 CoA（权限 Bug）**
+- 修改 coa-detail.tsx：添加 `isQC` 变量，DRAFT 状态"提交审核"按钮增加 `isQC &&` 条件
+- 后端 API 已有正确的 `canOperate` 权限校验（前端缺少守卫导致用户体验问题）
+
+**Bug 4: 移除 CoA 退回机制**
+- 修改 state-machine.ts：移除所有产品线的 `resubmit_coa` 转换规则 + transition() 函数中的 resubmit_coa 处理
+- 修改 coa/[coaId]/route.ts：移除 reject action（~55 行）、移除 resubmit_coa 分支、清理注释
+- 修改 coa-detail.tsx：移除退回按钮、重新提交按钮、退回确认对话框、rejectComment 状态、相关 import
+- 清理 transition/route.ts：移除 OPERATIONAL_ACTIONS 中 resubmit_coa、移除 reject_coa handler（~50 行）、清理注释
+- 清理 batches/[id]/route.ts：移除之前添加的 resubmit_coa 过滤逻辑（已无用）
+
+**Bug 5: COA_SUBMITTED 增加报废选项**
+- 修改 state-machine.ts：三条产品线（CELL_PRODUCT/SERVICE/KIT）的 COA_SUBMITTED 状态均新增 `scrap` 转换（ADMIN+SUPERVISOR 角色，requiresReason）
+
+**Bug 1: QA 待办任务无数据**
+- 修改 tasks/my-tasks/route.ts：新增 COA_SUBMITTED 批次查询，加入 toReview 列表
+- 修改 my-tasks.tsx：QA 角色增加"待审核CoA"和"所有批次"快捷操作，新增 COA_SUBMITTED 状态标签
+
+**Bug 2: CoA 退回后按钮异常**
+- 由 Bug 4 的移除退回机制自动解决
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 正常编译运行
+
+Stage Summary:
+- 修改文件：7 个（state-machine.ts、coa/[coaId]/route.ts、coa-detail.tsx、batches/[id]/route.ts、transition/route.ts、tasks/my-tasks/route.ts、my-tasks.tsx）
+- CoA 流程简化：QC_PASS → COA_SUBMITTED（approve → RELEASED | scrap → SCRAPPED）
+- 权限修复：CoA 提交仅 QC 角色可见/可操作
+- QA 待办：QA 登录后可在待办任务中看到 CoA 待审核批次
+- 清理残留：resubmit_coa、reject_coa、reject action 全部移除，零残留

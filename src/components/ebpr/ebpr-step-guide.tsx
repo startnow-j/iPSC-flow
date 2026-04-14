@@ -487,26 +487,54 @@ export function EbprStepGuide({
   const allStepsCompleted =
     seedPrepCompleted && expansionCompleted && differentiationCompleted && harvestCompleted
 
+  // ============================================
+  // Single-line production flow: lock previous steps
+  // Once a later step has started (IN_PROGRESS/PENDING) or is completed,
+  // the earlier step cannot add more rounds.
+  // ============================================
+  const expansionSeqNo = 2
+  const differentiationSeqNo = 3
+  const harvestSeqNo = 4
+
+  // Check if any later step has activity (PENDING/IN_PROGRESS/COMPLETED/REVIEWED)
+  const hasLaterStepActivity = (stepCode: StepCode): boolean => {
+    const seqMap: Record<string, number> = {
+      SEED_PREP: 1,
+      EXPANSION: 2,
+      DIFFERENTIATION: 3,
+      HARVEST: 4,
+    }
+    const currentSeq = seqMap[stepCode]
+    return tasks.some((t) => {
+      const tSeq = seqMap[t.taskCode]
+      return tSeq !== undefined && tSeq > currentSeq &&
+        ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
+    })
+  }
+
   // Compute pending phase tasks for assignment check
-  // Phase-type tasks (EXPANSION / DIFFERENTIATION) can have multiple rounds.
-  // Show the inline form when there are tasks but no pending/in-progress ones needing attention.
-  // This allows adding new rounds even after previous rounds are completed.
   const allExpansionTasks = tasks.filter((t) => t.taskCode === 'EXPANSION')
   const pendingExpansionTasks = allExpansionTasks.filter(
     (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
+  // Show expansion form only when: has expansion tasks, no pending/in-progress ones,
+  // AND no later step has started (single-line flow)
+  const expansionLocked = hasLaterStepActivity('EXPANSION')
   const showExpansionForm =
     allExpansionTasks.length > 0 &&
-    pendingExpansionTasks.length === 0
+    pendingExpansionTasks.length === 0 &&
+    !expansionLocked
 
   const allDifferentiationTasks = tasks.filter((t) => t.taskCode === 'DIFFERENTIATION')
   const pendingDifferentiationTasks = allDifferentiationTasks.filter(
     (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
+  const differentiationLocked = hasLaterStepActivity('DIFFERENTIATION')
   const showDifferentiationForm =
     showDifferentiation &&
     allDifferentiationTasks.length > 0 &&
-    pendingDifferentiationTasks.length === 0
+    pendingDifferentiationTasks.length === 0 &&
+    !differentiationLocked
 
   // Check if already submitted for QC
   const isQcSubmitted = batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS'
@@ -544,7 +572,7 @@ export function EbprStepGuide({
               </div>
             ))}
 
-          {/* Expansion: show form or assignment cards */}
+          {/* Expansion: show form, locked notice, or assignment cards */}
           {allExpansionTasks.length === 0 && getStepStatus('EXPANSION', tasks) !== 'completed' ? (
             <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
               <CardContent className="flex flex-col items-center justify-center py-10">
@@ -554,6 +582,18 @@ export function EbprStepGuide({
                 <h3 className="text-base font-medium mb-1">等待指派</h3>
                 <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
                   扩增培养任务尚未创建或尚未指派操作员。
+                </p>
+              </CardContent>
+            </Card>
+          ) : expansionLocked && pendingExpansionTasks.length === 0 ? (
+            <Card className="border-muted-foreground/20 bg-muted/30">
+              <CardContent className="flex flex-col items-center justify-center py-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                  <ShieldCheck className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium mb-1">步骤已锁定</h3>
+                <p className="text-xs text-muted-foreground text-center max-w-xs">
+                  后续步骤已进入，扩增培养无法再添加新的传代记录。
                 </p>
               </CardContent>
             </Card>
@@ -595,7 +635,7 @@ export function EbprStepGuide({
               </div>
             ))}
 
-          {/* Differentiation: show form or assignment cards */}
+          {/* Differentiation: show form, locked notice, or assignment cards */}
           {allDifferentiationTasks.length === 0 && getStepStatus('DIFFERENTIATION', tasks) !== 'completed' ? (
             <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
               <CardContent className="flex flex-col items-center justify-center py-10">
@@ -605,6 +645,18 @@ export function EbprStepGuide({
                 <h3 className="text-base font-medium mb-1">等待指派</h3>
                 <p className="text-sm text-muted-foreground text-center max-w-xs mb-1">
                   分化诱导任务尚未创建或尚未指派操作员。
+                </p>
+              </CardContent>
+            </Card>
+          ) : differentiationLocked && pendingDifferentiationTasks.length === 0 ? (
+            <Card className="border-muted-foreground/20 bg-muted/30">
+              <CardContent className="flex flex-col items-center justify-center py-8">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-muted mb-3">
+                  <ShieldCheck className="h-6 w-6 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-medium mb-1">步骤已锁定</h3>
+                <p className="text-xs text-muted-foreground text-center max-w-xs">
+                  后续步骤已进入，分化诱导无法再添加新的分化记录。
                 </p>
               </CardContent>
             </Card>

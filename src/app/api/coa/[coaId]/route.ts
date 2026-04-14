@@ -52,13 +52,9 @@ export async function GET(
 // Actions (v3.0 简化):
 //   submit:
 //     CELL_PRODUCT/KIT (batch QC_PASS) → transition 'submit_coa' (batch → COA_SUBMITTED)
-//     CELL_PRODUCT/KIT (batch COA_SUBMITTED, resubmit) → transition 'resubmit_coa' (batch stays COA_SUBMITTED)
 //     SERVICE (batch REPORT_PENDING) → transition 'submit_report' (batch → COA_SUBMITTED)
 //   approve:
 //     ALL → transition 'approve' (COA_SUBMITTED → RELEASED, CoA SUBMITTED → APPROVED)
-//   reject:
-//     CELL_PRODUCT/SERVICE → CoA → DRAFT, batch stays COA_SUBMITTED (no transition)
-//     KIT → 400 error (no reject support)
 // ============================================
 export async function PATCH(
   request: NextRequest,
@@ -77,11 +73,11 @@ export async function PATCH(
 
     const { coaId } = await params
     const body = await request.json()
-    const { action, reviewComment } = body
+    const { action } = body
 
-    if (!action || !['submit', 'approve', 'reject'].includes(action)) {
+    if (!action || !['submit', 'approve'].includes(action)) {
       return NextResponse.json(
-        { error: '无效的 action，支持: submit / approve / reject' },
+        { error: '无效的 action，支持: submit / approve' },
         { status: 400 }
       )
     }
@@ -128,20 +124,20 @@ export async function PATCH(
     const roles = getRolesFromPayload(payload)
 
     if (action === 'submit') {
-      // submit_coa / resubmit_coa → QC (operational, product-level)
+      // submit_coa → QC (operational, product-level)
       // submit_report → OPERATOR + SUPERVISOR (management, productLine-level)
       if (productLine === 'SERVICE' && batch.status === 'REPORT_PENDING') {
         if (!canManage(roles, userProductLines, productLine, ['OPERATOR', 'SUPERVISOR'])) {
           return NextResponse.json({ error: '无权限提交报告' }, { status: 403 })
         }
       } else {
-        // CELL_PRODUCT/KIT: submit_coa / resubmit_coa
+        // CELL_PRODUCT/KIT: submit_coa
         if (!canOperate(roles, userProductRoles, batch.productId, ['QC'])) {
           return NextResponse.json({ error: '无权限提交CoA' }, { status: 403 })
         }
       }
-    } else if (action === 'approve' || action === 'reject') {
-      // approve / reject → SUPERVISOR + QA (management, productLine-level)
+    } else if (action === 'approve') {
+      // approve → SUPERVISOR + QA (management, productLine-level)
       if (!canManage(roles, userProductLines, productLine, ['SUPERVISOR', 'QA'])) {
         return NextResponse.json({ error: '无权限审核CoA' }, { status: 403 })
       }
@@ -165,9 +161,6 @@ export async function PATCH(
       } else if (batch.status === 'QC_PASS') {
         // CELL_PRODUCT/KIT: 首次提交 CoA（QC_PASS → COA_SUBMITTED）
         transitionAction = 'submit_coa'
-      } else if (batch.status === 'COA_SUBMITTED') {
-        // CoA 被退回后重新提交（COA_SUBMITTED 自环）
-        transitionAction = 'resubmit_coa'
       } else {
         return NextResponse.json(
           { error: `当前批次状态 ${getStatusLabel(batch.status)} 不允许提交 CoA` },
@@ -251,65 +244,6 @@ export async function PATCH(
         success: true,
         message: result.message,
         newState: result.newState,
-        coa: updatedCoa ? { ...updatedCoa, content: JSON.parse(updatedCoa.content) } : null,
-      })
-    }
-
-    // ============================================
-    // Reject (SUBMITTED → DRAFT)
-    // v3.0: 统一处理，CoA → DRAFT，批次状态保持 COA_SUBMITTED
-    // ============================================
-    if (action === 'reject') {
-      if (existingCoa.status !== 'SUBMITTED') {
-        return NextResponse.json(
-          { error: '只有已提交状态的CoA可以退回' },
-          { status: 400 }
-        )
-      }
-
-      // KIT 产品线不支持 CoA 退回
-      if (productLine === 'KIT') {
-        return NextResponse.json(
-          { error: '试剂盒产品线不支持CoA退回操作' },
-          { status: 400 }
-        )
-      }
-
-      // v3.0: CELL_PRODUCT 和 SERVICE 统一处理
-      // CoA → DRAFT，批次状态保持 COA_SUBMITTED（不触发状态转换）
-      await db.coa.update({
-        where: { id: coaId },
-        data: {
-          status: 'DRAFT',
-          reviewedBy: payload.userId,
-          reviewedByName: payload.name,
-          reviewComment: reviewComment ?? '',
-          reviewedAt: new Date(),
-        },
-      })
-
-      // 记录审计日志
-      await createAuditLog({
-        eventType: 'COA_REJECTED',
-        targetType: 'COA',
-        targetId: coaId,
-        targetBatchNo: existingCoa.batchNo,
-        operatorId: payload.userId,
-        operatorName: payload.name,
-        dataBefore: { coaStatus: existingCoa.status, batchStatus: batch.status },
-        dataAfter: {
-          coaStatus: 'DRAFT',
-          batchStatus: batch.status,
-          note: 'CoA退回为草稿，批次状态保持COA_SUBMITTED',
-          reviewComment,
-        },
-      })
-
-      const updatedCoa = await db.coa.findUnique({ where: { id: coaId } })
-      return NextResponse.json({
-        success: true,
-        message: `CoA已退回为草稿，批次状态保持 ${getStatusLabel(batch.status)}`,
-        newState: batch.status,
         coa: updatedCoa ? { ...updatedCoa, content: JSON.parse(updatedCoa.content) } : null,
       })
     }

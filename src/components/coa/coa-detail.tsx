@@ -16,14 +16,12 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Textarea } from '@/components/ui/textarea'
 import {
   FileText,
   CheckCircle2,
   XCircle,
   Send,
   ShieldCheck,
-  RotateCcw,
   Loader2,
   Stamp,
   Eye,
@@ -128,14 +126,14 @@ const COA_STATUS_CONFIG: Record<string, { label: string; className: string }> = 
 export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
   const user = useAuthStore((s) => s.user)
   const [loading, setLoading] = useState(false)
-  const [confirmAction, setConfirmAction] = useState<'submit' | 'approve' | 'reject' | null>(null)
-  const [rejectComment, setRejectComment] = useState('')
+  const [confirmAction, setConfirmAction] = useState<'submit' | 'approve' | null>(null)
   const [viewMode, setViewMode] = useState<ViewMode>('internal')
 
   const statusConfig = COA_STATUS_CONFIG[coa.status] || COA_STATUS_CONFIG.DRAFT
   const userRoles = user?.roles || [user?.role || 'OPERATOR']
   const isSupervisorOrQA = hasRole(userRoles, 'SUPERVISOR') || hasRole(userRoles, 'QA')
   const isSupervisor = hasRole(userRoles, 'SUPERVISOR')
+  const isQC = hasRole(userRoles, 'QC')
 
   const isCustomerView = viewMode === 'customer'
 
@@ -145,9 +143,6 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
     setLoading(true)
     try {
       const body: Record<string, string> = { action: confirmAction }
-      if (confirmAction === 'reject' && rejectComment.trim()) {
-        body.reviewComment = rejectComment.trim()
-      }
 
       const res = await authFetch(`/api/coa/${coa.id}`, {
         method: 'PATCH',
@@ -162,7 +157,6 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
 
       toast.success(data.message || '操作成功')
       setConfirmAction(null)
-      setRejectComment('')
       onUpdated?.()
     } catch (err) {
       toast.error(err instanceof Error ? err.message : '操作失败，请重试')
@@ -429,7 +423,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
 
       {/* Action Buttons based on status */}
       <div className="flex gap-2 flex-wrap">
-        {coa.status === 'DRAFT' && (
+        {coa.status === 'DRAFT' && isQC && (
           <Button onClick={() => setConfirmAction('submit')}>
             <Send className="mr-2 h-4 w-4" />
             提交审核
@@ -437,16 +431,10 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
         )}
 
         {coa.status === 'SUBMITTED' && isSupervisorOrQA && (
-          <>
-            <Button onClick={() => setConfirmAction('approve')}>
-              <ShieldCheck className="mr-2 h-4 w-4" />
-              批准
-            </Button>
-            <Button variant="destructive" onClick={() => setConfirmAction('reject')}>
-              <XCircle className="mr-2 h-4 w-4" />
-              退回
-            </Button>
-          </>
+          <Button onClick={() => setConfirmAction('approve')}>
+            <ShieldCheck className="mr-2 h-4 w-4" />
+            批准
+          </Button>
         )}
 
         {coa.status === 'APPROVED' && isSupervisor && (
@@ -459,12 +447,6 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
           </Badge>
         )}
 
-        {coa.status === 'REJECTED' && (
-          <Button onClick={() => setConfirmAction('submit')}>
-            <RotateCcw className="mr-2 h-4 w-4" />
-            重新提交
-          </Button>
-        )}
       </div>
 
       {/* Submit Confirmation Dialog */}
@@ -511,40 +493,6 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Reject Confirmation Dialog */}
-      <AlertDialog
-        open={confirmAction === 'reject'}
-        onOpenChange={(open) => !open && setConfirmAction(null)}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>确认退回 CoA</AlertDialogTitle>
-            <AlertDialogDescription>
-              确认退回 CoA ({coa.coaNo})？退回后 CoA 将变为草稿状态，QC 需要重新提交。批次状态保持 COA_SUBMITTED。
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="py-2">
-            <label className="text-sm font-medium mb-1.5 block">退回原因（可选）</label>
-            <Textarea
-              placeholder="请输入退回原因..."
-              value={rejectComment}
-              onChange={(e) => setRejectComment(e.target.value)}
-              rows={3}
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={loading}>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleAction}
-              disabled={loading}
-              className="bg-destructive text-white hover:bg-destructive/90"
-            >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              退回
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }
