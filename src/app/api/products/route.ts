@@ -4,6 +4,9 @@ import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/aut
 import { isAdmin } from '@/lib/roles'
 import type { ProductLine } from '@prisma/client'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // Product code auto-generation prefixes by product line
 const PRODUCT_CODE_PREFIXES: Record<string, string> = {
   CELL_PRODUCT: 'CP',

@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { db } from '@/lib/db'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/batches/[id]/coa — 获取批次的CoA
 // ============================================

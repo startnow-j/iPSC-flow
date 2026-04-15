@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+
+// 禁止缓存
+export const dynamic = 'force-dynamic'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { getAvailableActions } from '@/lib/services/state-machine'
 
@@ -82,15 +85,18 @@ export async function GET(
       ? Math.max(0, batch.actualQuantity - totalConsumed)
       : null
 
-    return NextResponse.json({
-      batch: {
-        ...batch,
-        productCategory: batch.product?.category || null,
+    return NextResponse.json(
+      {
+        batch: {
+          ...batch,
+          productCategory: batch.product?.category || null,
+        },
+        availableActions,
+        remainingQuantity,
+        totalConsumedVials: totalConsumed,
       },
-      availableActions,
-      remainingQuantity,
-      totalConsumedVials: totalConsumed,
-    })
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (error) {
     console.error('GET /api/batches/[id] error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

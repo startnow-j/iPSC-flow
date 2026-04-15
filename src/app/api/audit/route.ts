@@ -3,6 +3,9 @@ import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/aut
 import { hasAnyRole } from '@/lib/roles'
 import { getAuditLogs } from '@/lib/services/audit-log'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // GET /api/audit — List audit logs with filters and pagination
 export async function GET(request: NextRequest) {
   try {

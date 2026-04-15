@@ -4,6 +4,9 @@ import { db } from '@/lib/db'
 import { validateQcRecord, type TestResultItem } from '@/lib/services/validation'
 import { createAuditLog } from '@/lib/services/audit-log'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/batches/[id]/qc/[qcId] — 获取质检记录详情
 // ============================================

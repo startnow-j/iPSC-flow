@@ -6,6 +6,9 @@ import { createAuditLog } from '@/lib/services/audit-log'
 import { getTaskTemplates, shouldIncludeDifferentiation } from '@/lib/services/task-templates'
 import type { TaskTemplate } from '@/lib/services/task-templates'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/batches/[id]/tasks — 列出批次的所有生产任务
 // ============================================
@@ -132,7 +135,7 @@ export async function GET(
       attachments: task.attachments ? JSON.parse(task.attachments) : null,
     }))
 
-    return NextResponse.json({ tasks: parsedTasks })
+    return NextResponse.json({ tasks: parsedTasks }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('GET /api/batches/[id]/tasks error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

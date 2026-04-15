@@ -3,6 +3,9 @@ import { getTokenFromRequest, verifyToken, hashPassword, getRolesFromPayload } f
 import { isAdmin, hasAnyRole, VALID_ROLES, serializeRoles, determinePrimaryRole, parseRoles, MANAGEMENT_ROLES } from '@/lib/roles'
 import { db } from '@/lib/db'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // GET /api/users — List users
 // - ADMIN: all users
 // - SUPERVISOR: all users (full visibility for permission overview)

@@ -7,6 +7,9 @@ import { createAuditLog } from '@/lib/services/audit-log'
 import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { TASK_TEMPLATES, CATEGORY_TASK_TEMPLATES } from '@/lib/services/task-templates'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/batches/[id]/tasks/[taskId] — 获取单个任务详情
 // ============================================

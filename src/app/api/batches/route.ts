@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+
+// 禁止缓存 — 生产数据实时性要求高
+export const dynamic = 'force-dynamic'
 import { getTokenFromRequest, verifyToken, getRolesFromPayload } from '@/lib/auth'
 import { canManage } from '@/lib/roles'
 import { validateBatchCreation } from '@/lib/services/validation'
@@ -95,13 +98,16 @@ export async function GET(request: NextRequest) {
       statusCountsMap[item.status] = item._count.status
     }
 
-    return NextResponse.json({
-      batches,
-      total,
-      page,
-      pageSize,
-      statusCounts: statusCountsMap,
-    })
+    return NextResponse.json(
+      {
+        batches,
+        total,
+        page,
+        pageSize,
+        statusCounts: statusCountsMap,
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (error) {
     console.error('GET /api/batches error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

@@ -3,6 +3,9 @@ import { db } from '@/lib/db'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { parseRoles } from '@/lib/roles'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 export async function GET(request: NextRequest) {
   try {
     // Extract token — checks Authorization header first, then cookie

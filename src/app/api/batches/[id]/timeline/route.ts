@@ -3,6 +3,9 @@ import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 import { getBatchTimeline } from '@/lib/services/audit-log'
 import { db } from '@/lib/db'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/batches/[id]/timeline — 批次时间线
 // ============================================
@@ -65,7 +68,7 @@ export async function GET(
       eventLabel: EVENT_TYPE_LABELS[entry.eventType] ?? entry.eventType,
     }))
 
-    return NextResponse.json({ timeline: formattedTimeline })
+    return NextResponse.json({ timeline: formattedTimeline }, { headers: { 'Cache-Control': 'no-store' } })
   } catch (error) {
     console.error('GET /api/batches/[id]/timeline error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

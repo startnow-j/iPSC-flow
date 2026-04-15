@@ -6,6 +6,9 @@ import { transition, getStatusLabel } from '@/lib/services/state-machine'
 import { createAuditLog } from '@/lib/services/audit-log'
 import type { ProductLine } from '@prisma/client'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // ============================================
 // GET /api/coa/[coaId] — 获取CoA详情
 // ============================================

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+
+// 禁止缓存
+export const dynamic = 'force-dynamic'
 import { getTokenFromRequest, verifyToken } from '@/lib/auth'
 
 // ============================================
@@ -75,12 +78,15 @@ export async function GET(request: NextRequest) {
       byProductLine[pl][row.status] = Number(row.count)
     }
 
-    return NextResponse.json({
-      global: formatCounts(globalCounts),
-      mine: formatCounts(myCounts),
-      byProductLine,
-      since: since.toISOString(),
-    })
+    return NextResponse.json(
+      {
+        global: formatCounts(globalCounts),
+        mine: formatCounts(myCounts),
+        byProductLine,
+        since: since.toISOString(),
+      },
+      { headers: { 'Cache-Control': 'no-store' } }
+    )
   } catch (error) {
     console.error('GET /api/batches/status-stats error:', error)
     return NextResponse.json({ error: '服务器错误' }, { status: 500 })

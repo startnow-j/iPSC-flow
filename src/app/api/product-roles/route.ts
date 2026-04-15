@@ -11,6 +11,9 @@ import {
 import { db } from '@/lib/db'
 import { createAuditLog } from '@/lib/services/audit-log'
 
+// 禁止缓存
+export const dynamic = 'force-dynamic'
+
 // GET /api/product-roles — List product role assignments
 // - ADMIN: everything
 // - SUPERVISOR: users in their product lines (changed: now sees ALL for permission overview)
