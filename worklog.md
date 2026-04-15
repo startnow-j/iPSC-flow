@@ -2948,3 +2948,25 @@ Stage Summary:
 - 权限修复：CoA 提交仅 QC 角色可见/可操作
 - QA 待办：QA 登录后可在待办任务中看到 CoA 待审核批次
 - 清理残留：resubmit_coa、reject_coa、reject action 全部移除，零残留
+---
+Task ID: 7
+Agent: Main Agent
+Task: 修复批次概览页面不显示中途指派操作员信息
+
+Work Log:
+- 深入分析整个操作员指派数据链路：AssignTaskDialog → PATCH /api/batches/[id]/tasks/[taskId] → batch.productionOperatorId → 概览页渲染
+- 查询数据库确认 NPC-260415-001 的 batch.productionOperatorName="陈五"（数据正确），但 tasks 中 assigneeName 与 batch 不一致
+- 发现根因1：tasks/[taskId]/route.ts 的同步逻辑仅当 `!currentBatch.productionOperatorId` 时才同步到 batch，导致已有操作员时新指派不会更新 batch
+- 发现根因2：SEED_PREP 完成后自动激活 EXPANSION 时不继承操作员信息，导致下一步骤显示"等待指派"
+- 修复1：移除 `!currentBatch.productionOperatorId` 条件，使 task 级指派始终同步到 batch.productionOperatorId
+- 修复2：自动激活 EXPANSION 时，如果该任务尚未指派操作员，则继承已完成 SEED_PREP 的 assigneeId
+- 修复3：同步更新 NPC-260415-001 的 PENDING/IN_PROGRESS 任务 assigneeName 与 batch.productionOperatorName 一致
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+- Dev server 编译运行正常，无编译错误
+
+Stage Summary:
+- 修改文件：src/app/api/batches/[id]/tasks/[taskId]/route.ts
+- 核心修复：task 级指派操作始终同步到 batch.productionOperatorId（移除原有仅首次同步限制）
+- 核心修复：SEED_PREP 完成后自动激活 EXPANSION 时继承操作员信息（保持生产连续性）
+- 数据修复：NPC-260415-001 的未完成任务操作员统一更新为"陈五"
+- 代码零新增 ESLint error/warning

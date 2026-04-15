@@ -323,22 +323,16 @@ export async function PATCH(
     // ============================================
     // 同步批次级操作员信息
     // 当通过任务级指派设置 assigneeId 时，
-    // 如果批次尚未设置 productionOperatorId，则自动同步
+    // 始终同步到批次的 productionOperatorId（反映最新指派）
     // ============================================
     if (assigneeId && assigneeId !== task.assigneeId) {
-      const currentBatch = await db.batch.findUnique({
+      await db.batch.update({
         where: { id },
-        select: { productionOperatorId: true },
+        data: {
+          productionOperatorId: assigneeId,
+          productionOperatorName: assigneeName || null,
+        },
       })
-      if (currentBatch && !currentBatch.productionOperatorId) {
-        await db.batch.update({
-          where: { id },
-          data: {
-            productionOperatorId: assigneeId,
-            productionOperatorName: assigneeName || null,
-          },
-        })
-      }
     }
 
     // 记录审计日志
@@ -377,19 +371,40 @@ export async function PATCH(
 
     if (status === 'COMPLETED' && task.taskCode === 'SEED_PREP') {
       // 种子复苏完成 → 自动激活扩增培养任务（第一条 EXPANSION 改为 IN_PROGRESS）
+      // 同时继承已完成任务的操作员信息
       const expansionTask = await db.productionTask.findFirst({
         where: { batchId: id, taskCode: 'EXPANSION', status: 'PENDING' },
         orderBy: { createdAt: 'asc' },
       })
 
       if (expansionTask) {
+        // 继承操作员：优先使用已完成任务的assigneeId，保持生产连续性
+        const inheritAssigneeId = updatedTask.assigneeId || payload.userId
+        const inheritAssigneeName = updatedTask.assigneeName || payload.name
+
         await db.productionTask.update({
           where: { id: expansionTask.id },
           data: {
             status: 'IN_PROGRESS',
             actualStart: new Date(),
+            // 如果扩增任务尚未指派操作员，则继承当前操作员
+            ...(expansionTask.assigneeId ? {} : {
+              assigneeId: inheritAssigneeId,
+              assigneeName: inheritAssigneeName,
+            }),
           },
         })
+
+        // 同步批次级操作员信息
+        if (!expansionTask.assigneeId) {
+          await db.batch.update({
+            where: { id },
+            data: {
+              productionOperatorId: inheritAssigneeId,
+              productionOperatorName: inheritAssigneeName,
+            },
+          })
+        }
 
         await createAuditLog({
           eventType: 'TASK_STARTED',
@@ -401,6 +416,7 @@ export async function PATCH(
           dataAfter: {
             taskCode: 'EXPANSION',
             taskName: '扩增培养',
+            assigneeId: inheritAssigneeId,
           },
         })
       }
