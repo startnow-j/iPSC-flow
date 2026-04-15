@@ -320,6 +320,27 @@ export async function PATCH(
       data: updateData,
     })
 
+    // ============================================
+    // 同步批次级操作员信息
+    // 当通过任务级指派设置 assigneeId 时，
+    // 如果批次尚未设置 productionOperatorId，则自动同步
+    // ============================================
+    if (assigneeId && assigneeId !== task.assigneeId) {
+      const currentBatch = await db.batch.findUnique({
+        where: { id },
+        select: { productionOperatorId: true },
+      })
+      if (currentBatch && !currentBatch.productionOperatorId) {
+        await db.batch.update({
+          where: { id },
+          data: {
+            productionOperatorId: assigneeId,
+            productionOperatorName: assigneeName || null,
+          },
+        })
+      }
+    }
+
     // 记录审计日志
     const eventType =
       status === 'REVIEWED'
