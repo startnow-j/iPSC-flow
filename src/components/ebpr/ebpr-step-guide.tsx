@@ -489,14 +489,16 @@ export function EbprStepGuide({
 
   // ============================================
   // Single-line production flow: lock previous steps
-  // Once a later step has started (IN_PROGRESS/PENDING) or is completed,
+  // Once a later step has actually started (IN_PROGRESS/COMPLETED/REVIEWED),
   // the earlier step cannot add more rounds.
+  // PENDING tasks are just placeholders — they do NOT count as "started".
   // ============================================
   const expansionSeqNo = 2
   const differentiationSeqNo = 3
   const harvestSeqNo = 4
 
-  // Check if any later step has activity (PENDING/IN_PROGRESS/COMPLETED/REVIEWED)
+  // Check if any later step has REAL activity (IN_PROGRESS/COMPLETED/REVIEWED)
+  // PENDING placeholder tasks are excluded — they haven't been touched yet.
   const hasLaterStepActivity = (stepCode: StepCode): boolean => {
     const seqMap: Record<string, number> = {
       SEED_PREP: 1,
@@ -508,7 +510,7 @@ export function EbprStepGuide({
     return tasks.some((t) => {
       const tSeq = seqMap[t.taskCode]
       return tSeq !== undefined && tSeq > currentSeq &&
-        ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
+        ['IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
     })
   }
 
@@ -517,23 +519,24 @@ export function EbprStepGuide({
   const pendingExpansionTasks = allExpansionTasks.filter(
     (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
-  // Show expansion form only when: has expansion tasks, no pending/in-progress ones,
-  // AND no later step has started (single-line flow)
+  // Show expansion form when: has expansion tasks (step has started),
+  // AND no later step has actually started (IN_PROGRESS/COMPLETED/REVIEWED).
+  // Note: pendingExpansionTasks is NOT checked here because expansion is multi-round —
+  // the user can always add new passage records as long as later steps haven't begun.
   const expansionLocked = hasLaterStepActivity('EXPANSION')
   const showExpansionForm =
     allExpansionTasks.length > 0 &&
-    pendingExpansionTasks.length === 0 &&
     !expansionLocked
 
   const allDifferentiationTasks = tasks.filter((t) => t.taskCode === 'DIFFERENTIATION')
   const pendingDifferentiationTasks = allDifferentiationTasks.filter(
     (t) => t.status === 'PENDING' || t.status === 'IN_PROGRESS'
   )
+  // Same as expansion: differentiation is multi-round, don't block on pending/in-progress tasks.
   const differentiationLocked = hasLaterStepActivity('DIFFERENTIATION')
   const showDifferentiationForm =
     showDifferentiation &&
     allDifferentiationTasks.length > 0 &&
-    pendingDifferentiationTasks.length === 0 &&
     !differentiationLocked
 
   // Check if already submitted for QC

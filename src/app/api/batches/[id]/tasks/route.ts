@@ -186,7 +186,8 @@ export async function POST(
       )
     }
 
-    // v3.1: 单线生产流程锁定 — 后续步骤已开始时，禁止向更早步骤添加记录
+    // v3.1: 单线生产流程锁定 — 后续步骤已真正开始时，禁止向更早步骤添加记录
+    // PENDING tasks are placeholders created at start_production — they do NOT count as "started".
     const STEP_SEQ_MAP: Record<string, number> = {
       SEED_PREP: 1,
       EXPANSION: 2,
@@ -206,7 +207,7 @@ export async function POST(
         return (
           tSeq !== undefined &&
           tSeq > currentStepSeq &&
-          ['PENDING', 'IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
+          ['IN_PROGRESS', 'COMPLETED', 'REVIEWED'].includes(t.status)
         )
       })
       if (hasLaterActivity) {
