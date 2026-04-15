@@ -1124,6 +1124,7 @@ export default function BatchDetailPage({
             <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
+              key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
               batchId={id}
               batch={batch}
               category={batch.productCategory}
@@ -1137,6 +1138,7 @@ export default function BatchDetailPage({
             />
           ) : (
             <GenericTaskList
+              key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
               batchId={id}
               productLine={batch.productLine || 'CELL_PRODUCT'}
               productId={batch.productId || ''}
