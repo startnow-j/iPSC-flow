@@ -51,6 +51,10 @@ interface BatchItem {
   storageLocation: string | null
   createdBy: string
   createdByName: string
+  productionOperatorId: string | null
+  productionOperatorName: string | null
+  qcOperatorId: string | null
+  qcOperatorName: string | null
   createdAt: string
   updatedAt: string
 }
@@ -431,7 +435,7 @@ export function BatchListContent({
                         </span>
                       )}
                       <span className="hidden sm:inline">
-                        {batch.createdByName}
+                        {batch.productionOperatorName || batch.createdByName}
                       </span>
                       <span>
                         {formatDate(batch.createdAt)}

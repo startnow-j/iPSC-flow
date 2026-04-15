@@ -18,6 +18,7 @@ interface RecentBatch {
   productLine?: string
   createdAt: string
   createdByName: string
+  productionOperatorName?: string | null
 }
 
 export function RecentBatches() {
@@ -110,7 +111,7 @@ export function RecentBatches() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground truncate">
-                      {batch.productName} · {batch.createdByName}
+                      {batch.productName} · {batch.productionOperatorName || batch.createdByName}
                     </p>
                   </div>
                 </div>
