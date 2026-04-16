@@ -1120,8 +1120,8 @@ export default function BatchDetailPage({
 
         {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
-          {['TERMINATED', 'RELEASED'].includes(batch.status) ? (
-            <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
+          {batch.status === 'TERMINATED' ? (
+            <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已终止，生产记录不可查看。" />
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
               key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
@@ -1135,7 +1135,7 @@ export default function BatchDetailPage({
                 taskName: req.taskName,
                 productId: batch.productId || req.productId || '',
               })}
-              readOnly={batch.status === 'SCRAPPED'}
+              readOnly={['SCRAPPED', 'RELEASED'].includes(batch.status)}
             />
           ) : (
             <GenericTaskList
@@ -1150,7 +1150,7 @@ export default function BatchDetailPage({
                 taskName: req.taskName,
                 productId: batch.productId || req.productId || '',
               })}
-              readOnly={batch.status === 'SCRAPPED'}
+              readOnly={['SCRAPPED', 'RELEASED'].includes(batch.status)}
             />
           )}
         </TabsContent>
