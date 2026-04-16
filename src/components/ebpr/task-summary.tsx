@@ -114,7 +114,11 @@ function SeedPrepSummary({ formData }: { formData: Record<string, any> }) {
 
 function ExpansionSummary({ formData, stepGroup }: { formData: Record<string, any>; stepGroup: string | null }) {
   return (
-    <div className="grid gap-2 sm:grid-cols-4 text-sm">
+    <div className="grid gap-2 sm:grid-cols-5 text-sm">
+      <div>
+        <span className="text-xs text-muted-foreground">传代日期</span>
+        <p className="font-medium">{formData.passage_date ? formatDate(formData.passage_date) : '-'}</p>
+      </div>
       <div>
         <span className="text-xs text-muted-foreground">代次</span>
         <p className="font-mono font-medium">{stepGroup ?? '-'}</p>
