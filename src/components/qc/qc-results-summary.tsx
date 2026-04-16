@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { authFetch } from '@/lib/auth-fetch'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -16,6 +17,9 @@ import {
   Beaker,
   ClipboardList,
   Hourglass,
+  ChevronDown,
+  ChevronUp,
+  FileText,
 } from 'lucide-react'
 
 // ============================================
@@ -83,100 +87,253 @@ function formatDateShort(dateStr: string | null | undefined) {
 }
 
 // ============================================
-// IN_PROCESS Record Card
+// Expandable Test Results Table (shared by all record types)
 // ============================================
 
-function InProcessRecordCard({ record }: { record: QcRecord }) {
-  const isPending = record.overallJudgment === 'PENDING'
-
-  // Extract detection type from testResults or sampleInfo
-  const detectionTypes = record.testResults
-    .filter((r) => r.itemName)
-    .map((r) => r.itemName)
-
-  // Extract sample info
-  const sampleNumber = (record.sampleInfo as Record<string, string>)?.sampleNumber
-  const sampleTime = (record.sampleInfo as Record<string, string>)?.sampleTime
-
+function TestResultsTable({ results }: { results: TestResultItem[] }) {
+  if (!results || results.length === 0) return null
   return (
-    <div className="flex items-center justify-between rounded-md border px-4 py-3">
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-          isPending
-            ? 'bg-amber-100 dark:bg-amber-900/40'
-            : record.overallJudgment === 'PASS'
-              ? 'bg-emerald-100 dark:bg-emerald-900/40'
-              : 'bg-red-100 dark:bg-red-900/40'
-        }`}>
-          {isPending ? (
-            <Hourglass className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-          ) : record.overallJudgment === 'PASS' ? (
-            <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          ) : (
-            <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 flex-wrap">
-            {detectionTypes.length > 0 ? (
-              <span className="text-sm font-medium truncate">
-                {detectionTypes.join('、')}
-              </span>
-            ) : (
-              <span className="text-sm font-medium">过程采样</span>
-            )}
-            {sampleNumber && (
-              <span className="text-xs text-muted-foreground">
-                样本号: {sampleNumber}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 mt-0.5">
-            {sampleTime && (
-              <span className="text-xs text-muted-foreground">
-                <Clock className="mr-1 h-3 w-3 inline" />
-                {sampleTime}
-              </span>
-            )}
-            {record.operatorName && (
-              <span className="text-xs text-muted-foreground">
-                <User className="mr-1 h-3 w-3 inline" />
-                {record.operatorName}
-              </span>
-            )}
-            <span className="text-xs text-muted-foreground">
-              {formatDateShort(record.createdAt)}
-            </span>
-          </div>
-        </div>
-      </div>
-      <div className="shrink-0 ml-3">
-        {isPending ? (
-          <Badge
-            variant="secondary"
-            className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs"
-          >
-            等待检测
-          </Badge>
-        ) : (
-          <Badge
-            variant="secondary"
-            className={
-              record.overallJudgment === 'PASS'
-                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs'
-                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs'
-            }
-          >
-            {record.overallJudgment === 'PASS' ? '合格' : '不合格'}
-          </Badge>
-        )}
-      </div>
+    <div className="rounded-md border">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="border-b bg-muted/50">
+            <th className="px-3 py-2 text-left font-medium">检测项目</th>
+            <th className="px-3 py-2 text-left font-medium">检测方法</th>
+            <th className="px-3 py-2 text-left font-medium">标准</th>
+            <th className="px-3 py-2 text-left font-medium">检测结果</th>
+            <th className="px-3 py-2 text-center font-medium">判定</th>
+          </tr>
+        </thead>
+        <tbody>
+          {results.map((item) => (
+            <tr key={item.itemCode} className="border-b last:border-b-0">
+              <td className="px-3 py-2 font-medium">{item.itemName}</td>
+              <td className="px-3 py-2 text-muted-foreground">{item.method}</td>
+              <td className="px-3 py-2 text-muted-foreground">{item.standard}</td>
+              <td className="px-3 py-2">
+                {item.resultValue
+                  ? `${item.resultValue}${item.resultUnit || ''}`
+                  : '-'}
+              </td>
+              <td className="px-3 py-2 text-center">
+                <Badge
+                  variant="secondary"
+                  className={
+                    item.judgment === 'PASS'
+                      ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                      : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                  }
+                >
+                  {item.judgment === 'PASS' ? '合格' : '不合格'}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }
 
 // ============================================
-// ROUTINE Record Detail (existing behavior)
+// Operator & Reviewer Info (shared)
+// ============================================
+
+function OperatorInfo({ record }: { record: QcRecord }) {
+  const hasInfo = record.operatorName || record.operatedAt || record.reviewerName || record.reviewedAt || record.reviewComment
+  if (!hasInfo) return null
+
+  return (
+    <div className="space-y-2">
+      <Separator />
+      <div className="grid gap-2 sm:grid-cols-2 text-sm">
+        {record.operatorName && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <User className="h-3.5 w-3.5" />
+            <span>操作员: {record.operatorName}</span>
+          </div>
+        )}
+        {record.operatedAt && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span>操作时间: {formatDate(record.operatedAt)}</span>
+          </div>
+        )}
+        {record.reviewerName && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <User className="h-3.5 w-3.5" />
+            <span>审核人: {record.reviewerName}</span>
+          </div>
+        )}
+        {record.reviewedAt && (
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Clock className="h-3.5 w-3.5" />
+            <span>审核时间: {formatDate(record.reviewedAt)}</span>
+          </div>
+        )}
+      </div>
+      {record.reviewComment && (
+        <p className="text-sm text-muted-foreground">
+          审核意见: {record.reviewComment}
+        </p>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// IN_PROCESS Record Card — with expandable detail
+// ============================================
+
+function InProcessRecordCard({ record }: { record: QcRecord }) {
+  const [showDetail, setShowDetail] = useState(false)
+  const isPending = record.overallJudgment === 'PENDING'
+
+  const detectionTypes = record.testResults
+    .filter((r) => r.itemName)
+    .map((r) => r.itemName)
+
+  const sampleNumber = (record.sampleInfo as Record<string, string>)?.sampleNumber
+  const sampleTime = (record.sampleInfo as Record<string, string>)?.sampleTime
+
+  return (
+    <div className="rounded-md border">
+      {/* Summary row (always visible) */}
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+        onClick={() => setShowDetail(!showDetail)}
+      >
+        <div className="flex items-center gap-3 min-w-0 flex-1">
+          <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+            isPending
+              ? 'bg-amber-100 dark:bg-amber-900/40'
+              : record.overallJudgment === 'PASS'
+                ? 'bg-emerald-100 dark:bg-emerald-900/40'
+                : 'bg-red-100 dark:bg-red-900/40'
+          }`}>
+            {isPending ? (
+              <Hourglass className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            ) : record.overallJudgment === 'PASS' ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+            ) : (
+              <XCircle className="h-4 w-4 text-red-600 dark:text-red-400" />
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 flex-wrap">
+              {detectionTypes.length > 0 ? (
+                <span className="text-sm font-medium truncate">
+                  {detectionTypes.join('、')}
+                </span>
+              ) : (
+                <span className="text-sm font-medium">过程采样</span>
+              )}
+              {sampleNumber && (
+                <span className="text-xs text-muted-foreground">
+                  样本号: {sampleNumber}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-3 mt-0.5">
+              {sampleTime && (
+                <span className="text-xs text-muted-foreground">
+                  <Clock className="mr-1 h-3 w-3 inline" />
+                  {sampleTime}
+                </span>
+              )}
+              {record.operatorName && (
+                <span className="text-xs text-muted-foreground">
+                  <User className="mr-1 h-3 w-3 inline" />
+                  {record.operatorName}
+                </span>
+              )}
+              <span className="text-xs text-muted-foreground">
+                {formatDateShort(record.createdAt)}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="shrink-0 ml-3 flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground"
+          >
+            {showDetail ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+          </Button>
+          {isPending ? (
+            <Badge
+              variant="secondary"
+              className="bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200 text-xs"
+            >
+              等待检测
+            </Badge>
+          ) : (
+            <Badge
+              variant="secondary"
+              className={
+                record.overallJudgment === 'PASS'
+                  ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs'
+                  : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs'
+              }
+            >
+              {record.overallJudgment === 'PASS' ? '合格' : '不合格'}
+            </Badge>
+          )}
+        </div>
+      </div>
+
+      {/* Expandable detail */}
+      {showDetail && (
+        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
+          {/* Sample info */}
+          <div className="grid gap-2 sm:grid-cols-2 text-sm">
+            {record.sampleQuantity != null && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Beaker className="h-3.5 w-3.5" />
+                <span>复苏支数: {record.sampleQuantity} 支</span>
+              </div>
+            )}
+            {sampleNumber && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span>样本号: {sampleNumber}</span>
+              </div>
+            )}
+            {sampleTime && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                <span>采样时间: {sampleTime}</span>
+              </div>
+            )}
+          </div>
+
+          {/* Test results */}
+          <TestResultsTable results={record.testResults} />
+
+          {/* Fail reason */}
+          {record.failReason && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+              <span className="font-medium">不合格原因：</span>
+              {record.failReason}
+            </div>
+          )}
+
+          {/* Future: attachments placeholder */}
+          {record.testResults.length === 0 && !record.failReason && (
+            <p className="text-xs text-muted-foreground text-center py-2">
+              暂无检测数据
+            </p>
+          )}
+
+          <OperatorInfo record={record} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================
+// ROUTINE Record Detail — always expanded (latest record)
 // ============================================
 
 function RoutineRecordDetail({ record }: { record: QcRecord }) {
@@ -230,45 +387,7 @@ function RoutineRecordDetail({ record }: { record: QcRecord }) {
         )}
 
         {/* Test Results Table */}
-        <div className="rounded-md border">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-3 py-2 text-left font-medium">检测项目</th>
-                <th className="px-3 py-2 text-left font-medium">检测方法</th>
-                <th className="px-3 py-2 text-left font-medium">标准</th>
-                <th className="px-3 py-2 text-left font-medium">检测结果</th>
-                <th className="px-3 py-2 text-center font-medium">判定</th>
-              </tr>
-            </thead>
-            <tbody>
-              {record.testResults.map((item) => (
-                <tr key={item.itemCode} className="border-b last:border-b-0">
-                  <td className="px-3 py-2 font-medium">{item.itemName}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{item.method}</td>
-                  <td className="px-3 py-2 text-muted-foreground">{item.standard}</td>
-                  <td className="px-3 py-2">
-                    {item.resultValue
-                      ? `${item.resultValue}${item.resultUnit || ''}`
-                      : '-'}
-                  </td>
-                  <td className="px-3 py-2 text-center">
-                    <Badge
-                      variant="secondary"
-                      className={
-                        item.judgment === 'PASS'
-                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                          : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                      }
-                    >
-                      {item.judgment === 'PASS' ? '合格' : '不合格'}
-                    </Badge>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <TestResultsTable results={record.testResults} />
 
         {/* Fail Reason */}
         {record.failReason && (
@@ -278,43 +397,96 @@ function RoutineRecordDetail({ record }: { record: QcRecord }) {
           </div>
         )}
 
-        <Separator className="my-3" />
+        {/* Future: attachments placeholder — will show uploaded files here */}
+        {/* {record.attachments && record.attachments.length > 0 && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">附件</p>
+            ...
+          </div>
+        )} */}
 
-        {/* Operator Info */}
-        <div className="grid gap-2 sm:grid-cols-2 text-sm">
-          {record.operatorName && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-3.5 w-3.5" />
-              <span>操作员: {record.operatorName}</span>
-            </div>
-          )}
-          {record.operatedAt && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              <span>操作时间: {formatDate(record.operatedAt)}</span>
-            </div>
-          )}
-          {record.reviewerName && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <User className="h-3.5 w-3.5" />
-              <span>审核人: {record.reviewerName}</span>
-            </div>
-          )}
-          {record.reviewedAt && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Clock className="h-3.5 w-3.5" />
-              <span>审核时间: {formatDate(record.reviewedAt)}</span>
-            </div>
-          )}
-        </div>
-
-        {record.reviewComment && (
-          <p className="mt-2 text-sm text-muted-foreground">
-            审核意见: {record.reviewComment}
-          </p>
-        )}
+        <OperatorInfo record={record} />
       </CardContent>
     </Card>
+  )
+}
+
+// ============================================
+// Historical Routine Record Card — with expandable detail
+// ============================================
+
+function HistoricalRoutineCard({ record }: { record: QcRecord }) {
+  const [showDetail, setShowDetail] = useState(false)
+
+  return (
+    <div className="rounded-md border">
+      {/* Summary row */}
+      <div
+        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-muted/30 transition-colors"
+        onClick={() => setShowDetail(!showDetail)}
+      >
+        <div className="flex items-center gap-2 min-w-0 flex-1">
+          <Badge
+            variant="secondary"
+            className={
+              record.overallJudgment === 'PASS'
+                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs'
+                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs'
+            }
+          >
+            {record.overallJudgment === 'PASS' ? '合格' : '不合格'}
+          </Badge>
+          <span className="text-sm text-muted-foreground">
+            {formatDate(record.createdAt)}
+          </span>
+          {record.operatorName && (
+            <span className="text-xs text-muted-foreground">
+              · {record.operatorName}
+            </span>
+          )}
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0 text-muted-foreground hover:text-foreground shrink-0 ml-2"
+        >
+          {showDetail ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+      </div>
+
+      {/* Expandable detail */}
+      {showDetail && (
+        <div className="border-t px-4 py-3 space-y-3 bg-muted/20">
+          {/* Sample info */}
+          {record.sampleQuantity != null && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Beaker className="h-3.5 w-3.5" />
+              <span>复苏支数: {record.sampleQuantity} 支</span>
+            </div>
+          )}
+
+          {/* Test results */}
+          <TestResultsTable results={record.testResults} />
+
+          {/* Fail reason */}
+          {record.failReason && (
+            <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
+              <span className="font-medium">不合格原因：</span>
+              {record.failReason}
+            </div>
+          )}
+
+          {/* Future: attachments placeholder */}
+          {/* {record.attachments && record.attachments.length > 0 && (
+            <div className="mt-2">
+              ...
+            </div>
+          )} */}
+
+          <OperatorInfo record={record} />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -458,22 +630,12 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
           </TabsContent>
 
           <TabsContent value="routine" className="mt-4">
-            {/* Latest ROUTINE record detail */}
             <div className="space-y-4">
               {routineRecords.map((record, index) => (
                 index === 0 ? (
                   <RoutineRecordDetail key={record.id} record={record} />
                 ) : (
-                  <Card key={record.id}>
-                    <CardContent className="pt-0">
-                      <div className="flex items-center justify-between rounded-md border px-3 py-2">
-                        <div>
-                          <p className="text-sm font-medium">{record.overallJudgment === 'PASS' ? '合格' : '不合格'}</p>
-                          <p className="text-xs text-muted-foreground">{formatDateShort(record.createdAt)}</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <HistoricalRoutineCard key={record.id} record={record} />
                 )
               ))}
             </div>
@@ -496,13 +658,13 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
           </CardContent>
         </Card>
       ) : (
-        /* Only ROUTINE records — backward compatible display */
+        /* Only ROUTINE records — all with detail view */
         <div className="space-y-4">
-          {routineRecords.map((record, index) => (
-            index === 0 ? (
-              <RoutineRecordDetail key={record.id} record={record} />
-            ) : null
-          ))}
+          {/* Latest record: full detail */}
+          {routineRecords[0] && (
+            <RoutineRecordDetail key={routineRecords[0].id} record={routineRecords[0]} />
+          )}
+          {/* Historical records: expandable cards */}
           {routineRecords.length > 1 && (
             <Card>
               <CardHeader className="pb-2">
@@ -513,31 +675,7 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
               <CardContent className="pt-0">
                 <div className="space-y-2">
                   {routineRecords.slice(1).map((record) => (
-                    <div
-                      key={record.id}
-                      className="flex items-center justify-between rounded-md border px-3 py-2"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Badge
-                          variant="secondary"
-                          className={
-                            record.overallJudgment === 'PASS'
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200 text-xs'
-                              : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 text-xs'
-                          }
-                        >
-                          {record.overallJudgment === 'PASS' ? '合格' : '不合格'}
-                        </Badge>
-                        <span className="text-sm text-muted-foreground">
-                          {formatDate(record.createdAt)}
-                        </span>
-                        {record.operatorName && (
-                          <span className="text-xs text-muted-foreground">
-                            · {record.operatorName}
-                          </span>
-                        )}
-                      </div>
-                    </div>
+                    <HistoricalRoutineCard key={record.id} record={record} />
                   ))}
                 </div>
               </CardContent>
