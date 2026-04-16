@@ -1,8 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Microscope, Clock, User, ShieldCheck, Dna, Crosshair, ThermometerSun, Wand2, Search, PackageSearch, TestTubes, Printer } from 'lucide-react'
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { CheckCircle2, FlaskConical, ArrowUpDown, Snowflake, Microscope, Clock, User, ShieldCheck, Dna, Crosshair, ThermometerSun, Wand2, Search, PackageSearch, TestTubes, Printer, ChevronDown, ChevronUp, FileText } from 'lucide-react'
 
 // ============================================
 // Types
@@ -23,6 +26,72 @@ interface TaskSummaryProps {
     actualEnd: string | null
     notes: string | null
   }
+}
+
+// ============================================
+// Field label mapping (snake_case → 中文)
+// ============================================
+
+const FIELD_LABELS: Record<string, string> = {
+  // 种子复苏
+  recovery_time: '复苏耗时',
+  recovery_method: '复苏方式',
+  recovery_status: '复苏状态',
+  thawed_vials: '复苏支数',
+  // 扩增培养
+  passage_from: '起始代次',
+  passage_to: '目标代次',
+  passage_date: '传代日期',
+  passage_ratio: '传代比例',
+  cell_density: '细胞密度',
+  media_batch_no: '培养基批号',
+  morphology: '细胞形态',
+  // 分化
+  diff_stage: '分化阶段',
+  diff_date: '操作日期',
+  culture_days: '培养天数',
+  induction_factors: '诱导因子',
+  medium: '培养基',
+  // 收获
+  cell_passage: '细胞代次',
+  total_cells: '总细胞数',
+  viability: '存活率',
+  total_vials: '总支数',
+  storage_location: '存储位置',
+  // 通用
+  operator_name: '操作员',
+  notes: '备注',
+  sample_info: '样本信息',
+}
+
+// Fields that are already shown in the summary (will be de-emphasized in detail view)
+const SUMMARY_FIELDS = new Set([
+  'passage_date', 'passage_ratio', 'cell_density', 'morphology',
+  'diff_stage', 'diff_date', 'culture_days', 'induction_factors', 'medium',
+  'cell_passage', 'total_cells', 'viability', 'total_vials', 'storage_location',
+  'recovery_time', 'recovery_method', 'recovery_status',
+])
+
+// Fields to skip in detail view
+const SKIP_FIELDS = new Set(['operator_name', 'notes'])
+
+function getFieldLabel(key: string): string {
+  return FIELD_LABELS[key] || key
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, c => c.toUpperCase())
+}
+
+function formatFieldValue(key: string, value: unknown): string {
+  if (value === null || value === undefined) return '-'
+  if (typeof value === 'object') return JSON.stringify(value, null, 2)
+  // Date fields: only show date part
+  if (typeof value === 'string' && (key.includes('_date') || key === 'date')) {
+    const d = new Date(value)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' })
+    }
+  }
+  return String(value)
 }
 
 // ============================================
@@ -224,11 +293,77 @@ function HarvestSummary({ formData }: { formData: Record<string, any> }) {
 }
 
 // ============================================
+// Full Detail View (all formData fields)
+// ============================================
+
+function TaskFullDetail({ formData }: { formData: Record<string, any> }) {
+  const entries = Object.entries(formData).filter(([key]) => !SKIP_FIELDS.has(key))
+
+  // Separate into: already-in-summary fields vs additional fields
+  const summaryEntries = entries.filter(([key]) => SUMMARY_FIELDS.has(key))
+  const additionalEntries = entries.filter(([key]) => !SUMMARY_FIELDS.has(key))
+
+  if (entries.length === 0) return null
+
+  return (
+    <div className="space-y-3">
+      {/* Additional fields (not shown in summary) */}
+      {additionalEntries.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+            补充信息
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2 text-sm">
+            {additionalEntries.map(([key, value]) => (
+              <div key={key} className="rounded-md bg-background/50 px-3 py-2">
+                <span className="text-xs text-muted-foreground">{getFieldLabel(key)}</span>
+                <p className="font-medium whitespace-pre-wrap break-all mt-0.5">
+                  {formatFieldValue(key, value)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* All fields (complete data table) */}
+      <div className="space-y-2">
+        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider">
+          完整数据
+        </p>
+        <div className="rounded-md border">
+          <table className="w-full text-sm">
+            <tbody>
+              {entries.map(([key, value], idx) => (
+                <tr key={key} className={idx % 2 === 0 ? 'bg-muted/30' : ''}>
+                  <td className="px-3 py-2 text-muted-foreground font-medium whitespace-nowrap align-top w-40">
+                    {getFieldLabel(key)}
+                  </td>
+                  <td className="px-3 py-2 whitespace-pre-wrap break-all">
+                    {formatFieldValue(key, value)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================
 // TaskSummary Component
 // ============================================
 
 export function TaskSummary({ task }: TaskSummaryProps) {
   const data = task.formData ?? {}
+  const [showDetail, setShowDetail] = useState(false)
+
+  // Check if there are additional fields beyond what's shown in summary
+  const allKeys = Object.keys(data).filter(key => !SKIP_FIELDS.has(key))
+  const hasAdditionalFields = allKeys.some(key => !SUMMARY_FIELDS.has(key))
+  const hasFormData = allKeys.length > 0
 
   return (
     <Card className="border-emerald/20 bg-emerald/5">
@@ -264,11 +399,38 @@ export function TaskSummary({ task }: TaskSummaryProps) {
               <div className="grid gap-2 sm:grid-cols-3 text-sm">
                 {Object.entries(data).filter(([key]) => !['operator_name', 'notes'].includes(key)).slice(0, 6).map(([key, value]) => (
                   <div key={key}>
-                    <span className="text-xs text-muted-foreground">{key}</span>
-                    <p className="font-medium line-clamp-1">{String(value ?? '-')}</p>
+                    <span className="text-xs text-muted-foreground">{getFieldLabel(key)}</span>
+                    <p className="font-medium line-clamp-1">{formatFieldValue(key, value)}</p>
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Expandable Detail */}
+            {hasFormData && (
+              <>
+                <Separator />
+                <div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 text-xs text-muted-foreground hover:text-foreground px-0"
+                    onClick={() => setShowDetail(!showDetail)}
+                  >
+                    <FileText className="mr-1.5 h-3 w-3" />
+                    {showDetail ? '收起详情' : '查看详情'}
+                    {showDetail
+                      ? <ChevronUp className="ml-1 h-3 w-3" />
+                      : <ChevronDown className="ml-1 h-3 w-3" />
+                    }
+                  </Button>
+                  {showDetail && (
+                    <div className="mt-3">
+                      <TaskFullDetail formData={data} />
+                    </div>
+                  )}
+                </div>
+              </>
             )}
 
             {/* Meta */}
