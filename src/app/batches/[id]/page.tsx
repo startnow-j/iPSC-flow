@@ -251,6 +251,88 @@ const INPUT_MODE_COLORS: Record<string, string> = {
   AI_CONVERSATION: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300',
 }
 
+// ============================================
+// Timeline field label mapping (English key → 中文)
+// ============================================
+const TIMELINE_FIELD_LABELS: Record<string, string> = {
+  // 状态相关
+  status: '状态',
+  action: '操作',
+  statusLabel: '状态',
+  reason: '原因',
+  terminationReason: '终止原因',
+  // 任务相关
+  taskCode: '任务编码',
+  taskName: '任务名称',
+  stepGroup: '步骤分组',
+  notes: '备注',
+  redoRound: '重做轮次',
+  originalTaskId: '原任务ID',
+  // 人员相关
+  assigneeId: '操作员ID',
+  assigneeName: '操作员',
+  reviewerId: '审核员ID',
+  reviewerName: '审核员',
+  productionOperatorId: '生产操作员ID',
+  productionOperatorName: '生产操作员',
+  qcOperatorId: '质检员ID',
+  qcOperatorName: '质检员',
+  operatorId: '操作员ID',
+  operatorName: '操作员',
+  // 质检相关
+  qcType: '质检类型',
+  sampleQuantity: '复苏支数',
+  overallJudgment: '综合判定',
+  failReason: '不合格原因',
+  taskId: '关联任务',
+  // CoA 相关
+  coaNo: 'CoA编号',
+  // 批次相关
+  batchNo: '批次号',
+  productLine: '产品线',
+  category: '产品类别',
+  requirements: '鉴定需求',
+  // 数据同步
+  actualQuantity: '实际数量',
+  storageLocation: '存储位置',
+}
+
+// Complex nested objects/arrays that should be skipped from diff display
+const SKIP_COMPLEX_KEYS = new Set([
+  'formData',    // task form data (too verbose, shown in task detail)
+  'testResults', // QC test results (too verbose, shown in QC tab)
+  'tasks',       // auto-created task list
+  'sampleInfo',  // sample info object
+  'aiContext',   // AI context
+])
+
+// 判定值中文映射
+const JUDGMENT_LABELS: Record<string, string> = {
+  PASS: '合格',
+  FAIL: '不合格',
+  PENDING: '待判定',
+}
+
+// 质检类型中文映射
+const QC_TYPE_LABELS: Record<string, string> = {
+  ROUTINE: '终检',
+  IN_PROCESS: '过程采样',
+}
+
+function getTimelineFieldLabel(key: string): string {
+  return TIMELINE_FIELD_LABELS[key] || key
+}
+
+function formatTimelineValue(value: unknown): { text: string; isHtml?: boolean } {
+  if (value === null || value === undefined) return { text: '-' }
+  if (typeof value === 'object') return { text: JSON.stringify(value, null, 2) }
+  return { text: String(value) }
+}
+
+function isComplexValue(value: unknown): boolean {
+  return value !== null && value !== undefined && typeof value === 'object'
+}
+
 function formatDiffData(
   dataBefore: Record<string, unknown> | undefined,
   dataAfter: Record<string, unknown> | undefined,
@@ -263,13 +345,18 @@ function formatDiffData(
     ...Object.keys(dataAfter || {}),
   ])
 
-  // Skip certain internal keys
-  const skipKeys = new Set(['id', 'createdAt', 'updatedAt'])
+  // Skip internal keys and complex nested objects
+  const skipKeys = new Set(['id', 'createdAt', 'updatedAt', ...SKIP_COMPLEX_KEYS])
 
   for (const key of allKeys) {
     if (skipKeys.has(key)) continue
     const before = dataBefore?.[key]
     const after = dataAfter?.[key]
+    // Also skip if both values are complex objects (would show [object Object])
+    if (isComplexValue(before) && isComplexValue(after)) continue
+    // Skip null → object transitions (auto-generated fields)
+    if ((before === null || before === undefined) && isComplexValue(after)) continue
+    if ((after === null || after === undefined) && isComplexValue(before)) continue
     if (JSON.stringify(before) === JSON.stringify(after)) continue
     entries.push({ key, before, after })
   }
@@ -340,7 +427,7 @@ function TimelineCard({ timeline }: { timeline: TimelineEntry[] }) {
                       {formatTime(entry.createdAt)}
                     </p>
 
-                    {/* Status change */}
+                    {/* Status change with additional fields */}
                     {entry.dataBefore?.status && entry.dataAfter?.status && (
                       <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs">
                         <p>
@@ -359,30 +446,113 @@ function TimelineCard({ timeline }: { timeline: TimelineEntry[] }) {
                             {getStatusLabel(entry.dataAfter.status as string)}
                           </Badge>
                         </p>
+                        {/* Show reason/terminationReason alongside status change */}
+                        {(entry.dataAfter.reason || entry.dataAfter.terminationReason) && (
+                          <p className="mt-1">
+                            <span className="text-muted-foreground">
+                              {entry.dataAfter.terminationReason ? '终止原因' : '原因'}：
+                            </span>
+                            {entry.dataAfter.terminationReason
+                              ? (TERMINATION_REASON_LABELS[entry.dataAfter.terminationReason as string] || entry.dataAfter.terminationReason as string)
+                              : entry.dataAfter.reason as string}
+                            {entry.dataAfter.terminationReason && entry.dataAfter.reason && (
+                              <span className="mt-0.5 block text-muted-foreground/80">详情：{entry.dataAfter.reason as string}</span>
+                            )}
+                          </p>
+                        )}
                       </div>
                     )}
 
-                    {/* Generic data diff */}
+                    {/* Generic data diff (no status change) */}
                     {diffData && !entry.dataBefore?.status && !entry.dataAfter?.status && (
                       <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
                         {diffData.map(({ key, before, after }) => (
-                          <p key={key}>
-                            <span className="text-muted-foreground">{key}：</span>
-                            {before !== undefined && before !== null && (
-                              <span className="line-through text-muted-foreground/60 mr-1">
-                                {String(before)}
+                          <p key={key} className="flex items-start gap-1 flex-wrap">
+                            <span className="text-muted-foreground shrink-0">{getTimelineFieldLabel(key)}：</span>
+                            {key === 'overallJudgment' ? (
+                              /* 综合判定：显示为彩色标签 */
+                              <Badge
+                                variant="secondary"
+                                className={`text-[10px] ${
+                                  after === 'PASS'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : after === 'FAIL'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-amber-100 text-amber-800'
+                                }`}
+                              >
+                                {JUDGMENT_LABELS[String(after)] || String(after)}
+                              </Badge>
+                            ) : key === 'qcType' ? (
+                              <span className="font-medium">
+                                {QC_TYPE_LABELS[String(after)] || String(after)}
                               </span>
-                            )}
-                            {after !== undefined && after !== null && (
-                              <span className="font-medium">{String(after)}</span>
+                            ) : (
+                              <>
+                                {before !== undefined && before !== null && (
+                                  <span className="line-through text-muted-foreground/60 mr-1">
+                                    {formatTimelineValue(before).text}
+                                  </span>
+                                )}
+                                {after !== undefined && after !== null && (
+                                  <span className="font-medium">{formatTimelineValue(after).text}</span>
+                                )}
+                              </>
                             )}
                           </p>
                         ))}
+                        {/* For QC events: show overallJudgment + failReason even if filtered from diff */}
+                        {entry.dataAfter?.overallJudgment && !diffData.some(d => d.key === 'overallJudgment') && (
+                          <p className="flex items-center gap-1">
+                            <span className="text-muted-foreground">综合判定：</span>
+                            <Badge
+                              variant="secondary"
+                              className={`text-[10px] ${
+                                entry.dataAfter.overallJudgment === 'PASS'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : entry.dataAfter.overallJudgment === 'FAIL'
+                                    ? 'bg-red-100 text-red-800'
+                                    : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {JUDGMENT_LABELS[entry.dataAfter.overallJudgment as string] || entry.dataAfter.overallJudgment as string}
+                            </Badge>
+                            {entry.dataAfter.failReason && (
+                              <span className="text-red-600 dark:text-red-400 ml-1">
+                                — {entry.dataAfter.failReason as string}
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        {entry.dataAfter?.qcType && !diffData.some(d => d.key === 'qcType') && (
+                          <p>
+                            <span className="text-muted-foreground">质检类型：</span>
+                            <span className="font-medium">{QC_TYPE_LABELS[entry.dataAfter.qcType as string] || entry.dataAfter.qcType as string}</span>
+                            {entry.dataAfter.sampleQuantity != null && (
+                              <span className="ml-2">
+                                <span className="text-muted-foreground">复苏支数：</span>
+                                <span className="font-medium">{entry.dataAfter.sampleQuantity as number} 支</span>
+                              </span>
+                            )}
+                          </p>
+                        )}
+                        {/* For task events: show taskName + status */}
+                        {entry.dataAfter?.taskName && !diffData.some(d => d.key === 'taskName') && (
+                          <p>
+                            <span className="text-muted-foreground">任务：</span>
+                            <span className="font-medium">{entry.dataAfter.taskName as string}</span>
+                            {entry.dataAfter.stepGroup && (
+                              <Badge variant="outline" className="ml-1 font-mono text-[10px]">
+                                {entry.dataAfter.stepGroup as string}
+                              </Badge>
+                            )}
+                          </p>
+                        )}
                       </div>
                     )}
 
                     {/* Action / BatchNo / Reason (legacy format) */}
-                    {entry.dataAfter && !diffData && (
+                    {entry.dataAfter && !diffData && !entry.dataBefore?.status && !entry.dataAfter?.status && (
                       <div className="mt-2 rounded-md bg-muted/50 px-3 py-2 text-xs space-y-1">
                         {entry.dataAfter.statusLabel && (
                           <p>

@@ -3012,3 +3012,34 @@ Stage Summary:
 - 所有记录以只读模式展示，带"只读模式"提示横幅
 - 不可修改（无表单、无指派按钮、无操作入口）
 - 终止（TERMINATED）批次仍保持完全锁定（符合业务需求）
+
+---
+Task ID: 1
+Agent: main
+Task: 修复详情展开和时间线中的英文字段和 [object Object] 问题
+
+Work Log:
+- 分析了 TaskSummary (task-summary.tsx) 中的 FIELD_LABELS 映射，补充了缺失的中文标签
+- 分析了批次时间线 (page.tsx TimelineCard) 中的 diff 渲染逻辑，发现两个核心问题：
+  1. diff 键直接用原始英文字段名显示
+  2. 对象类型值用 String() 转换导致 [object Object]
+- 在 page.tsx 中添加了 TIMELINE_FIELD_LABELS 映射（30+字段中英文对照）
+- 添加了 SKIP_COMPLEX_KEYS 集合跳过 formData/testResults/tasks/sampleInfo 等复杂嵌套对象
+- 添加了 JUDGMENT_LABELS 和 QC_TYPE_LABELS 映射用于特殊值的中文显示
+- 添加了 isComplexValue() 和 formatTimelineValue() 辅助函数
+- 重构了 formatDiffData() 函数，增加复杂值过滤逻辑
+- 重构了时间线渲染逻辑：
+  - 状态变更卡片增加 reason/terminationReason 显示
+  - 通用 diff 显示使用中文标签
+  - overallJudgment 显示为彩色标签（合格/不合格/待判定）
+  - qcType 显示为中文（终检/过程采样）
+  - QC 事件额外显示综合判定和不合格原因
+  - 任务事件额外显示任务名称和步骤分组
+- 补充了 task-summary.tsx 中 FIELD_LABELS 的缺失映射（鉴定、通用等字段）
+
+Stage Summary:
+- 修改文件: src/app/batches/[id]/page.tsx, src/components/ebpr/task-summary.tsx
+- 时间线所有字段现在都显示中文标签，不再显示 [object Object]
+- 复杂嵌套对象（formData/testResults）从时间线 diff 中过滤，避免信息冗余
+- 质检记录在时间线中正确显示综合判定（彩色标签）和不合格原因
+- TaskSummary 展开详情补充了更多字段的中文翻译

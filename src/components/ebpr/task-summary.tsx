@@ -58,10 +58,24 @@ const FIELD_LABELS: Record<string, string> = {
   viability: '存活率',
   total_vials: '总支数',
   storage_location: '存储位置',
+  // 鉴定
+  sample_type: '样本类型',
+  test_item: '检测项目',
+  test_method: '检测方法',
+  test_result: '检测结果',
   // 通用
   operator_name: '操作员',
   notes: '备注',
   sample_info: '样本信息',
+  passage: '代次',
+  result: '结果',
+  operator: '操作员',
+  date: '日期',
+  time: '时间',
+  description: '描述',
+  batch_no: '批次号',
+  product_name: '产品名称',
+  specification: '规格',
 }
 
 // Fields that are already shown in the summary (will be de-emphasized in detail view)
