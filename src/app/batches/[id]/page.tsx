@@ -666,6 +666,10 @@ export default function BatchDetailPage({
       await fetchBatchDetail()
       // Also refresh timeline
       fetchTimeline()
+      // Refresh CoA if approve action (CoA status changes from SUBMITTED → APPROVED)
+      if (confirmAction.action === 'approve') {
+        fetchCoa()
+      }
     } catch {
       toast.error('网络错误，请重试')
     } finally {
@@ -702,6 +706,7 @@ export default function BatchDetailPage({
       setScrapReason('')
       await fetchBatchDetail()
       fetchTimeline()
+      fetchCoa()
     } catch {
       toast.error('网络错误，请重试')
     } finally {
