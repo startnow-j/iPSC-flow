@@ -72,6 +72,16 @@ export async function GET(
       }
     }
 
+    // v3.1: QC 操作（pass_qc / submit_coa）需要检查指定质检员
+    // 如果当前用户不是批次的指定质检员，则隐藏这些按钮（避免显示无效按钮）
+    const roles = getRolesFromPayload(payload)
+    if (roles.some(r => ['QC'].includes(r)) && !roles.includes('ADMIN')) {
+      const hasQcActions = availableActions.some(a => ['pass_qc', 'submit_coa'].includes(a.action))
+      if (hasQcActions && batch.qcOperatorId && batch.qcOperatorId !== payload.userId) {
+        availableActions = availableActions.filter(a => !['pass_qc', 'submit_coa'].includes(a.action))
+      }
+    }
+
     // 计算剩余数量：生产数量 - 所有质检记录消耗的复苏支数
     const qcRecords = await db.qcRecord.findMany({
       where: { batchId: id },

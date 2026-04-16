@@ -39,6 +39,15 @@ function formatDate(dateStr: string | null): string {
   })
 }
 
+function formatDateOnly(dateStr: string | null): string {
+  if (!dateStr) return '-'
+  return new Date(dateStr).toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  })
+}
+
 // ============================================
 // TaskIcon — rendered as a proper component (not variable)
 // ============================================
@@ -117,7 +126,7 @@ function ExpansionSummary({ formData, stepGroup }: { formData: Record<string, an
     <div className="grid gap-2 sm:grid-cols-5 text-sm">
       <div>
         <span className="text-xs text-muted-foreground">传代日期</span>
-        <p className="font-medium">{formData.passage_date ? formatDate(formData.passage_date) : '-'}</p>
+        <p className="font-medium">{formData.passage_date ? formatDateOnly(formData.passage_date) : '-'}</p>
       </div>
       <div>
         <span className="text-xs text-muted-foreground">代次</span>
@@ -150,7 +159,7 @@ function DifferentiationSummary({ formData, stepGroup }: { formData: Record<stri
       </div>
       <div>
         <span className="text-xs text-muted-foreground">操作日期</span>
-        <p>{formData.diff_date ? formatDate(formData.diff_date) : '-'}</p>
+        <p>{formData.diff_date ? formatDateOnly(formData.diff_date) : '-'}</p>
       </div>
       <div>
         <span className="text-xs text-muted-foreground">培养天数</span>

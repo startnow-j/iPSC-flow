@@ -157,7 +157,58 @@ export async function GET(request: NextRequest) {
     }
 
     // ============================================
-    // 3.6: 查询 COA_SUBMITTED 批次（待 SUPERVISOR/QA 审核）
+    // 3.6: 查询 QC_IN_PROGRESS 批次（待 SUPERVISOR/ADMIN 处理返工/报废）
+    // 质检不合格时，批次仍在 QC_IN_PROGRESS 状态，需要主管决策
+    // ============================================
+    const isSupervisorOrAdmin = payload.roles?.some((r: string) => ['SUPERVISOR', 'ADMIN'].includes(r))
+
+    if (isSupervisorOrAdmin) {
+      // 检查是否有不合格的质检记录（ROUTINE 类型且 overallJudgment = 'FAIL'）
+      const failedQcBatchIds = await db.qcRecord.groupBy({
+        by: ['batchId'],
+        where: {
+          qcType: 'ROUTINE',
+          overallJudgment: 'FAIL',
+        },
+        having: {
+          batchId: { _count: { gt: 0 } },
+        },
+      })
+      const failedBatchIdSet = new Set(failedQcBatchIds.map(r => r.batchId))
+
+      const qcInProgressBatches = await db.batch.findMany({
+        where: {
+          status: 'QC_IN_PROGRESS',
+          id: { in: Array.from(failedBatchIdSet) },
+        },
+        select: {
+          id: true,
+          batchNo: true,
+          productName: true,
+          productLine: true,
+          qcOperatorName: true,
+        },
+      })
+
+      for (const batch of qcInProgressBatches) {
+        toExecute.push({
+          taskId: 'qc_disposition_' + batch.id,
+          batchId: batch.id,
+          batchNo: batch.batchNo,
+          taskCode: 'QC_DISPOSITION',
+          taskName: '质检不合格待处理',
+          productName: batch.productName,
+          productLine: batch.productLine,
+          assigneeName: batch.qcOperatorName,
+          reviewerName: null,
+          status: 'QC_DISPOSITION',
+          sequenceNo: 998,
+        })
+      }
+    }
+
+    // ============================================
+    // 3.7: 查询 COA_SUBMITTED 批次（待 SUPERVISOR/QA 审核）
     // ============================================
     const coaPendingBatches = await db.batch.findMany({
       where: {

@@ -47,6 +47,7 @@ const TASK_STATUS_LABELS: Record<string, string> = {
   IN_PROGRESS: '进行中',
   COMPLETED: '已完成',
   QC_PENDING: '待质检',
+  QC_DISPOSITION: '质检不合格',
   COA_SUBMITTED: 'CoA待审核',
 }
 
@@ -55,6 +56,7 @@ const TASK_STATUS_COLORS: Record<string, string> = {
   IN_PROGRESS: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
   COMPLETED: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
   QC_PENDING: 'bg-violet-100 text-violet-700 dark:bg-violet-900/30 dark:text-violet-400',
+  QC_DISPOSITION: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400',
   COA_SUBMITTED: 'bg-sky-100 text-sky-700 dark:bg-sky-900/30 dark:text-sky-400',
 }
 
@@ -156,7 +158,7 @@ export function MyTasks() {
                   </div>
                   <div className="space-y-1">
                     {data.toExecute.slice(0, 5).map((task) => (
-                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(task.taskCode === 'QC_PENDING' ? `/batches/${task.batchId}?tab=qc` : task.taskCode === 'COA_REVIEW' ? `/batches/${task.batchId}?tab=coa` : `/batches/${task.batchId}`)} />
+                      <TaskCard key={task.taskId} task={task} onClick={() => router.push(task.taskCode === 'QC_PENDING' || task.taskCode === 'QC_DISPOSITION' ? `/batches/${task.batchId}?tab=qc` : task.taskCode === 'COA_REVIEW' ? `/batches/${task.batchId}?tab=coa` : `/batches/${task.batchId}`)} />
                     ))}
                     {data.toExecuteCount > 5 && (
                       <button
