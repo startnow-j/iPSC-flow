@@ -67,6 +67,7 @@ interface GenericTaskListProps {
   productId: string
   onBatchUpdated?: () => void
   onAssignTask?: (request: AssignTaskRequest) => void
+  readOnly?: boolean
 }
 
 // ============================================
@@ -151,12 +152,12 @@ function formatDate(dateStr: string | null): string {
 // Single Task Card
 // ============================================
 
-function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks, productId }: { task: ProductionTask; allTasks: ProductionTask[]; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean; onRefreshTasks: () => void; productId: string }) {
+function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks, productId, readOnly = false }: { task: ProductionTask; allTasks: ProductionTask[]; onAssignTask?: (request: AssignTaskRequest) => void; canAssign: boolean; onRefreshTasks: () => void; productId: string; readOnly?: boolean }) {
   const isCompleted = task.status === 'COMPLETED'
   const isReviewed = task.status === 'REVIEWED'
   const isSkipped = task.status === 'SKIPPED'
   const isIdTask = task.taskCode.startsWith('ID_')
-  const showAssignButton = canAssign && task.status === 'PENDING' && !task.assigneeId
+  const showAssignButton = !readOnly && canAssign && task.status === 'PENDING' && !task.assigneeId
 
   return (
     <Card className={isCompleted || isReviewed ? 'border-emerald/20 bg-emerald/5' : isSkipped ? 'opacity-60' : ''}>
@@ -257,13 +258,14 @@ function TaskCard({ task, allTasks, onAssignTask, canAssign, onRefreshTasks, pro
               </p>
             )}
 
-            {/* IN_PROGRESS: Show actual form */}
+            {/* IN_PROGRESS: Show actual form (or read-only summary) */}
             {task.status === 'IN_PROGRESS' && (
               <TaskFormWrapper
                 task={task}
                 batch={{ batchNo: task.batchNo }}
                 allTasks={allTasks}
                 onTaskUpdated={onRefreshTasks}
+                readOnly={readOnly}
               />
             )}
           </div>
@@ -317,7 +319,7 @@ function ProgressSummary({ tasks }: { tasks: ProductionTask[] }) {
 // Main GenericTaskList Component
 // ============================================
 
-export function GenericTaskList({ batchId, productLine, productId, onBatchUpdated, onAssignTask }: GenericTaskListProps) {
+export function GenericTaskList({ batchId, productLine, productId, onBatchUpdated, onAssignTask, readOnly = false }: GenericTaskListProps) {
   const { user } = useAuthStore()
   const [tasks, setTasks] = useState<ProductionTask[]>([])
   const [loading, setLoading] = useState(true)
@@ -412,7 +414,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
             </Badge>
           </div>
           {regularTasks.map(task => (
-            <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} />
+            <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} readOnly={readOnly} />
           ))}
         </div>
       )}
@@ -430,7 +432,7 @@ export function GenericTaskList({ batchId, productLine, productId, onBatchUpdate
               </Badge>
             </div>
             {identificationTasks.map(task => (
-              <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} />
+              <TaskCard key={task.id} task={task} allTasks={tasks} onAssignTask={onAssignTask} canAssign={canAssign} onRefreshTasks={fetchTasks} productId={productId} readOnly={readOnly} />
             ))}
           </div>
         </>

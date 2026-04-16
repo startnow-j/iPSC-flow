@@ -1120,7 +1120,7 @@ export default function BatchDetailPage({
 
         {/* Production Tab */}
         <TabsContent value="production" className="mt-4">
-          {['TERMINATED', 'SCRAPPED', 'RELEASED'].includes(batch.status) ? (
+          {['TERMINATED', 'RELEASED'].includes(batch.status) ? (
             <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已结束，生产记录不可修改" />
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
@@ -1135,6 +1135,7 @@ export default function BatchDetailPage({
                 taskName: req.taskName,
                 productId: batch.productId || req.productId || '',
               })}
+              readOnly={batch.status === 'SCRAPPED'}
             />
           ) : (
             <GenericTaskList
@@ -1149,6 +1150,7 @@ export default function BatchDetailPage({
                 taskName: req.taskName,
                 productId: batch.productId || req.productId || '',
               })}
+              readOnly={batch.status === 'SCRAPPED'}
             />
           )}
         </TabsContent>
@@ -1296,26 +1298,24 @@ export default function BatchDetailPage({
               {/* Post-QC statuses: show QC results summary */}
               {(batch.status === 'QC_PASS' ||
                 batch.status === 'COA_SUBMITTED' ||
-                batch.status === 'RELEASED') && (
+                batch.status === 'RELEASED' ||
+                batch.status === 'SCRAPPED') && (
                 <>
                   {qcLoading ? (
                     <div className="space-y-4">
                       <Skeleton className="h-48" />
                       <Skeleton className="h-24" />
                     </div>
-                  ) : (
+                  ) : qcRecords.length > 0 ? (
                     <QcResultsSummary batchId={id} />
+                  ) : (
+                    <PlaceholderCard
+                      icon={ClipboardCheck}
+                      title={batch.status === 'SCRAPPED' ? '批次已报废' : '暂无质检记录'}
+                      description={batch.status === 'SCRAPPED' ? '该批次已报废，无质检记录。' : '暂无质检记录。'}
+                    />
                   )}
                 </>
-              )}
-
-              {/* SCRAPPED status */}
-              {batch.status === 'SCRAPPED' && (
-                <PlaceholderCard
-                  icon={ClipboardCheck}
-                  title="批次已报废"
-                  description="该批次已报废，无法进行质检。"
-                />
               )}
             </>
           )}

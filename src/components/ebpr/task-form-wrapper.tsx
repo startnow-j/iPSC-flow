@@ -59,6 +59,7 @@ interface TaskFormWrapperProps {
   }
   allTasks: ProductionTask[]
   onTaskUpdated: () => void
+  readOnly?: boolean
 }
 
 // ============================================
@@ -70,6 +71,7 @@ export function TaskFormWrapper({
   batch,
   allTasks,
   onTaskUpdated,
+  readOnly = false,
 }: TaskFormWrapperProps) {
   const [saving, setSaving] = useState(false)
 
@@ -82,7 +84,7 @@ export function TaskFormWrapper({
     }, 500)
   }
 
-  // For completed or reviewed tasks that aren't the current active one, show summary
+  // For completed or reviewed tasks, show summary
   if (task.status === 'COMPLETED' || task.status === 'REVIEWED') {
     return <TaskSummary task={task} />
   }
@@ -93,6 +95,20 @@ export function TaskFormWrapper({
       <Card>
         <CardContent className="flex items-center justify-center py-8 text-sm text-muted-foreground">
           此步骤已跳过
+        </CardContent>
+      </Card>
+    )
+  }
+
+  // ReadOnly mode: show summary for any non-completed task (e.g. IN_PROGRESS, PENDING)
+  if (readOnly) {
+    if (task.formData && Object.keys(task.formData).length > 0) {
+      return <TaskSummary task={task} />
+    }
+    return (
+      <Card>
+        <CardContent className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+          该任务未完成，无记录数据
         </CardContent>
       </Card>
     )

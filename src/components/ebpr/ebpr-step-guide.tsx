@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { TaskFormWrapper, TaskFormSkeleton } from './task-form-wrapper'
+import { TaskSummary } from './task-summary'
 import { ExpansionForm } from './expansion-form'
 import { DifferentiationForm } from './differentiation-form'
 import {
@@ -23,6 +24,7 @@ import {
   ShieldCheck,
   User,
   Clock,
+  Lock,
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -74,6 +76,7 @@ interface EbprStepGuideProps {
   category?: string | null
   onBatchUpdated: () => void
   onAssignTask?: (request: AssignTaskRequest) => void
+  readOnly?: boolean
 }
 
 // ============================================
@@ -327,6 +330,7 @@ export function EbprStepGuide({
   category,
   onBatchUpdated,
   onAssignTask,
+  readOnly = false,
 }: EbprStepGuideProps) {
   const { user } = useAuthStore()
   const canAssign = hasAnyRole(user?.roles || [], ['ADMIN', 'SUPERVISOR'])
@@ -541,6 +545,73 @@ export function EbprStepGuide({
 
   // Check if already submitted for QC
   const isQcSubmitted = batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS'
+
+  // ============================================
+  // ReadOnly mode: show all tasks as read-only summaries
+  // ============================================
+  if (readOnly) {
+    // Group completed tasks by step
+    const tasksByStep = steps.map(step => ({
+      step,
+      tasks: tasks.filter(t => t.taskCode === step.code && (t.status === 'COMPLETED' || t.status === 'REVIEWED')),
+      hasOther: tasks.some(t => t.taskCode === step.code && t.status !== 'COMPLETED' && t.status !== 'REVIEWED' && t.status !== 'SKIPPED'),
+    }))
+
+    return (
+      <div className="space-y-4">
+        {/* ReadOnly banner */}
+        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-800 dark:bg-amber-950/20">
+          <CardContent className="flex items-center gap-3 p-4">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+              <Lock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div>
+              <p className="text-sm font-medium text-amber-700 dark:text-amber-400">只读模式</p>
+              <p className="text-xs text-muted-foreground">该批次已结束，以下记录仅供查看，不可修改。</p>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Step Progress (read-only) */}
+        <Card>
+          <CardContent className="p-4 sm:p-6">
+            <div className="flex justify-center overflow-x-auto pb-1">
+              <StepProgressBar
+                steps={steps}
+                tasks={tasks}
+                activeStep={activeStep}
+                onStepClick={handleStepClick}
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Show all completed task summaries for the active step */}
+        {activeStep && (
+          <div className="space-y-3">
+            {tasksByStep.find(s => s.step.code === activeStep)?.tasks.map(t => (
+              <TaskSummary key={t.id} task={t} />
+            ))}
+            {tasksByStep.find(s => s.step.code === activeStep)?.hasOther && (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  该步骤存在未完成的任务记录
+                </CardContent>
+              </Card>
+            )}
+            {tasksByStep.find(s => s.step.code === activeStep)?.tasks.length === 0 && 
+             !tasksByStep.find(s => s.step.code === activeStep)?.hasOther && (
+              <Card>
+                <CardContent className="flex items-center justify-center py-8 text-sm text-muted-foreground">
+                  该步骤无记录
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-4">

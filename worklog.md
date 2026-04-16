@@ -2970,3 +2970,45 @@ Stage Summary:
 - 核心修复：SEED_PREP 完成后自动激活 EXPANSION 时继承操作员信息（保持生产连续性）
 - 数据修复：NPC-260415-001 的未完成任务操作员统一更新为"陈五"
 - 代码零新增 ESLint error/warning
+
+---
+Task ID: 7
+Agent: Main Agent
+Task: 修复报废批次记录完全不可查看的问题
+
+Work Log:
+- 用户报告 NPC-260415-001 批次报废后，所有记录（生产、质检、CoA）被锁定不可查看
+- 深入排查发现根因：`SCRAPPED` 状态被与 `TERMINATED`/`RELEASED` 同等处理
+  - 生产记录Tab（line 1123）：整个 EbprStepGuide 被替换为"生产记录已锁定"占位卡片
+  - 质检Tab（line 1312-1319）：CELL_PRODUCT/KIT 显示"批次已报废"占位卡片
+  - CoA Tab（line 1332-1337）：显示"无法生成CoA"占位卡片（但如果CoA已存在则会正确显示）
+- 修改方案：报废批次保留查看权限，所有记录以只读模式展示
+
+**修改文件：**
+1. `src/components/ebpr/task-form-wrapper.tsx`：
+   - 新增 `readOnly` prop
+   - readOnly 模式下，非完成任务显示 TaskSummary（如有数据）或"无记录数据"提示
+
+2. `src/components/ebpr/ebpr-step-guide.tsx`：
+   - 新增 `readOnly` prop 和 Lock 图标导入
+   - readOnly 模式下显示：只读横幅提示 + 步骤进度条 + 已完成任务的 TaskSummary 列表
+   - 不显示表单、指派按钮、完成生产按钮等操作入口
+
+3. `src/components/ebpr/generic-task-list.tsx`：
+   - 新增 `readOnly` prop（GenericTaskListProps 和 TaskCard）
+   - readOnly 模式下隐藏指派按钮，IN_PROGRESS 任务通过 TaskFormWrapper(readOnly) 显示
+
+4. `src/app/batches/[id]/page.tsx`：
+   - 生产Tab：将 `['TERMINATED', 'SCRAPPED', 'RELEASED']` 改为 `['TERMINATED', 'RELEASED']`
+   - 给 EbprStepGuide 和 GenericTaskList 传递 `readOnly={batch.status === 'SCRAPPED'}`
+   - 质检Tab：将 `SCRAPPED` 加入 `QC_PASS/COA_SUBMITTED/RELEASED` 的展示列表，显示已有质检记录
+   - CoA Tab：无需修改（已有逻辑在 CoA 存在时正确显示）
+
+- Lint 检查通过（仅预存 generate-plan.js 错误）
+- Dev server 正常运行
+
+Stage Summary:
+- 报废批次现在可以查看所有历史记录（生产记录、质检记录、CoA）
+- 所有记录以只读模式展示，带"只读模式"提示横幅
+- 不可修改（无表单、无指派按钮、无操作入口）
+- 终止（TERMINATED）批次仍保持完全锁定（符合业务需求）
