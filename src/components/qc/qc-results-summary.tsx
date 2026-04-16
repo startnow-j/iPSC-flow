@@ -179,7 +179,7 @@ function InProcessRecordCard({ record }: { record: QcRecord }) {
 // ROUTINE Record Detail (existing behavior)
 // ============================================
 
-function RoutineRecordDetail({ record, recoveryDate }: { record: QcRecord; recoveryDate?: string | null }) {
+function RoutineRecordDetail({ record }: { record: QcRecord }) {
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -222,20 +222,12 @@ function RoutineRecordDetail({ record, recoveryDate }: { record: QcRecord; recov
       </CardHeader>
       <CardContent className="pt-0">
         {/* QC Sample Info */}
-        <div className="grid gap-2 sm:grid-cols-2 text-sm mb-3">
-          {recoveryDate && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <FlaskConical className="h-3.5 w-3.5" />
-              <span>复苏日期: {formatDate(recoveryDate)}</span>
-            </div>
-          )}
-          {record.sampleQuantity != null && (
-            <div className="flex items-center gap-2 text-muted-foreground">
-              <Beaker className="h-3.5 w-3.5" />
-              <span>复苏支数: {record.sampleQuantity} 支</span>
-            </div>
-          )}
-        </div>
+        {record.sampleQuantity != null && (
+          <div className="flex items-center gap-2 text-sm text-muted-foreground mb-3">
+            <Beaker className="h-3.5 w-3.5" />
+            <span>复苏支数: {record.sampleQuantity} 支</span>
+          </div>
+        )}
 
         {/* Test Results Table */}
         <div className="rounded-md border">
@@ -333,16 +325,14 @@ function RoutineRecordDetail({ record, recoveryDate }: { record: QcRecord; recov
 export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
   const [inProcessRecords, setInProcessRecords] = useState<QcRecord[]>([])
   const [routineRecords, setRoutineRecords] = useState<QcRecord[]>([])
-  const [recoveryDate, setRecoveryDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const fetchQcRecords = useCallback(async () => {
     setLoading(true)
     try {
-      const [inProcessRes, routineRes, tasksRes] = await Promise.all([
+      const [inProcessRes, routineRes] = await Promise.all([
         authFetch(`/api/batches/${batchId}/qc?qcType=IN_PROCESS`),
         authFetch(`/api/batches/${batchId}/qc?qcType=ROUTINE`),
-        authFetch(`/api/batches/${batchId}/tasks`),
       ])
 
       if (inProcessRes.ok) {
@@ -352,21 +342,6 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
       if (routineRes.ok) {
         const data = await routineRes.json()
         setRoutineRecords(data.qcRecords || [])
-      }
-      // Extract recovery date from SEED_PREP task
-      if (tasksRes.ok) {
-        const data = await tasksRes.json()
-        const seedTask = (data.tasks || []).find(
-          (t: { taskCode: string; status: string }) => t.taskCode === 'SEED_PREP' && t.status === 'COMPLETED'
-        )
-        if (seedTask) {
-          const formData = seedTask.formData
-          if (formData) {
-            const parsed = typeof formData === 'string' ? JSON.parse(formData) : formData
-            // Seed prep form stores recovery time in minutes; use actualEnd as recovery date
-            setRecoveryDate(seedTask.actualEnd)
-          }
-        }
       }
     } catch {
       // Silently fail
@@ -487,7 +462,7 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
             <div className="space-y-4">
               {routineRecords.map((record, index) => (
                 index === 0 ? (
-                  <RoutineRecordDetail key={record.id} record={record} recoveryDate={recoveryDate} />
+                  <RoutineRecordDetail key={record.id} record={record} />
                 ) : (
                   <Card key={record.id}>
                     <CardContent className="pt-0">
@@ -525,7 +500,7 @@ export function QcResultsSummary({ batchId }: QcResultsSummaryProps) {
         <div className="space-y-4">
           {routineRecords.map((record, index) => (
             index === 0 ? (
-              <RoutineRecordDetail key={record.id} record={record} recoveryDate={recoveryDate} />
+              <RoutineRecordDetail key={record.id} record={record} />
             ) : null
           ))}
           {routineRecords.length > 1 && (
