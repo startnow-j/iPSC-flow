@@ -109,6 +109,7 @@ interface BatchDetail {
   // Termination info
   terminationReason?: string | null
   scrapReason?: string | null
+  notes?: string | null
 }
 
 interface QcRecord {
@@ -1203,7 +1204,8 @@ export default function BatchDetailPage({
               </CardContent>
             </Card>
 
-            {/* Seed Info */}
+            {/* Seed Info — Not shown for KIT products */}
+            {batch.productLine !== 'KIT' && (
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-semibold flex items-center gap-2">
@@ -1235,6 +1237,7 @@ export default function BatchDetailPage({
                 />
               </CardContent>
             </Card>
+            )}
 
             {/* Time Info */}
             <Card>
@@ -1290,6 +1293,21 @@ export default function BatchDetailPage({
                 />
               </CardContent>
             </Card>
+
+            {/* 生产要求备注 — Shown when notes exist */}
+            {batch.notes && (
+            <Card className="border-amber/20 bg-amber/5">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-semibold flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-amber-600" />
+                  生产要求备注
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground whitespace-pre-wrap">{batch.notes}</p>
+              </CardContent>
+            </Card>
+            )}
           </div>
         </TabsContent>
 

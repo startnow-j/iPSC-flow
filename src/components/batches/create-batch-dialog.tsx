@@ -30,7 +30,8 @@ import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { IDENTIFICATION_OPTIONS, DEFAULT_IDENTIFICATION_REQUIREMENTS } from '@/lib/services/task-templates'
-import { FlaskConical, Loader2, ShoppingCart, ClipboardCheck, User, ShieldCheck, AlertTriangle } from 'lucide-react'
+import { Textarea } from '@/components/ui/textarea'
+import { FlaskConical, Loader2, ShoppingCart, ClipboardCheck, User, ShieldCheck, AlertTriangle, MessageSquare } from 'lucide-react'
 
 interface Product {
   id: string
@@ -79,6 +80,7 @@ export function CreateBatchDialog({
   const [seedPassage, setSeedPassage] = useState('')
   const [plannedEndDate, setPlannedEndDate] = useState('')
   const [orderNo, setOrderNo] = useState('') // 订单号（仅服务项目）
+  const [notes, setNotes] = useState('') // 生产要求备注（所有产品线）
   const [identificationRequirements, setIdentificationRequirements] = useState<string[]>([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
 
   // Pre-assignment state (v3.0)
@@ -97,10 +99,12 @@ export function CreateBatchDialog({
     : 'IPSC'
 
   const isServiceProduct = selectedProduct?.productLine === 'SERVICE'
+  const isKitProduct = selectedProduct?.productLine === 'KIT'
+  const isCellProduct = selectedProduct?.productLine === 'CELL_PRODUCT'
 
-  // Batch number preview
+  // Batch number preview — only show for cell products (has passage suffix)
   const batchNoPreview = (() => {
-    if (!seedPassage) return ''
+    if (!isCellProduct || !seedPassage) return ''
     const now = new Date()
     const dateStr =
       String(now.getFullYear()).slice(-2) +
@@ -195,6 +199,7 @@ export function CreateBatchDialog({
     setSeedPassage('')
     setPlannedEndDate('')
     setOrderNo('')
+    setNotes('')
     setIdentificationRequirements([...DEFAULT_IDENTIFICATION_REQUIREMENTS])
     setSelectedOperatorId('')
     setSelectedQcId('')
@@ -212,7 +217,7 @@ export function CreateBatchDialog({
       return
     }
 
-    if (seedPassage && !/^P\d+$/i.test(seedPassage)) {
+    if (isCellProduct && seedPassage && !/^P\d+$/i.test(seedPassage)) {
       setError('种子代次格式不正确，应为 P 加数字（如 P3）')
       return
     }
@@ -222,9 +227,9 @@ export function CreateBatchDialog({
       const body: Record<string, unknown> = {
         productCode,
         plannedQuantity: plannedQuantity ? Number(plannedQuantity) : null,
-        seedBatchNo: seedBatchNo || null,
-        seedPassage: seedPassage || null,
         plannedEndDate: plannedEndDate || null,
+        notes: notes.trim() || null,
+        ...(isCellProduct ? { seedBatchNo: seedBatchNo || null, seedPassage: seedPassage || null } : {}),
       }
       // Add orderNo for SERVICE products
       if (isServiceProduct && orderNo.trim()) {
@@ -508,25 +513,44 @@ export function CreateBatchDialog({
             />
           </div>
 
-          {/* Seed Batch No */}
-          <div className="space-y-2">
-            <Label htmlFor="seedBatchNo">种子批号</Label>
-            <Input
-              id="seedBatchNo"
-              placeholder="如 IPSC-WSB-2603-002"
-              value={seedBatchNo}
-              onChange={(e) => setSeedBatchNo(e.target.value)}
-            />
-          </div>
+          {/* Seed Batch No / Seed Passage — Only for CELL_PRODUCT */}
+          {isCellProduct && (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="seedBatchNo">种子批号</Label>
+                <Input
+                  id="seedBatchNo"
+                  placeholder="如 IPSC-WSB-2603-002"
+                  value={seedBatchNo}
+                  onChange={(e) => setSeedBatchNo(e.target.value)}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="seedPassage">种子代次</Label>
+                <Input
+                  id="seedPassage"
+                  placeholder="如 P3"
+                  value={seedPassage}
+                  onChange={(e) => setSeedPassage(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
 
-          {/* Seed Passage */}
+          {/* 生产要求备注 — All product lines */}
           <div className="space-y-2">
-            <Label htmlFor="seedPassage">种子代次</Label>
-            <Input
-              id="seedPassage"
-              placeholder="如 P3"
-              value={seedPassage}
-              onChange={(e) => setSeedPassage(e.target.value)}
+            <Label htmlFor="notes" className="flex items-center gap-1.5">
+              <MessageSquare className="h-3.5 w-3.5" />
+              生产要求备注
+              <span className="text-xs text-muted-foreground font-normal">（可选，记录特殊要求或注意事项）</span>
+            </Label>
+            <Textarea
+              id="notes"
+              placeholder="如：客户要求无菌检测增加真菌项；使用指定品牌培养基"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={2}
+              className="resize-none"
             />
           </div>
 

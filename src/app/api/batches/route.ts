@@ -143,6 +143,7 @@ export async function POST(request: NextRequest) {
       seedBatchNo,
       seedPassage,
       orderNo,
+      notes,
       identificationRequirements,
       productionOperatorId,
       productionOperatorName,
@@ -266,6 +267,7 @@ export async function POST(request: NextRequest) {
         currentPassage: seedPassage || null,
         plannedEndDate: plannedEndDate ? new Date(plannedEndDate) : null,
         orderNo: orderNo || null,
+        notes: notes || null,
         identificationRequirements: identificationRequirements
           ? JSON.stringify(identificationRequirements)
           : '[]',
