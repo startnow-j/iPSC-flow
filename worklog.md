@@ -3068,3 +3068,27 @@ Stage Summary:
 - 根因：Batch 表缺少 notes 列，Prisma create 写入不存在的字段导致 500 错误
 - 数据库已同步：db:push 成功
 - 所有产品线新建批次功能恢复正常
+
+---
+Task ID: fix-kit-batch-create-v2
+Agent: Main Agent
+Task: 修复试剂盒批次创建服务器错误（Turbopack 缓存问题）
+
+Work Log:
+- 用户报告试剂盒批次创建仍然显示"服务器错误"
+- 在 POST API 中临时添加 debug 输出获取详细错误信息
+- 错误详情：`Unknown argument 'notes'. Available options are marked with ?.`
+- 根因：Turbopack 缓存了旧版 Prisma Client 编译产物，虽然已运行 `prisma generate` 和 `db:push`
+- 验证方式：直接用 node 调用 Prisma Client 可以创建成功（notes 字段已存在于 Prisma Client）
+- 但 Next.js 的 Turbopack 编译的 chunk 仍使用旧版（不包含 notes）
+- 修复：`rm -rf .next` 清除 Turbopack 缓存后重启 dev server
+- 额外修复：GET /api/batches 列表的 select 列表缺少 notes 字段，已添加
+- 额外修复：移除 POST API 的临时 debug 输出
+- 验证：通过 curl 完整测试创建流程，KIT 批次创建成功，notes 正确保存
+- 清理测试数据
+
+Stage Summary:
+- 根因：Turbopack 缓存了旧版 Prisma Client 编译产物
+- 修复方法：rm -rf .next + 重启 dev server
+- 修改文件：src/app/api/batches/route.ts（select 添加 notes、移除 debug 输出）
+- 试剂盒批次创建功能恢复正常

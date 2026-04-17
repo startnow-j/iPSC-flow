@@ -78,6 +78,7 @@ export async function GET(request: NextRequest) {
           actualStartDate: true,
           actualEndDate: true,
           storageLocation: true,
+          notes: true,
           createdBy: true,
           createdByName: true,
           productionOperatorId: true,
