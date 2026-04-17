@@ -3043,3 +3043,28 @@ Stage Summary:
 - 复杂嵌套对象（formData/testResults）从时间线 diff 中过滤，避免信息冗余
 - 质检记录在时间线中正确显示综合判定（彩色标签）和不合格原因
 - TaskSummary 展开详情补充了更多字段的中文翻译
+
+---
+Task ID: fix-kit-batch-create
+Agent: Main Agent
+Task: 修复试剂盒批次创建服务器错误
+
+Work Log:
+- 用户报告创建试剂盒批次时显示"服务器错误"
+- 排查 dev server 日志（无 dev.log 文件）
+- 分析批次创建 API（/api/batches POST）的完整流程
+- 发现根因：API 路由代码在 `db.batch.create()` 中写入了 `notes: notes || null`，但 Batch 模型的 Prisma schema 中没有 `notes` 字段
+- `rg "notes" prisma/schema.prisma` 确认 `notes` 字段仅存在于 ProductionTask 模型，不在 Batch 模型中
+- 修复方案：在 Batch 模型中添加 `notes String?` 字段
+- 修改 prisma/schema.prisma，在 storageLocation 之后添加 notes 字段
+- 运行 `bun run db:push` 同步数据库结构，成功
+- 验证批次详情 API（/api/batches/[id] GET）使用 `...batch` spread 会自动包含 notes
+- 验证批次详情页已包含 notes 显示逻辑（第 1297-1307 行）
+- 验证种子信息卡片已正确对 KIT 产品隐藏（`batch.productLine !== 'KIT'`）
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error）
+
+Stage Summary:
+- 修改文件：prisma/schema.prisma（Batch 模型新增 notes String? 字段）
+- 根因：Batch 表缺少 notes 列，Prisma create 写入不存在的字段导致 500 错误
+- 数据库已同步：db:push 成功
+- 所有产品线新建批次功能恢复正常

@@ -184,6 +184,9 @@ model Batch {
   // 存储
   storageLocation String?
 
+  // 备注（生产要求/特殊注意事项）
+  notes           String?
+
   // 时间
   plannedStartDate DateTime?
   plannedEndDate   DateTime?
