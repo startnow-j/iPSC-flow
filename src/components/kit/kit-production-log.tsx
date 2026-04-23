@@ -65,8 +65,7 @@ interface ComponentLog {
   id: string           // Use kitComponent config id
   name: string
   description: string
-  prepDate: string     // 配制日期
-  fillingDate: string  // 分装日期
+  prepFillingDate: string  // 配制及分装日期
   operator: string
   reviewer: string     // 复核人 (optional)
   status: 'normal' | 'abnormal'
@@ -217,8 +216,7 @@ export function KitProductionLog({
   const [components, setComponents] = useState<ComponentLog[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchFill, setBatchFill] = useState({
-    prepDate: '',
-    fillingDate: '',
+    prepFillingDate: '',
     operator: '',
     reviewer: '',
     status: 'normal' as 'normal' | 'abnormal',
@@ -252,7 +250,7 @@ export function KitProductionLog({
 
   const allStepsComplete =
     components.length > 0 &&
-    components.every((c) => c.prepDate && c.fillingDate && c.operator) &&
+    components.every((c) => c.prepFillingDate && c.operator) &&
     assembly.date &&
     assembly.operator
 
@@ -322,8 +320,7 @@ export function KitProductionLog({
             id: config.id,
             name: config.name,
             description: config.description || '',
-            prepDate: '',
-            fillingDate: '',
+            prepFillingDate: '',
             operator: defaultOperator,
             reviewer: '',
             status: 'normal' as const,
@@ -355,8 +352,7 @@ export function KitProductionLog({
           id: config.id,
           name: config.name,
           description: config.description || '',
-          prepDate: '',
-          fillingDate: '',
+          prepFillingDate: '',
           operator: defaultOperator,
           reviewer: '',
           status: 'normal' as const,
@@ -418,8 +414,7 @@ export function KitProductionLog({
       if (!selectedIds.has(c.id)) return c
       return {
         ...c,
-        ...(batchFill.prepDate && { prepDate: batchFill.prepDate }),
-        ...(batchFill.fillingDate && { fillingDate: batchFill.fillingDate }),
+        ...(batchFill.prepFillingDate && { prepFillingDate: batchFill.prepFillingDate }),
         ...(batchFill.operator && { operator: batchFill.operator }),
         ...(batchFill.reviewer && { reviewer: batchFill.reviewer }),
         ...(batchFill.status && { status: batchFill.status }),
@@ -427,7 +422,7 @@ export function KitProductionLog({
     })
     setComponents(updated)
     setSelectedIds(new Set())
-    setBatchFill({ prepDate: '', fillingDate: '', operator: '', reviewer: '', status: 'normal' })
+    setBatchFill({ prepFillingDate: '', operator: '', reviewer: '', status: 'normal' })
     setProductionSaved(false)
     toast.success(`已更新 ${selectedIds.size} 个组分`)
   }
@@ -503,8 +498,8 @@ export function KitProductionLog({
       toast.error('该产品未配置组分，无法完成生产')
       return
     }
-    if (!components.every((c) => c.prepDate && c.fillingDate && c.operator)) {
-      toast.error('请填写所有组分的配制日期、分装日期和操作员')
+    if (!components.every((c) => c.prepFillingDate && c.operator)) {
+      toast.error('请填写所有组分的配制及分装日期和操作员')
       return
     }
     if (!assembly.date || !assembly.operator) {
@@ -676,20 +671,11 @@ export function KitProductionLog({
                     已选 {selectedIds.size} 项 — 批量填写：
                   </span>
                   <div className="flex items-center gap-1.5">
-                    <Label className="text-[11px] text-muted-foreground whitespace-nowrap">配制日期</Label>
+                    <Label className="text-[11px] text-muted-foreground whitespace-nowrap">配制及分装日期</Label>
                     <Input
                       type="date"
-                      value={batchFill.prepDate}
-                      onChange={(e) => setBatchFill({ ...batchFill, prepDate: e.target.value })}
-                      className="h-7 w-32 text-xs"
-                    />
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Label className="text-[11px] text-muted-foreground whitespace-nowrap">分装日期</Label>
-                    <Input
-                      type="date"
-                      value={batchFill.fillingDate}
-                      onChange={(e) => setBatchFill({ ...batchFill, fillingDate: e.target.value })}
+                      value={batchFill.prepFillingDate}
+                      onChange={(e) => setBatchFill({ ...batchFill, prepFillingDate: e.target.value })}
                       className="h-7 w-32 text-xs"
                     />
                   </div>
@@ -793,35 +779,19 @@ export function KitProductionLog({
                           </div>
 
                           {/* Fields */}
-                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                             <div className="space-y-1">
                               <Label className="text-[11px] text-muted-foreground">
                                 <Clock className="inline h-2.5 w-2.5 mr-0.5" />
-                                配制日期
+                                配制及分装日期
                               </Label>
                               {isReadOnly ? (
-                                <p className="text-sm">{comp.prepDate || '-'}</p>
+                                <p className="text-sm">{comp.prepFillingDate || '-'}</p>
                               ) : (
                                 <Input
                                   type="date"
-                                  value={comp.prepDate}
-                                  onChange={(e) => handleUpdateComponent(comp.id, 'prepDate', e.target.value)}
-                                  className="h-8 text-sm"
-                                />
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              <Label className="text-[11px] text-muted-foreground">
-                                <Clock className="inline h-2.5 w-2.5 mr-0.5" />
-                                分装日期
-                              </Label>
-                              {isReadOnly ? (
-                                <p className="text-sm">{comp.fillingDate || '-'}</p>
-                              ) : (
-                                <Input
-                                  type="date"
-                                  value={comp.fillingDate}
-                                  onChange={(e) => handleUpdateComponent(comp.id, 'fillingDate', e.target.value)}
+                                  value={comp.prepFillingDate}
+                                  onChange={(e) => handleUpdateComponent(comp.id, 'prepFillingDate', e.target.value)}
                                   className="h-8 text-sm"
                                 />
                               )}

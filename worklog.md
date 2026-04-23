@@ -3271,3 +3271,22 @@ Stage Summary:
 - 修改文件：prisma/seed.ts（试剂盒组分预配置数据）
 - 修改文件：src/app/api/batches/[id]/transition/route.ts（KIT reassign支持）
 - 6项用户需求全部实现
+---
+Task ID: 5
+Agent: Main Agent
+Task: 合并 prepDate + fillingDate 为单个"配制及分装日期"字段
+
+Work Log:
+- 审查 kit-production-log.tsx 中所有 prepDate/fillingDate 引用
+- 合并 ComponentLog 接口：prepDate + fillingDate → prepFillingDate
+- 更新批量填写工具栏：两个日期输入合并为一个"配制及分装日期"
+- 更新组分卡片网格布局：4列改为3列（日期、操作员、复核人）
+- 更新验证逻辑、初始化逻辑、保存/提交逻辑
+- 确认所有6项改造需求状态
+
+Stage Summary:
+- ComponentLog.prepDate + ComponentLog.fillingDate → ComponentLog.prepFillingDate
+- 组分卡片 grid 从 lg:grid-cols-4 改为 lg:grid-cols-3
+- 批量填写工具栏日期字段合并
+- 所有校验逻辑已更新（allStepsComplete, handleCompleteProduction 验证等）
+- lint 通过（无新增错误）
