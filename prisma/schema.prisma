@@ -275,7 +275,7 @@ model QcRecord {
   taskId          String?                               // 关联的生产任务ID
 
   // 质检信息
-  qcType          String   @default("ROUTINE")               // ROUTINE
+  qcType          String   @default("ROUTINE")               // ROUTINE / IN_PROCESS / FUNCTIONAL_VERIFICATION
   templateId      String?                                    // 质检模板编码
 
   // 抽样信息
@@ -289,6 +289,11 @@ model QcRecord {
   // 综合判定
   overallJudgment String                                    // PASS / FAIL
   failReason      String?
+
+  // 功能性验证关联（KIT产品线专用）
+  linkedBatchId   String?                                    // 关联的外部批次ID（细胞产品/服务项目）
+  linkedBatchNo   String?                                    // 关联的外部批次号
+  linkedBatchType String?                                    // 关联批次类型：CELL_PRODUCT / SERVICE
 
   // 执行
   operatorId      String?

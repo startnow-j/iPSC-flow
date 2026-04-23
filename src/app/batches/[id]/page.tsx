@@ -1483,6 +1483,7 @@ export default function BatchDetailPage({
                     batchNo={batch.batchNo}
                     batchActualQuantity={remainingQuantity}
                     batchUnit={batch.unit}
+                    productLine={batch.productLine}
                     onSubmitted={handleQcSubmitted}
                   />
                 </div>

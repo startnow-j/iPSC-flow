@@ -814,6 +814,46 @@ export function validateQcRecord(testResults: TestResultItem[]): ValidationResul
         break
       }
 
+      case 'APPEARANCE': {
+        // judgment 必须为 PASS 或 FAIL
+        if (!item.judgment || typeof item.judgment !== 'string') {
+          addError(
+            result,
+            `${prefix}judgment`,
+            'REQUIRED',
+            '外观检查判定不能为空',
+          )
+        } else if (!['PASS', 'FAIL'].includes(item.judgment.trim().toUpperCase())) {
+          addError(
+            result,
+            `${prefix}judgment`,
+            'INVALID_ENUM',
+            '外观检查判定必须为 PASS 或 FAIL',
+          )
+        }
+        break
+      }
+
+      case 'STERILITY': {
+        // judgment 必须为 PASS 或 FAIL
+        if (!item.judgment || typeof item.judgment !== 'string') {
+          addError(
+            result,
+            `${prefix}judgment`,
+            'REQUIRED',
+            '无菌检查判定不能为空',
+          )
+        } else if (!['PASS', 'FAIL'].includes(item.judgment.trim().toUpperCase())) {
+          addError(
+            result,
+            `${prefix}judgment`,
+            'INVALID_ENUM',
+            '无菌检查判定必须为 PASS 或 FAIL',
+          )
+        }
+        break
+      }
+
       default:
         // 其他检测项不强制校验，仅警告
         if (!item.judgment && item.resultValue === undefined) {

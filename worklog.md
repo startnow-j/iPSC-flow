@@ -3092,3 +3092,73 @@ Stage Summary:
 - 修复方法：rm -rf .next + 重启 dev server
 - 修改文件：src/app/api/batches/route.ts（select 添加 notes、移除 debug 输出）
 - 试剂盒批次创建功能恢复正常
+
+---
+Task ID: KIT-QC-OVERHAUL
+Agent: Main Agent
+Task: 试剂盒质检差异化 — KIT常规质检(外观+无菌) + 功能性验证(关联外部批次)
+
+Work Log:
+- 分析现有QC模块代码结构：qc-form.tsx(3项细胞检测硬编码)、validation.ts(VIABILITY/MORPHOLOGY/MYCOPLASMA校验)、qc-results-summary.tsx(结果展示)、QC API route
+- 确认方案一实现策略：前端根据productLine切换模板、后端新增检测项校验、功能性验证作为可选关联
+
+**1. Prisma Schema 更新**
+- QcRecord模型新增3个字段：linkedBatchId、linkedBatchNo、linkedBatchType
+- qcType注释更新支持FUNCTIONAL_VERIFICATION
+- db:push同步数据库
+
+**2. QC表单重构 (qc-form.tsx)**
+- 新增KIT_QC_TEMPLATE：外观检查(APPEARANCE, select合格/不合格) + 无菌检查(STERILITY, select无菌生长/有菌生长)
+- 保留CELL_PRODUCT_QC_TEMPLATE：复苏活率 + 细胞形态 + 支原体检测
+- 组件接收productLine prop，自动选择对应模板
+- KIT产品线隐藏"复苏信息"卡片（试剂盒无需复苏）
+- TestItemCard改为通用组件：根据selectOptions动态渲染下拉选项，不再硬编码itemCode分支
+- 新增"功能性验证"可选区域（KIT专用，violet色主题）：
+  - Checkbox启用/关闭
+  - 批次类型选择按钮（细胞产品/服务项目）
+  - 批次搜索（防抖300ms，最少2字符触发）
+  - 搜索结果列表（批次号+产品名+状态Badge）
+  - 已选批次展示卡片（可移除）
+- 提交时携带functionalVerification数据（linkedBatchId/linkedBatchNo/linkedBatchType）
+
+**3. 后端验证扩展 (validation.ts)**
+- validateQcRecord新增APPEARANCE和STERILITY两个case分支
+- 校验规则：judgment必填，必须为PASS或FAIL
+
+**4. QC API增强 (route.ts)**
+- qcType支持FUNCTIONAL_VERIFICATION类型
+- 解析functionalVerification请求体
+- 验证关联批次存在性及状态（必须已完成QC或已放行）
+- 创建QcRecord时写入linkedBatchId/linkedBatchNo/linkedBatchType
+- 状态检查：FUNCTIONAL_VERIFICATION允许在QC_IN_PROGRESS及之后状态创建
+
+**5. 批次搜索API (新建)**
+- 创建src/app/api/batches/search/route.ts
+- GET /api/batches/search：支持productLine、search、excludeBatchId参数
+- 只返回已完成QC或已放行的批次（QC_PASS/COA_SUBMITTED/RELEASED）
+- 搜索字段：batchNo、productCode模糊匹配
+- 限制返回10条结果
+
+**6. 批次详情页更新 (batches/[id]/page.tsx)**
+- QcForm组件传入productLine={batch.productLine}
+
+**7. QC结果展示更新 (qc-results-summary.tsx)**
+- QcRecord接口新增linkedBatchId/linkedBatchNo/linkedBatchType
+- RoutineRecordDetail增加"含功能验证"Badge（violet色）
+- 新增功能性验证关联信息展示卡片（violet边框，显示关联批次号和类型）
+
+**8. CoA适配**
+- CoA自动从QcRecord的testResults获取检测项，无需代码修改
+- KIT批次CoA自动显示外观检查+无菌检查结果
+- 种子批号/代次信息对KIT为null，InfoItem组件已处理显示'-'
+
+- ESLint检查通过（仅预存generate-plan.js错误）
+- Dev server编译成功运行
+
+Stage Summary:
+- 修改文件：prisma/schema.prisma、qc-form.tsx、validation.ts、qc/route.ts、qc-results-summary.tsx、batches/[id]/page.tsx（6个）
+- 新增文件：api/batches/search/route.ts（1个）
+- KIT常规质检：外观检查(目视) + 无菌检查(薄膜过滤法)，2项select检测
+- 细胞产品质检：保持原有3项（复苏活率+细胞形态+支原体检测）
+- 功能性验证：可选功能，关联已完成的细胞产品或服务项目批次
+- 批次搜索API：支持按产品线+关键词搜索已放行批次

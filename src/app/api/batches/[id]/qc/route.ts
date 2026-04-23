@@ -84,14 +84,16 @@ export async function POST(
 
     const { id } = await params
     const body = await request.json()
-    const { testResults, operatorId, operatorName, thawedVials, qcType, taskId, sampleInfo } = body
+    const { testResults, operatorId, operatorName, thawedVials, qcType, taskId, sampleInfo, functionalVerification } = body
 
     if (!Array.isArray(testResults) || testResults.length === 0) {
       return NextResponse.json({ error: '检测结果不能为空' }, { status: 400 })
     }
 
-    // 校验 qcType（仅允许 ROUTINE 和 IN_PROCESS）
-    const finalQcType = qcType === 'IN_PROCESS' ? 'IN_PROCESS' : 'ROUTINE'
+    // 校验 qcType（仅允许 ROUTINE, IN_PROCESS 和 FUNCTIONAL_VERIFICATION）
+    const finalQcType = qcType === 'IN_PROCESS' ? 'IN_PROCESS'
+      : qcType === 'FUNCTIONAL_VERIFICATION' ? 'FUNCTIONAL_VERIFICATION'
+      : 'ROUTINE'
 
     // 校验关联 taskId（如提供）
     if (taskId) {
@@ -103,9 +105,36 @@ export async function POST(
       }
     }
 
+    // 校验功能性验证关联批次（如提供）
+    let linkedBatchId: string | null = null
+    let linkedBatchNo: string | null = null
+    let linkedBatchType: string | null = null
+
+    if (functionalVerification && finalQcType === 'ROUTINE') {
+      linkedBatchId = functionalVerification.linkedBatchId || null
+      linkedBatchNo = functionalVerification.linkedBatchNo || null
+      linkedBatchType = functionalVerification.linkedBatchType || null
+
+      if (linkedBatchId) {
+        const linkedBatch = await db.batch.findUnique({
+          where: { id: linkedBatchId },
+        })
+        if (!linkedBatch) {
+          return NextResponse.json({ error: '关联的外部批次不存在' }, { status: 404 })
+        }
+        // 验证关联批次状态（已完成QC或已放行）
+        if (!['QC_PASS', 'COA_SUBMITTED', 'RELEASED'].includes(linkedBatch.status)) {
+          return NextResponse.json(
+            { error: '关联的外部批次尚未完成质检，无法用于功能性验证' },
+            { status: 400 }
+          )
+        }
+      }
+    }
+
     // 校验复苏支数
-    const parsedThawedVials = thawedVials !== undefined ? Number(thawedVials) : null
-    if (thawedVials !== undefined && (isNaN(parsedThawedVials!) || parsedThawedVials! < 1)) {
+    const parsedThawedVials = thawedVials !== undefined && thawedVials !== null ? Number(thawedVials) : null
+    if (thawedVials !== undefined && thawedVials !== null && (isNaN(parsedThawedVials!) || parsedThawedVials! < 1)) {
       return NextResponse.json({ error: '复苏支数必须为大于0的整数' }, { status: 400 })
     }
 
@@ -118,7 +147,6 @@ export async function POST(
     }
 
     // 操作类权限检查：只有 QC（在该产品上有授权）或 ADMIN 可以创建质检记录
-    // v3.1: 额外检查 — 必须是该批次指定的质检员（batch.qcOperatorId）
     const roles = getRolesFromPayload(payload)
     const userWithPermissions = await db.user.findUnique({
       where: { id: payload.userId },
@@ -142,6 +170,7 @@ export async function POST(
     }
 
     // IN_PROCESS 类型允许在生产中进行状态下创建（过程监控）
+    // FUNCTIONAL_VERIFICATION 允许在 QC_IN_PROGRESS 状态下创建
     // ROUTINE 类型保持原有逻辑：只能在质检中进行状态下创建
     if (finalQcType === 'ROUTINE' && batch.status !== 'QC_IN_PROGRESS') {
       return NextResponse.json(
@@ -157,6 +186,13 @@ export async function POST(
       )
     }
 
+    if (finalQcType === 'FUNCTIONAL_VERIFICATION' && !['QC_IN_PROGRESS', 'QC_PASS', 'COA_SUBMITTED', 'RELEASED'].includes(batch.status)) {
+      return NextResponse.json(
+        { error: '功能性验证只能在质检中或质检合格后状态下创建' },
+        { status: 400 }
+      )
+    }
+
     // 校验检测结果
     const validation = validateQcRecord(testResults)
     if (!validation.valid) {
@@ -166,14 +202,21 @@ export async function POST(
       )
     }
 
-    // 自动计算综合判定（IN_PROCESS 记录默认为 PENDING，等待后续审核确认）
-    const overallJudgment = finalQcType === 'IN_PROCESS'
-      ? 'PENDING'
-      : testResults.every(
-          (item: TestResultItem) => item.judgment === 'PASS'
-        )
-          ? 'PASS'
-          : 'FAIL'
+    // 自动计算综合判定
+    // IN_PROCESS 记录默认为 PENDING，等待后续审核确认
+    // FUNCTIONAL_VERIFICATION 记录根据关联批次状态判定
+    let overallJudgment: string
+    if (finalQcType === 'IN_PROCESS') {
+      overallJudgment = 'PENDING'
+    } else if (finalQcType === 'FUNCTIONAL_VERIFICATION') {
+      overallJudgment = testResults.every(
+        (item: TestResultItem) => item.judgment === 'PASS'
+      ) ? 'PASS' : 'FAIL'
+    } else {
+      overallJudgment = testResults.every(
+        (item: TestResultItem) => item.judgment === 'PASS'
+      ) ? 'PASS' : 'FAIL'
+    }
 
     // 收集不合格原因（IN_PROCESS 不收集，因为判定为 PENDING）
     const failItems = finalQcType !== 'IN_PROCESS'
@@ -194,6 +237,9 @@ export async function POST(
         testResults: JSON.stringify(testResults),
         overallJudgment,
         failReason,
+        linkedBatchId,
+        linkedBatchNo,
+        linkedBatchType,
         operatorId: operatorId || payload.userId,
         operatorName: operatorName || payload.name,
         operatedAt: new Date(),
@@ -216,6 +262,9 @@ export async function POST(
         overallJudgment,
         testResults,
         failReason,
+        ...(linkedBatchId ? {
+          functionalVerification: { linkedBatchId, linkedBatchNo, linkedBatchType }
+        } : {}),
       },
     })
 

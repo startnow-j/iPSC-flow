@@ -20,6 +20,8 @@ import {
   ChevronDown,
   ChevronUp,
   FileText,
+  Link2,
+  Package,
 } from 'lucide-react'
 
 // ============================================
@@ -54,6 +56,9 @@ interface QcRecord {
   reviewedAt?: string | null
   taskId?: string | null
   sampleInfo?: Record<string, unknown> | null
+  linkedBatchId?: string | null
+  linkedBatchNo?: string | null
+  linkedBatchType?: string | null
   createdAt: string
 }
 
@@ -337,6 +342,8 @@ function InProcessRecordCard({ record }: { record: QcRecord }) {
 // ============================================
 
 function RoutineRecordDetail({ record }: { record: QcRecord }) {
+  const hasFunctionalVerification = record.linkedBatchId && record.linkedBatchNo
+
   return (
     <Card>
       <CardHeader className="pb-3">
@@ -354,7 +361,18 @@ function RoutineRecordDetail({ record }: { record: QcRecord }) {
               }`} />
             </div>
             <div>
-              <CardTitle className="text-base">质检结果</CardTitle>
+              <CardTitle className="text-base">
+                质检结果
+                {hasFunctionalVerification && (
+                  <Badge
+                    variant="secondary"
+                    className="ml-2 bg-violet-100 text-violet-800 dark:bg-violet-900 dark:text-violet-200 text-xs"
+                  >
+                    <Link2 className="mr-1 h-3 w-3" />
+                    含功能验证
+                  </Badge>
+                )}
+              </CardTitle>
               <p className="text-xs text-muted-foreground mt-0.5">
                 {formatDate(record.createdAt)}
               </p>
@@ -389,6 +407,27 @@ function RoutineRecordDetail({ record }: { record: QcRecord }) {
         {/* Test Results Table */}
         <TestResultsTable results={record.testResults} />
 
+        {/* Functional Verification Linked Batch */}
+        {hasFunctionalVerification && (
+          <div className="mt-3 rounded-md border border-violet-200 bg-violet-50/50 dark:border-violet-800 dark:bg-violet-950/20 p-3">
+            <div className="flex items-center gap-2 mb-2">
+              <Link2 className="h-4 w-4 text-violet-600 dark:text-violet-400" />
+              <span className="text-sm font-medium text-violet-700 dark:text-violet-300">功能性验证</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Package className="h-3.5 w-3.5" />
+                <span>关联批次: <span className="font-medium text-foreground">{record.linkedBatchNo}</span></span>
+              </div>
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <span>类型: <span className="font-medium text-foreground">
+                  {record.linkedBatchType === 'CELL_PRODUCT' ? '细胞产品' : '服务项目'}
+                </span></span>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Fail Reason */}
         {record.failReason && (
           <div className="mt-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700 dark:bg-red-950/30 dark:text-red-400">
@@ -396,14 +435,6 @@ function RoutineRecordDetail({ record }: { record: QcRecord }) {
             {record.failReason}
           </div>
         )}
-
-        {/* Future: attachments placeholder — will show uploaded files here */}
-        {/* {record.attachments && record.attachments.length > 0 && (
-          <div className="mt-3">
-            <p className="text-xs font-medium text-muted-foreground mb-2">附件</p>
-            ...
-          </div>
-        )} */}
 
         <OperatorInfo record={record} />
       </CardContent>
