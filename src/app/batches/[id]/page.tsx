@@ -202,12 +202,10 @@ function InfoRow({
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '-'
-  return new Date(dateStr).toLocaleString('zh-CN', {
+  return new Date(dateStr).toLocaleDateString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
   })
 }
 
@@ -1284,12 +1282,12 @@ export default function BatchDetailPage({
                 <InfoRow
                   icon={Clock}
                   label="创建时间"
-                  value={formatDate(batch.createdAt)}
+                  value={formatTime(batch.createdAt)}
                 />
                 <InfoRow
                   icon={Clock}
                   label="最后更新"
-                  value={formatDate(batch.updatedAt)}
+                  value={formatTime(batch.updatedAt)}
                 />
               </CardContent>
             </Card>
