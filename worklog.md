@@ -3308,3 +3308,27 @@ Stage Summary:
 - 物料准备和生产记录页面不再显示生产指令单
 - KIT complete_production 转换逻辑已修复，兼容旧版遗留任务
 - 修改文件：page.tsx, kit-material-prep.tsx, kit-production-log.tsx, transition/route.ts
+---
+Task ID: 4
+Agent: Main
+Task: 修复KIT CoA证书格式
+
+Work Log:
+- 分析问题：CoA的生产信息区域硬编码显示细胞产品字段（种子批号、代次、质检消耗、可发放数量），对KIT不适用
+- 修改 state-machine.ts createCoaIfNeeded()：按 productLine 生成不同 content
+  - KIT: 添加 productionInfo（components数组 + assembly对象），从 KIT_PRODUCTION task formData 获取
+  - CELL_PRODUCT: 保留原有字段（seedBatchNo, seedPassage, currentPassage, totalConsumedVials, releaseQuantity）
+- 修改 coa-detail.tsx：
+  - 新增 KitComponentInfo/KitAssemblyInfo/KitProductionInfo 类型
+  - CoaContent 新增 productLine/productionInfo/unit 字段
+  - 生产信息区域按 productLine 条件渲染：
+    - KIT: 计划数量(盒)、组分生产记录表格(名称/日期/操作员/复核人/状态)、组装信息
+    - CELL_PRODUCT: 原有种子批号/代次/数量等
+  - 客户视图代次信息仅对 CELL_PRODUCT 显示
+- 修复已有数据：删除 KIT-260423-001 的旧 CoA，重置批次为 QC_PASS，以便质检通过时重新生成正确格式的 CoA
+
+Stage Summary:
+- CoA 生成逻辑已按产品线差异化
+- KIT CoA 显示：计划/生产数量(盒)、组分生产记录表格、组装信息
+- 修改文件：state-machine.ts, coa-detail.tsx
+- 已有数据已修复（KIT-260423-001 重置为 QC_PASS）

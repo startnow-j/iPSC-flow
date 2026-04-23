@@ -50,23 +50,53 @@ interface TestResultItem {
   judgment?: string
 }
 
+interface KitComponentInfo {
+  id: string
+  name: string
+  description?: string
+  prepFillingDate?: string
+  operator?: string
+  reviewer?: string
+  status?: string
+  notes?: string
+}
+
+interface KitAssemblyInfo {
+  date?: string
+  operator?: string
+  reviewer?: string
+  status?: string
+  notes?: string
+}
+
+interface KitProductionInfo {
+  components: KitComponentInfo[]
+  assembly: KitAssemblyInfo | null
+}
+
 interface CoaContent {
   productCode?: string
   productName?: string
   batchNo?: string
   specification?: string
-  seedBatchNo?: string
-  seedPassage?: string
-  currentPassage?: string
+  productLine?: string
+  // CELL_PRODUCT / SERVICE fields
+  seedBatchNo?: string | null
+  seedPassage?: string | null
+  currentPassage?: string | null
   plannedQuantity?: number | null
   actualQuantity?: number | null
   storageLocation?: string | null
+  releaseQuantity?: number | null
+  totalConsumedVials?: number | null
+  unit?: string
+  // KIT fields
+  productionInfo?: KitProductionInfo | null
+  // Common fields
   testResults?: TestResultItem[]
   overallJudgment?: string
   actualStartDate?: string | null
   actualEndDate?: string | null
-  releaseQuantity?: number | null
-  totalConsumedVials?: number | null
 }
 
 interface CoaRecord {
@@ -243,7 +273,7 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
           <Separator />
 
           {/* Production Information — only in internal view */}
-          {!isCustomerView && (
+          {!isCustomerView && coa.content.productLine !== 'KIT' && (
             <>
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
@@ -254,8 +284,8 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
                   <InfoItem label="种子批号" value={coa.content.seedBatchNo} />
                   <InfoItem label="种子代次" value={coa.content.seedPassage} />
                   <InfoItem label="当前代次" value={coa.content.currentPassage} />
-                  <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} 支` : null} />
-                  <InfoItem label="生产数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 支` : null} />
+                  <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} ${coa.content.unit || '支'}` : null} />
+                  <InfoItem label="生产数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} ${coa.content.unit || '支'}` : null} />
                   <InfoItem label="存储位置" value={coa.content.storageLocation} />
                   <InfoItem
                     label="质检消耗"
@@ -274,8 +304,100 @@ export function CoaDetail({ coa, onUpdated }: CoaDetailProps) {
             </>
           )}
 
-          {/* Passage Information — only in customer view */}
-          {isCustomerView && (
+          {/* KIT Production Information — only in internal view */}
+          {!isCustomerView && coa.content.productLine === 'KIT' && (
+            <>
+              <div>
+                <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Stamp className="h-4 w-4 text-primary" />
+                  生产信息
+                </h3>
+                <div className="space-y-4">
+                  {/* Quantity info */}
+                  <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                    <InfoItem label="计划数量" value={coa.content.plannedQuantity ? `${coa.content.plannedQuantity} 盒` : null} />
+                    <InfoItem label="生产数量" value={coa.content.actualQuantity ? `${coa.content.actualQuantity} 盒` : null} />
+                  </div>
+
+                  {/* Component production records */}
+                  {coa.content.productionInfo?.components && coa.content.productionInfo.components.length > 0 && (
+                    <div className="rounded-md border">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="border-b bg-muted/50">
+                            <th className="px-3 py-2 text-left font-medium">组分名称</th>
+                            <th className="px-3 py-2 text-left font-medium">配制及分装日期</th>
+                            <th className="px-3 py-2 text-left font-medium">操作员</th>
+                            <th className="px-3 py-2 text-left font-medium">复核人</th>
+                            <th className="px-3 py-2 text-center font-medium">状态</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {coa.content.productionInfo.components.map((comp, index) => (
+                            <tr key={comp.id} className="border-b last:border-b-0">
+                              <td className="px-3 py-2 font-medium">
+                                <span className="text-xs text-muted-foreground mr-1">{index + 1}.</span>
+                                {comp.name}
+                              </td>
+                              <td className="px-3 py-2">{comp.prepFillingDate || '-'}</td>
+                              <td className="px-3 py-2">{comp.operator || '-'}</td>
+                              <td className="px-3 py-2">{comp.reviewer || '-'}</td>
+                              <td className="px-3 py-2 text-center">
+                                {comp.status === 'abnormal' ? (
+                                  <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                                    有异常
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                                    正常
+                                  </Badge>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Assembly info */}
+                  {coa.content.productionInfo?.assembly && (
+                    <div className="grid gap-3 sm:grid-cols-4 text-sm rounded-md border p-3 bg-muted/30">
+                      <div>
+                        <p className="text-xs text-muted-foreground">组装日期</p>
+                        <p className="font-medium">{coa.content.productionInfo.assembly.date || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">操作员</p>
+                        <p className="font-medium">{coa.content.productionInfo.assembly.operator || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">复核人</p>
+                        <p className="font-medium">{coa.content.productionInfo.assembly.reviewer || '-'}</p>
+                      </div>
+                      <div>
+                        <p className="text-xs text-muted-foreground">状态</p>
+                        {coa.content.productionInfo.assembly.status === 'abnormal' ? (
+                          <Badge variant="secondary" className="bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-200">
+                            有异常
+                          </Badge>
+                        ) : (
+                          <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-200">
+                            正常
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <Separator />
+            </>
+          )}
+
+          {/* Passage Information — only in customer view, only for cell products */}
+          {isCustomerView && coa.content.productLine !== 'KIT' && (
             <>
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">

@@ -328,7 +328,7 @@ export function getAvailableActions(productLine: ProductLine, currentStatus: str
  * 被多个转换场景复用
  */
 async function createCoaIfNeeded(
-  batch: { batchNo: string; productCode: string; productName: string; specification: string | null; seedBatchNo: string | null; seedPassage: string | null; currentPassage: string | null; plannedQuantity: number | null; actualQuantity: number | null; storageLocation: string | null },
+  batch: { batchNo: string; productCode: string; productName: string; specification: string | null; seedBatchNo: string | null; seedPassage: string | null; currentPassage: string | null; plannedQuantity: number | null; actualQuantity: number | null; storageLocation: string | null; productLine: string | null; unit: string | null },
   batchId: string,
   operatorId: string,
   operatorName: string,
@@ -337,35 +337,61 @@ async function createCoaIfNeeded(
   if (existingCoa) return
 
   const coaNo = `COA-${batch.batchNo}`
+  const productLine = batch.productLine as string
+  const unit = batch.unit || '盒'
 
   const latestQc = await db.qcRecord.findFirst({
     where: { batchId },
     orderBy: { createdAt: 'desc' },
   })
 
-  const qcRecords = await db.qcRecord.findMany({
-    where: { batchId },
-    select: { sampleQuantity: true },
-  })
-  const totalConsumed = qcRecords.reduce((sum, r) => sum + (r.sampleQuantity || 0), 0)
-  const releaseQuantity = (batch.actualQuantity || 0) - totalConsumed
-
-  const coaContent = JSON.stringify({
+  // Base CoA content (common fields)
+  const baseContent: Record<string, unknown> = {
     productCode: batch.productCode,
     productName: batch.productName,
     batchNo: batch.batchNo,
     specification: batch.specification,
-    seedBatchNo: batch.seedBatchNo,
-    seedPassage: batch.seedPassage,
-    currentPassage: batch.currentPassage,
+    productLine,
     plannedQuantity: batch.plannedQuantity,
     actualQuantity: batch.actualQuantity,
-    storageLocation: batch.storageLocation,
     testResults: latestQc ? JSON.parse(latestQc.testResults) : [],
     overallJudgment: latestQc?.overallJudgment ?? '',
-    releaseQuantity,
-    totalConsumedVials: totalConsumed,
-  })
+  }
+
+  if (productLine === 'KIT') {
+    // KIT: fetch production task formData for component/assembly info
+    const kitTask = await db.productionTask.findFirst({
+      where: { batchId, taskCode: 'KIT_PRODUCTION' },
+      select: { formData: true },
+    })
+
+    const formData = kitTask?.formData
+      ? (typeof kitTask.formData === 'string' ? JSON.parse(kitTask.formData) : kitTask.formData) as Record<string, unknown>
+      : null
+
+    baseContent.productionInfo = {
+      components: formData?.components || [],
+      assembly: formData?.assembly || null,
+    }
+  } else {
+    // CELL_PRODUCT / SERVICE: standard production fields
+    const qcRecords = await db.qcRecord.findMany({
+      where: { batchId },
+      select: { sampleQuantity: true },
+    })
+    const totalConsumed = qcRecords.reduce((sum, r) => sum + (r.sampleQuantity || 0), 0)
+    const releaseQuantity = (batch.actualQuantity || 0) - totalConsumed
+
+    baseContent.seedBatchNo = batch.seedBatchNo
+    baseContent.seedPassage = batch.seedPassage
+    baseContent.currentPassage = batch.currentPassage
+    baseContent.storageLocation = batch.storageLocation
+    baseContent.releaseQuantity = releaseQuantity
+    baseContent.totalConsumedVials = totalConsumed
+    baseContent.unit = '支'
+  }
+
+  const coaContent = JSON.stringify(baseContent)
 
   await db.coa.create({
     data: {
