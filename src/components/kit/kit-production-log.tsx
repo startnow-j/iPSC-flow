@@ -9,7 +9,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
-import { Separator } from '@/components/ui/separator'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
@@ -20,8 +19,6 @@ import {
   Paperclip,
   CheckCircle2,
   AlertTriangle,
-  Plus,
-  Trash2,
   Upload,
   X,
   FileText,
@@ -31,6 +28,7 @@ import {
   ClipboardEdit,
   Info,
   Image as ImageIcon,
+  Eye,
 } from 'lucide-react'
 
 // ============================================
@@ -56,11 +54,21 @@ interface ProductionTask {
   updatedAt: string
 }
 
-interface ComponentLog {
+interface KitComponentConfig {
   id: string
   name: string
-  date: string
+  description: string | null
+  sortOrder: number
+}
+
+interface ComponentLog {
+  id: string           // Use kitComponent config id
+  name: string
+  description: string
+  prepDate: string     // 配制日期
+  fillingDate: string  // 分装日期
   operator: string
+  reviewer: string     // 复核人 (optional)
   status: 'normal' | 'abnormal'
   notes: string
 }
@@ -68,12 +76,7 @@ interface ComponentLog {
 interface AssemblyLog {
   date: string
   operator: string
-  status: 'normal' | 'abnormal'
-  notes: string
-}
-
-interface MaterialPrepLog {
-  date: string
+  reviewer: string     // 复核人 (optional)
   status: 'normal' | 'abnormal'
   notes: string
 }
@@ -89,6 +92,7 @@ interface BatchInfo {
   id: string
   batchNo: string
   productName: string
+  productCode: string
   specification: string | null
   plannedQuantity: number | null
   unit: string | null
@@ -108,10 +112,6 @@ interface KitProductionLogProps {
 // ============================================
 // Helpers
 // ============================================
-
-function generateId() {
-  return Math.random().toString(36).substring(2, 10) + Date.now().toString(36)
-}
 
 function formatDate(dateStr: string | null) {
   if (!dateStr) return '-'
@@ -135,15 +135,10 @@ function getFileIcon(type: string) {
   return <FileText className="h-4 w-4 text-muted-foreground" />
 }
 
-const EMPTY_MATERIAL_PREP: MaterialPrepLog = {
-  date: '',
-  status: 'normal',
-  notes: '',
-}
-
 const EMPTY_ASSEMBLY: AssemblyLog = {
   date: '',
   operator: '',
+  reviewer: '',
   status: 'normal',
   notes: '',
 }
@@ -214,14 +209,20 @@ export function KitProductionLog({
   const [saving, setSaving] = useState(false)
   const [completing, setCompleting] = useState(false)
 
-  // Material prep
-  const [materialPrep, setMaterialPrep] = useState<MaterialPrepLog>(EMPTY_MATERIAL_PREP)
-  const [materialPrepCompleted, setMaterialPrepCompleted] = useState(false)
+  // Product components config (fetched from API)
+  const [componentConfigs, setComponentConfigs] = useState<KitComponentConfig[]>([])
+  const [componentsLoading, setComponentsLoading] = useState(true)
 
-  // Components
+  // Components production logs
   const [components, setComponents] = useState<ComponentLog[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
-  const [batchFill, setBatchFill] = useState({ date: '', operator: '', status: 'normal' as 'normal' | 'abnormal' })
+  const [batchFill, setBatchFill] = useState({
+    prepDate: '',
+    fillingDate: '',
+    operator: '',
+    reviewer: '',
+    status: 'normal' as 'normal' | 'abnormal',
+  })
 
   // Assembly
   const [assembly, setAssembly] = useState<AssemblyLog>(EMPTY_ASSEMBLY)
@@ -229,9 +230,8 @@ export function KitProductionLog({
   // Attachments
   const [attachments, setAttachments] = useState<FileInfo[]>([])
 
-  // New component input
-  const [newComponentName, setNewComponentName] = useState('')
-  const [showAddInput, setShowAddInput] = useState(false)
+  // Track if components have been initialized from saved data or config
+  const [componentsInitialized, setComponentsInitialized] = useState(false)
 
   // Production saved state
   const [productionSaved, setProductionSaved] = useState(false)
@@ -239,7 +239,6 @@ export function KitProductionLog({
   // ============================================
   // Computed
   // ============================================
-  const materialPrepTask = tasks.find((t) => t.taskCode === 'MATERIAL_PREP')
   const kitProductionTask = tasks.find((t) => t.taskCode === 'KIT_PRODUCTION')
   const hasLegacyTasks = tasks.some((t) => ['PREPARATION', 'DISPENSING'].includes(t.taskCode))
 
@@ -247,18 +246,17 @@ export function KitProductionLog({
     readOnly ||
     ['QC_PENDING', 'QC_IN_PROGRESS', 'QC_PASS', 'COA_SUBMITTED', 'RELEASED', 'SCRAPPED', 'TERMINATED'].includes(batch.status)
 
-  const isMaterialPrepPhase = batch.status === 'MATERIAL_PREP'
   const isProductionPhase = batch.status === 'IN_PRODUCTION'
 
+  const defaultOperator = batch.productionOperatorName || ''
+
   const allStepsComplete =
-    materialPrepCompleted &&
     components.length > 0 &&
-    components.every((c) => c.date && c.operator) &&
+    components.every((c) => c.prepDate && c.fillingDate && c.operator) &&
     assembly.date &&
     assembly.operator
 
   const someStepsAbnormal =
-    materialPrep.status === 'abnormal' ||
     components.some((c) => c.status === 'abnormal') ||
     assembly.status === 'abnormal'
 
@@ -279,111 +277,117 @@ export function KitProductionLog({
     }
   }, [batchId])
 
+  // ============================================
+  // Fetch product components config
+  // ============================================
+  const fetchComponentConfigs = useCallback(async () => {
+    if (!batch.productCode) {
+      setComponentsLoading(false)
+      return
+    }
+    try {
+      const res = await authFetch(`/api/kit-components/${batch.productCode}`)
+      if (res.ok) {
+        const data = await res.json()
+        setComponentConfigs(data.components || [])
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setComponentsLoading(false)
+    }
+  }, [batch.productCode])
+
   useEffect(() => {
     fetchTasks()
-  }, [fetchTasks])
+    fetchComponentConfigs()
+  }, [fetchTasks, fetchComponentConfigs])
 
-  // Load task data into state
+  // ============================================
+  // Initialize components from saved data or product config
+  // ============================================
   useEffect(() => {
-    if (tasks.length === 0) return
+    if (componentsInitialized) return
+    if (loading || componentsLoading) return
 
-    // Material prep
-    if (materialPrepTask?.formData && typeof materialPrepTask.formData === 'object') {
-      const fd = materialPrepTask.formData as Record<string, unknown>
-      setMaterialPrep({
-        date: (fd.date as string) || '',
-        status: ((fd.status as string) || 'normal') as 'normal' | 'abnormal',
-        notes: (fd.notes as string) || '',
-      })
-      setMaterialPrepCompleted(materialPrepTask.status === 'COMPLETED')
-    }
-
-    // Production
+    // If task has saved formData with components, use that
     if (kitProductionTask?.formData && typeof kitProductionTask.formData === 'object') {
       const fd = kitProductionTask.formData as Record<string, unknown>
-      if (fd.components && Array.isArray(fd.components)) {
+      if (fd.components && Array.isArray(fd.components) && (fd.components as ComponentLog[]).length > 0) {
         setComponents(fd.components as ComponentLog[])
+      } else if (componentConfigs.length > 0) {
+        // Initialize from product config
+        setComponents(
+          componentConfigs.map((config) => ({
+            id: config.id,
+            name: config.name,
+            description: config.description || '',
+            prepDate: '',
+            fillingDate: '',
+            operator: defaultOperator,
+            reviewer: '',
+            status: 'normal' as const,
+            notes: '',
+          }))
+        )
       }
+
+      // Load assembly
       if (fd.assembly && typeof fd.assembly === 'object') {
         const asm = fd.assembly as Record<string, unknown>
         setAssembly({
           date: (asm.date as string) || '',
-          operator: (asm.operator as string) || '',
+          operator: (asm.operator as string) || defaultOperator,
+          reviewer: (asm.reviewer as string) || '',
           status: ((asm.status as string) || 'normal') as 'normal' | 'abnormal',
           notes: (asm.notes as string) || '',
         })
       }
+
+      // Load attachments
       if (fd.attachments && Array.isArray(fd.attachments)) {
         setAttachments(fd.attachments as FileInfo[])
       }
+    } else if (componentConfigs.length > 0) {
+      // No saved data yet — initialize from product config
+      setComponents(
+        componentConfigs.map((config) => ({
+          id: config.id,
+          name: config.name,
+          description: config.description || '',
+          prepDate: '',
+          fillingDate: '',
+          operator: defaultOperator,
+          reviewer: '',
+          status: 'normal' as const,
+          notes: '',
+        }))
+      )
     }
+
+    // Initialize assembly operator from batch default
+    setAssembly((prev) => {
+      if (prev.operator) return prev
+      return { ...prev, operator: defaultOperator }
+    })
 
     if (kitProductionTask?.status === 'COMPLETED') {
       setProductionSaved(true)
     }
-  }, [tasks, materialPrepTask, kitProductionTask])
 
-  // ============================================
-  // Save Material Prep
-  // ============================================
-  const handleSaveMaterialPrep = async () => {
-    if (!materialPrepTask) return
-    setSaving(true)
-    try {
-      const res = await authFetch(`/api/batches/${batchId}/tasks/${materialPrepTask.id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          formData: materialPrep,
-          status: 'COMPLETED',
-        }),
-      })
-      if (!res.ok) {
-        const data = await res.json()
-        toast.error(data.error || '保存失败')
-        return
-      }
-      setMaterialPrepCompleted(true)
-      toast.success('物料准备已完成')
-      onBatchUpdated?.()
-    } catch {
-      toast.error('网络错误')
-    } finally {
-      setSaving(false)
-    }
-  }
+    setComponentsInitialized(true)
+  }, [
+    loading,
+    componentsLoading,
+    componentConfigs,
+    kitProductionTask,
+    componentsInitialized,
+    defaultOperator,
+  ])
 
   // ============================================
   // Component management
   // ============================================
-  const handleAddComponent = () => {
-    const name = newComponentName.trim()
-    if (!name) {
-      toast.error('请输入组分名称')
-      return
-    }
-    const newComp: ComponentLog = {
-      id: generateId(),
-      name,
-      date: '',
-      operator: '',
-      status: 'normal',
-      notes: '',
-    }
-    setComponents((prev) => [...prev, newComp])
-    setNewComponentName('')
-    setShowAddInput(false)
-  }
-
-  const handleRemoveComponent = (id: string) => {
-    setComponents((prev) => prev.filter((c) => c.id !== id))
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      next.delete(id)
-      return next
-    })
-  }
-
   const handleUpdateComponent = (id: string, field: keyof ComponentLog, value: string) => {
     setComponents((prev) =>
       prev.map((c) => (c.id === id ? { ...c, [field]: value } : c))
@@ -414,14 +418,16 @@ export function KitProductionLog({
       if (!selectedIds.has(c.id)) return c
       return {
         ...c,
-        ...(batchFill.date && { date: batchFill.date }),
+        ...(batchFill.prepDate && { prepDate: batchFill.prepDate }),
+        ...(batchFill.fillingDate && { fillingDate: batchFill.fillingDate }),
         ...(batchFill.operator && { operator: batchFill.operator }),
+        ...(batchFill.reviewer && { reviewer: batchFill.reviewer }),
         ...(batchFill.status && { status: batchFill.status }),
       }
     })
     setComponents(updated)
     setSelectedIds(new Set())
-    setBatchFill({ date: '', operator: '', status: 'normal' })
+    setBatchFill({ prepDate: '', fillingDate: '', operator: '', reviewer: '', status: 'normal' })
     setProductionSaved(false)
     toast.success(`已更新 ${selectedIds.size} 个组分`)
   }
@@ -494,15 +500,15 @@ export function KitProductionLog({
   const handleCompleteProduction = async () => {
     // Validate
     if (components.length === 0) {
-      toast.error('请至少添加一个组分')
+      toast.error('该产品未配置组分，无法完成生产')
       return
     }
-    if (!components.every((c) => c.date && c.operator)) {
-      toast.error('请填写所有组分的日期和操作员')
+    if (!components.every((c) => c.prepDate && c.fillingDate && c.operator)) {
+      toast.error('请填写所有组分的配制日期、分装日期和操作员')
       return
     }
     if (!assembly.date || !assembly.operator) {
-      toast.error('请填写组装信息')
+      toast.error('请填写组装日期和操作员')
       return
     }
 
@@ -548,7 +554,7 @@ export function KitProductionLog({
   // ============================================
   // Loading state
   // ============================================
-  if (loading) {
+  if (loading || componentsLoading) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-32" />
@@ -636,112 +642,11 @@ export function KitProductionLog({
       </Card>
 
       {/* ============================================ */}
-      {/* Material Prep Section */}
+      {/* Production Steps Section */}
       {/* ============================================ */}
-      {materialPrepTask && (
-        <Card className={materialPrepCompleted ? 'border-emerald/20 bg-emerald/5' : ''}>
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-sm font-semibold flex items-center gap-2">
-                <Package className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                物料准备
-                {materialPrepCompleted && (
-                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs">
-                    <CheckCircle2 className="mr-1 h-3 w-3" />
-                    已完成
-                  </Badge>
-                )}
-              </CardTitle>
-            </div>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid gap-4 sm:grid-cols-3">
-              {/* Date */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">
-                  <Clock className="inline h-3 w-3 mr-1" />
-                  领料日期
-                </Label>
-                <Input
-                  type="date"
-                  value={materialPrep.date}
-                  onChange={(e) => setMaterialPrep({ ...materialPrep, date: e.target.value })}
-                  disabled={isReadOnly || materialPrepCompleted}
-                  className="h-9"
-                />
-              </div>
-
-              {/* Status */}
-              <div className="space-y-1.5">
-                <Label className="text-xs text-muted-foreground">领料状态</Label>
-                <StatusToggle
-                  value={materialPrep.status}
-                  onChange={(v) => setMaterialPrep({ ...materialPrep, status: v })}
-                  disabled={isReadOnly || materialPrepCompleted}
-                />
-              </div>
-
-              {/* Notes */}
-              <div className="space-y-1.5 sm:col-span-3 sm:col-span-1">
-                <Label className="text-xs text-muted-foreground">备注</Label>
-                <Input
-                  value={materialPrep.notes}
-                  onChange={(e) => setMaterialPrep({ ...materialPrep, notes: e.target.value })}
-                  placeholder="物料情况说明（可选）"
-                  disabled={isReadOnly || materialPrepCompleted}
-                  className="h-9"
-                />
-              </div>
-            </div>
-
-            {/* Abnormal notes */}
-            {materialPrep.status === 'abnormal' && !materialPrepCompleted && (
-              <div className="space-y-1.5">
-                <Label className="text-xs text-amber-600 dark:text-amber-400 font-medium">
-                  <AlertTriangle className="inline h-3 w-3 mr-1" />
-                  异常说明
-                </Label>
-                <Textarea
-                  value={materialPrep.notes}
-                  onChange={(e) => setMaterialPrep({ ...materialPrep, notes: e.target.value })}
-                  placeholder="请描述物料异常情况（如缺料、规格不符等）..."
-                  disabled={isReadOnly || materialPrepCompleted}
-                  rows={2}
-                  className="text-sm"
-                />
-              </div>
-            )}
-
-            {/* Read-only completed display */}
-            {materialPrepCompleted && materialPrep.notes && (
-              <p className="text-xs text-muted-foreground">
-                备注: {materialPrep.notes}
-              </p>
-            )}
-
-            {/* Complete button */}
-            {!materialPrepCompleted && isMaterialPrepPhase && !isReadOnly && (
-              <div className="flex justify-end">
-                <Button
-                  onClick={handleSaveMaterialPrep}
-                  disabled={saving || !materialPrep.date}
-                  size="sm"
-                >
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  完成备料
-                </Button>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ============================================ */}
-      {/* Production Steps Section (IN_PRODUCTION) */}
-      {/* ============================================ */}
-      {(isProductionPhase || isReadOnly) && kitProductionTask && (
+      {kitProductionTask && (
         <>
-          {/* Components */}
+          {/* Components Production Records */}
           <Card>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
@@ -754,56 +659,15 @@ export function KitProductionLog({
                     </Badge>
                   )}
                 </CardTitle>
-                {!isReadOnly && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setShowAddInput(true)}
-                    className="h-7 text-xs gap-1"
-                  >
-                    <Plus className="h-3.5 w-3.5" />
-                    添加组分
-                  </Button>
+                {isReadOnly && kitProductionTask.status === 'COMPLETED' && (
+                  <Badge variant="secondary" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/40 dark:text-emerald-300 text-xs">
+                    <CheckCircle2 className="mr-1 h-3 w-3" />
+                    已完成
+                  </Badge>
                 )}
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              {/* Add component input */}
-              {showAddInput && !isReadOnly && (
-                <div className="flex gap-2 items-end p-3 rounded-md border border-dashed bg-muted/30">
-                  <div className="flex-1 space-y-1">
-                    <Label className="text-xs">组分名称</Label>
-                    <Input
-                      value={newComponentName}
-                      onChange={(e) => setNewComponentName(e.target.value)}
-                      placeholder="如: 基础培养基、生长因子..."
-                      className="h-8 text-sm"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleAddComponent()
-                        if (e.key === 'Escape') { setShowAddInput(false); setNewComponentName('') }
-                      }}
-                      autoFocus
-                    />
-                  </div>
-                  <Button
-                    size="sm"
-                    onClick={handleAddComponent}
-                    disabled={!newComponentName.trim()}
-                    className="h-8"
-                  >
-                    添加
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => { setShowAddInput(false); setNewComponentName('') }}
-                    className="h-8"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </div>
-              )}
-
               {/* Batch fill toolbar */}
               {selectedIds.size > 0 && !isReadOnly && (
                 <div className="flex items-center gap-2 p-3 rounded-md bg-primary/5 border border-primary/20 flex-wrap">
@@ -811,16 +675,34 @@ export function KitProductionLog({
                   <span className="text-xs font-medium text-primary">
                     已选 {selectedIds.size} 项 — 批量填写：
                   </span>
-                  <Input
-                    type="date"
-                    value={batchFill.date}
-                    onChange={(e) => setBatchFill({ ...batchFill, date: e.target.value })}
-                    className="h-7 w-36 text-xs"
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-[11px] text-muted-foreground whitespace-nowrap">配制日期</Label>
+                    <Input
+                      type="date"
+                      value={batchFill.prepDate}
+                      onChange={(e) => setBatchFill({ ...batchFill, prepDate: e.target.value })}
+                      className="h-7 w-32 text-xs"
+                    />
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Label className="text-[11px] text-muted-foreground whitespace-nowrap">分装日期</Label>
+                    <Input
+                      type="date"
+                      value={batchFill.fillingDate}
+                      onChange={(e) => setBatchFill({ ...batchFill, fillingDate: e.target.value })}
+                      className="h-7 w-32 text-xs"
+                    />
+                  </div>
                   <Input
                     value={batchFill.operator}
                     onChange={(e) => setBatchFill({ ...batchFill, operator: e.target.value })}
                     placeholder="操作员"
+                    className="h-7 w-24 text-xs"
+                  />
+                  <Input
+                    value={batchFill.reviewer}
+                    onChange={(e) => setBatchFill({ ...batchFill, reviewer: e.target.value })}
+                    placeholder="复核人"
                     className="h-7 w-24 text-xs"
                   />
                   <StatusToggle
@@ -849,8 +731,8 @@ export function KitProductionLog({
               {components.length === 0 ? (
                 <div className="text-center py-8 text-sm text-muted-foreground">
                   <TestTubes className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                  <p>尚未添加组分</p>
-                  <p className="text-xs mt-1">点击上方"添加组分"开始记录</p>
+                  <p>该产品尚未配置组分</p>
+                  <p className="text-xs mt-1">请在产品管理中配置试剂盒组分</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -886,19 +768,14 @@ export function KitProductionLog({
 
                         {/* Content */}
                         <div className="flex-1 min-w-0 space-y-3">
-                          {/* Header: name + status + delete */}
+                          {/* Header: name + description + status */}
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-medium text-muted-foreground">
                               {index + 1}.
                             </span>
-                            {isReadOnly ? (
-                              <span className="text-sm font-medium">{comp.name}</span>
-                            ) : (
-                              <Input
-                                value={comp.name}
-                                onChange={(e) => handleUpdateComponent(comp.id, 'name', e.target.value)}
-                                className="h-7 w-40 text-sm font-medium"
-                              />
+                            <span className="text-sm font-medium">{comp.name}</span>
+                            {comp.description && (
+                              <span className="text-xs text-muted-foreground">— {comp.description}</span>
                             )}
                             {isReadOnly && (
                               comp.status === 'abnormal' ? (
@@ -913,32 +790,38 @@ export function KitProductionLog({
                                 </Badge>
                               )
                             )}
-                            {!isReadOnly && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleRemoveComponent(comp.id)}
-                                className="h-6 w-6 p-0 text-muted-foreground hover:text-destructive ml-auto shrink-0"
-                              >
-                                <Trash2 className="h-3.5 w-3.5" />
-                              </Button>
-                            )}
                           </div>
 
                           {/* Fields */}
-                          <div className="grid gap-3 sm:grid-cols-3">
+                          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                             <div className="space-y-1">
                               <Label className="text-[11px] text-muted-foreground">
                                 <Clock className="inline h-2.5 w-2.5 mr-0.5" />
                                 配制日期
                               </Label>
                               {isReadOnly ? (
-                                <p className="text-sm">{comp.date || '-'}</p>
+                                <p className="text-sm">{comp.prepDate || '-'}</p>
                               ) : (
                                 <Input
                                   type="date"
-                                  value={comp.date}
-                                  onChange={(e) => handleUpdateComponent(comp.id, 'date', e.target.value)}
+                                  value={comp.prepDate}
+                                  onChange={(e) => handleUpdateComponent(comp.id, 'prepDate', e.target.value)}
+                                  className="h-8 text-sm"
+                                />
+                              )}
+                            </div>
+                            <div className="space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">
+                                <Clock className="inline h-2.5 w-2.5 mr-0.5" />
+                                分装日期
+                              </Label>
+                              {isReadOnly ? (
+                                <p className="text-sm">{comp.fillingDate || '-'}</p>
+                              ) : (
+                                <Input
+                                  type="date"
+                                  value={comp.fillingDate}
+                                  onChange={(e) => handleUpdateComponent(comp.id, 'fillingDate', e.target.value)}
                                   className="h-8 text-sm"
                                 />
                               )}
@@ -959,6 +842,26 @@ export function KitProductionLog({
                                 />
                               )}
                             </div>
+                            <div className="space-y-1">
+                              <Label className="text-[11px] text-muted-foreground">
+                                <Eye className="inline h-2.5 w-2.5 mr-0.5" />
+                                复核人
+                              </Label>
+                              {isReadOnly ? (
+                                <p className="text-sm">{comp.reviewer || '-'}</p>
+                              ) : (
+                                <Input
+                                  value={comp.reviewer}
+                                  onChange={(e) => handleUpdateComponent(comp.id, 'reviewer', e.target.value)}
+                                  placeholder="复核人（可选）"
+                                  className="h-8 text-sm"
+                                />
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Status */}
+                          <div className="flex items-center gap-3 flex-wrap">
                             <div className="space-y-1">
                               <Label className="text-[11px] text-muted-foreground">状态</Label>
                               {isReadOnly ? (
@@ -1009,7 +912,7 @@ export function KitProductionLog({
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <div className="space-y-1.5">
                   <Label className="text-xs text-muted-foreground">
                     <Clock className="inline h-3 w-3 mr-1" />
@@ -1038,6 +941,22 @@ export function KitProductionLog({
                       value={assembly.operator}
                       onChange={(e) => setAssembly({ ...assembly, operator: e.target.value })}
                       placeholder="操作员姓名"
+                      className="h-9"
+                    />
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-xs text-muted-foreground">
+                    <Eye className="inline h-3 w-3 mr-1" />
+                    复核人
+                  </Label>
+                  {isReadOnly ? (
+                    <p className="text-sm">{assembly.reviewer || '-'}</p>
+                  ) : (
+                    <Input
+                      value={assembly.reviewer}
+                      onChange={(e) => setAssembly({ ...assembly, reviewer: e.target.value })}
+                      placeholder="复核人（可选）"
                       className="h-9"
                     />
                   )}
@@ -1101,13 +1020,16 @@ export function KitProductionLog({
                 <div className="space-y-1.5">
                   {attachments.map((file, index) => (
                     <div
-                      key={`${file.name}-${index}`}
-                      className="flex items-center gap-2 p-2 rounded-md border bg-muted/30 text-sm"
+                      key={`${file.name}-${file.uploadedAt}-${index}`}
+                      className="flex items-center gap-2 p-2 rounded-md border text-sm"
                     >
                       {getFileIcon(file.type)}
-                      <span className="flex-1 truncate text-xs">{file.name}</span>
+                      <span className="flex-1 min-w-0 truncate text-sm">{file.name}</span>
                       <span className="text-xs text-muted-foreground shrink-0">
                         {formatFileSize(file.size)}
+                      </span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {formatDate(file.uploadedAt)}
                       </span>
                       {!isReadOnly && (
                         <Button
@@ -1126,92 +1048,59 @@ export function KitProductionLog({
 
               {/* Upload area */}
               {!isReadOnly && (
-                <>
+                <div>
                   <input
                     ref={fileInputRef}
                     type="file"
                     multiple
-                    accept="image/*,.pdf,.doc,.docx,.xls,.xlsx"
                     onChange={handleFileSelect}
                     className="hidden"
                   />
                   <Button
                     variant="outline"
+                    size="sm"
                     onClick={() => fileInputRef.current?.click()}
-                    className="w-full h-10 border-dashed gap-2"
+                    className="w-full h-10 border-dashed"
                   >
-                    <Upload className="h-4 w-4" />
-                    上传附件（支持多选）
+                    <Upload className="mr-2 h-4 w-4" />
+                    上传附件
                   </Button>
-                  <p className="text-[11px] text-muted-foreground text-center">
-                    支持 PDF、Word、Excel、图片等格式，记录纸质生产记录原件
-                  </p>
-                </>
-              )}
-
-              {isReadOnly && attachments.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-2">无附件</p>
+                </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Action buttons */}
+          {/* ============================================ */}
+          {/* Action Buttons */}
+          {/* ============================================ */}
           {!isReadOnly && isProductionPhase && (
-            <div className="flex items-center gap-3 justify-end">
-              {!productionSaved && components.length > 0 && (
-                <Button
-                  variant="outline"
-                  onClick={handleSaveProduction}
-                  disabled={saving}
-                  size="sm"
-                >
-                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  保存草稿
-                </Button>
-              )}
+            <div className="flex items-center gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={handleSaveProduction}
+                disabled={saving || productionSaved}
+                size="sm"
+              >
+                {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {productionSaved ? '已保存' : '保存记录'}
+              </Button>
               <Button
                 onClick={handleCompleteProduction}
                 disabled={completing || !allStepsComplete}
                 size="sm"
-                className={someStepsAbnormal ? '' : ''}
               >
                 {completing && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                完成生产并提交质检
+                完成生产
               </Button>
-              {!allStepsComplete && components.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  请完成所有步骤后提交
-                </p>
+              {someStepsAbnormal && (
+                <span className="text-xs text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                  <AlertTriangle className="h-3 w-3" />
+                  部分步骤有异常
+                </span>
               )}
             </div>
           )}
-
-          {/* Read-only summary for post-production */}
-          {isReadOnly && (batch.status === 'QC_PENDING' || batch.status === 'QC_IN_PROGRESS' || batch.status === 'QC_PASS') && (
-            <div className="rounded-md border border-emerald/20 bg-emerald/5 p-4 text-center">
-              <CheckCircle2 className="h-6 w-6 text-emerald-600 mx-auto mb-2" />
-              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-300">
-                生产已完成
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                共 {components.length} 个组分，{attachments.length} 份附件
-              </p>
-            </div>
-          )}
         </>
-      )}
-
-      {/* Empty state: before material prep */}
-      {!materialPrepTask && !kitProductionTask && !isReadOnly && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-12">
-            <PackageOpen className="h-10 w-10 text-muted-foreground mb-3" />
-            <h3 className="text-sm font-medium mb-1">等待开始备料</h3>
-            <p className="text-xs text-muted-foreground text-center max-w-xs">
-              请点击页面顶部的"开始备料"按钮开始生产流程
-            </p>
-          </CardContent>
-        </Card>
       )}
     </div>
   )

@@ -133,8 +133,30 @@ model Product {
 
   batches          Batch[]
   userRoles        UserProductRole[]
+  kitComponents    KitComponent[]
 
   @@map("product")
+}
+
+// ============================================
+// 试剂盒组分配置（预定义每个试剂盒包含的组分）
+// 在产品管理中配置，生产时自动生成对应组分记录
+// ============================================
+model KitComponent {
+  id          String   @id @default(cuid())
+  productId   String
+  productCode String                           // 冗余字段，便于查询
+  name        String                           // 组分名称，如 "基础培养基"
+  description String?                          // 组分描述/说明
+  sortOrder   Int      @default(0)             // 排序顺序
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, name])
+  @@map("kit_component")
 }
 
 // ============================================

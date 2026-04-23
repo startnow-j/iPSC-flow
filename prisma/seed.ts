@@ -163,6 +163,21 @@ const USER_PRODUCT_ROLES: { email: string; productCode: string; roles: string[] 
 ]
 
 // 用户-产品线归属（ADMIN 配置，控制用户的活动范围）
+// 试剂盒组分预配置
+const KIT_COMPONENTS: { productCode: string; name: string; description?: string; sortOrder: number }[] = [
+  // 神经分化试剂盒 (KIT-NDF-001) — 4个组分
+  { productCode: 'KIT-NDF-001', name: 'N2B27基础培养基', description: '不含生长因子的神经诱导基础培养基', sortOrder: 1 },
+  { productCode: 'KIT-NDF-001', name: '双SMAD抑制剂A', description: 'LDN193189，BMP信号通路抑制剂', sortOrder: 2 },
+  { productCode: 'KIT-NDF-001', name: '双SMAD抑制剂B', description: 'SB431542，TGF-β/Activin/Nodal信号通路抑制剂', sortOrder: 3 },
+  { productCode: 'KIT-NDF-001', name: '神经细胞培养基', description: 'NPC维持与扩增培养基', sortOrder: 4 },
+  // 心肌分化试剂盒 (KIT-CDM-001) — 5个组分
+  { productCode: 'KIT-CDM-001', name: 'RPMI/B27基础培养基', description: '含B27 Supplement的心肌分化基础培养基', sortOrder: 1 },
+  { productCode: 'KIT-CDM-001', name: 'CHIR99021', description: 'GSK3β抑制剂，Wnt信号通路激活剂', sortOrder: 2 },
+  { productCode: 'KIT-CDM-001', name: 'IWP2', description: 'Wnt信号通路抑制剂', sortOrder: 3 },
+  { productCode: 'KIT-CDM-001', name: '抗坏血酸(Vc)', description: '维生素C，促进心肌细胞成熟', sortOrder: 4 },
+  { productCode: 'KIT-CDM-001', name: '心肌细胞维持培养基', description: '成熟心肌细胞长期维持培养基', sortOrder: 5 },
+]
+
 const USER_PRODUCT_LINES: { email: string; productLine: string }[] = [
   // 李主管: 管理所有三条产品线
   { email: 'supervisor@ipsc.com', productLine: 'CELL_PRODUCT' },
@@ -248,6 +263,34 @@ async function main() {
 
     const lineLabel = PRODUCT_LINE_LABELS[upl.productLine] || upl.productLine
     console.log(`    ✓ ${upl.email.split('@')[0]} → ${lineLabel}`)
+  }
+
+  // 2.8. 创建试剂盒组分
+  console.log('\n  ── 试剂盒组分配置 ──')
+  for (const kc of KIT_COMPONENTS) {
+    const productId = createdProducts[kc.productCode]
+    if (!productId) {
+      console.log(`    ⚠ 跳过 ${kc.name}（产品 ${kc.productCode} 不存在）`)
+      continue
+    }
+
+    await db.kitComponent.upsert({
+      where: {
+        productId_name: { productId, name: kc.name },
+      },
+      update: {
+        description: kc.description,
+        sortOrder: kc.sortOrder,
+      },
+      create: {
+        productId,
+        productCode: kc.productCode,
+        name: kc.name,
+        description: kc.description,
+        sortOrder: kc.sortOrder,
+      },
+    })
+    console.log(`    ✓ [${kc.productCode}] ${kc.name} (排序:${kc.sortOrder})`)
   }
 
   // 3. 创建用户-产品角色关联

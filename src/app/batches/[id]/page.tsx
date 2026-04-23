@@ -64,6 +64,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
 import { GenericTaskList } from '@/components/ebpr/generic-task-list'
 import { KitProductionLog } from '@/components/kit/kit-production-log'
+import { KitMaterialPrep } from '@/components/kit/kit-material-prep'
 import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
@@ -1085,6 +1086,12 @@ export default function BatchDetailPage({
             <Activity className="mr-1.5 h-3.5 w-3.5" />
             生产记录
           </TabsTrigger>
+          {batch.productLine === 'KIT' && (
+          <TabsTrigger value="material-prep">
+            <Package className="mr-1.5 h-3.5 w-3.5" />
+            物料准备
+          </TabsTrigger>
+          )}
           <TabsTrigger value="qc">
             <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
             质检
@@ -1315,13 +1322,21 @@ export default function BatchDetailPage({
           {batch.status === 'TERMINATED' ? (
             <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已终止，生产记录不可查看。" />
           ) : batch.productLine === 'KIT' ? (
-            <KitProductionLog
-              key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
-              batchId={id}
-              batch={batch}
-              onBatchUpdated={handleProductionUpdate}
-              readOnly={['SCRAPPED', 'RELEASED'].includes(batch.status)}
-            />
+            batch.status === 'MATERIAL_PREP' || batch.status === 'NEW' ? (
+              <PlaceholderCard
+                icon={Activity}
+                title="尚未开始生产"
+                description="请先完成物料准备后，方可开始生产记录。前往「物料准备」标签页操作。"
+              />
+            ) : (
+              <KitProductionLog
+                key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
+                batchId={id}
+                batch={batch}
+                onBatchUpdated={handleProductionUpdate}
+                readOnly={['SCRAPPED', 'RELEASED'].includes(batch.status)}
+              />
+            )
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
               key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
@@ -1354,6 +1369,24 @@ export default function BatchDetailPage({
             />
           )}
         </TabsContent>
+
+        {/* ============================================ */}
+        {/* Material Prep Tab (KIT only) */}
+        {/* ============================================ */}
+        {batch.productLine === 'KIT' && (
+        <TabsContent value="material-prep" className="mt-4">
+          {batch.status === 'TERMINATED' ? (
+            <PlaceholderCard icon={Lock} title="物料准备记录已锁定" description="该批次已终止，物料准备记录不可查看。" />
+          ) : (
+            <KitMaterialPrep
+              key={`mat-prep-${batch.productionOperatorId}-${batch.updatedAt}`}
+              batchId={id}
+              batch={batch}
+              onBatchUpdated={handleProductionUpdate}
+            />
+          )}
+        </TabsContent>
+        )}
 
         {/* ============================================ */}
         {/* QC Tab */}

@@ -34,6 +34,16 @@ const OPERATIONAL_ACTIONS: Record<string, string[]> = {
 }
 
 // ============================================
+// 重新指派允许的批次状态（按产品线）
+// CELL_PRODUCT: 生产中、待质检、质检中
+// KIT: 物料准备中、生产中、待质检、质检中
+// ============================================
+const REASSIGN_ALLOWED_STATES: Record<string, string[]> = {
+  CELL_PRODUCT: ['IN_PRODUCTION', 'QC_PENDING', 'QC_IN_PROGRESS'],
+  KIT: ['MATERIAL_PREP', 'IN_PRODUCTION', 'QC_PENDING', 'QC_IN_PROGRESS'],
+}
+
+// ============================================
 // POST /api/batches/[id]/transition — 状态转换
 // ============================================
 export async function POST(
@@ -65,6 +75,141 @@ export async function POST(
 
     if (!action) {
       return NextResponse.json({ error: '缺少 action 参数' }, { status: 400 })
+    }
+
+    // ============================================
+    // KIT / CELL_PRODUCT 重新指派操作
+    // reassign_production: 变更生产操作员
+    // reassign_qc: 变更质检员
+    // 仅 SUPERVISOR/ADMIN 可操作，在指定状态下允许
+    // ============================================
+    if (action === 'reassign_production' || action === 'reassign_qc') {
+      // 查询批次完整信息
+      const batchForReassign = await db.batch.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          batchNo: true,
+          productLine: true,
+          status: true,
+          productId: true,
+          productionOperatorId: true,
+          productionOperatorName: true,
+          qcOperatorId: true,
+          qcOperatorName: true,
+        },
+      })
+
+      if (!batchForReassign) {
+        return NextResponse.json({ error: '批次不存在' }, { status: 404 })
+      }
+
+      // 校验产品线是否支持重新指派
+      const productLine = batchForReassign.productLine as string
+      const allowedStates = REASSIGN_ALLOWED_STATES[productLine]
+      if (!allowedStates) {
+        return NextResponse.json(
+          { error: `${productLine} 产品线不支持重新指派操作` },
+          { status: 400 }
+        )
+      }
+
+      // 校验批次状态是否允许重新指派
+      if (!allowedStates.includes(batchForReassign.status as string)) {
+        return NextResponse.json(
+          { error: `当前状态 ${batchForReassign.status} 不允许重新指派，允许的状态: ${allowedStates.join(', ')}` },
+          { status: 400 }
+        )
+      }
+
+      // 校验必填字段
+      if (action === 'reassign_production' && !productionOperatorId) {
+        return NextResponse.json({ error: 'reassign_production 必须提供 productionOperatorId' }, { status: 400 })
+      }
+      if (action === 'reassign_qc' && !qcOperatorId) {
+        return NextResponse.json({ error: 'reassign_qc 必须提供 qcOperatorId' }, { status: 400 })
+      }
+
+      // 权限检查：SUPERVISOR/ADMIN
+      const reassignRoles = getRolesFromPayload(payload)
+      const reassignUserPerms = await db.user.findUnique({
+        where: { id: payload.userId },
+        select: { productLines: { select: { productLine: true } } },
+      })
+      const reassignUserProductLines = reassignUserPerms?.productLines.map(pl => pl.productLine) || []
+      if (!canManage(reassignRoles, reassignUserProductLines, productLine, ['SUPERVISOR', 'ADMIN'])) {
+        return NextResponse.json({ error: '仅生产主管或管理员可重新指派人员' }, { status: 403 })
+      }
+
+      // 四眼原则校验
+      const newProdId = action === 'reassign_production' ? productionOperatorId : batchForReassign.productionOperatorId
+      const newQcId = action === 'reassign_qc' ? qcOperatorId : batchForReassign.qcOperatorId
+      if (newProdId && newQcId && newProdId === newQcId) {
+        return NextResponse.json(
+          { error: '四眼原则：生产操作员和质检员不能是同一人' },
+          { status: 400 }
+        )
+      }
+
+      // 构建更新数据
+      const reassignUpdateData: Record<string, unknown> = {}
+      if (action === 'reassign_production') {
+        reassignUpdateData.productionOperatorId = productionOperatorId
+        reassignUpdateData.productionOperatorName = productionOperatorName || null
+      }
+      if (action === 'reassign_qc') {
+        reassignUpdateData.qcOperatorId = qcOperatorId
+        reassignUpdateData.qcOperatorName = qcOperatorName || null
+      }
+
+      // 记录变更前快照
+      const reassignDataBefore = {
+        productionOperatorId: batchForReassign.productionOperatorId,
+        productionOperatorName: batchForReassign.productionOperatorName,
+        qcOperatorId: batchForReassign.qcOperatorId,
+        qcOperatorName: batchForReassign.qcOperatorName,
+      }
+
+      // 更新批次
+      await db.batch.update({ where: { id }, data: reassignUpdateData })
+
+      // 更新未完成任务的 assignee（仅当生产操作员变更时）
+      if (action === 'reassign_production') {
+        await db.productionTask.updateMany({
+          where: {
+            batchId: id,
+            status: { in: ['PENDING', 'IN_PROGRESS'] },
+          },
+          data: {
+            assigneeId: productionOperatorId,
+            assigneeName: productionOperatorName || null,
+          },
+        })
+      }
+
+      // 审计日志
+      await createAuditLog({
+        eventType: 'BATCH_UPDATED',
+        targetType: 'BATCH',
+        targetId: id,
+        targetBatchNo: batchForReassign.batchNo,
+        operatorId: payload.userId,
+        operatorName: payload.name,
+        dataBefore: reassignDataBefore,
+        dataAfter: {
+          action,
+          ...reassignUpdateData,
+        },
+      })
+
+      const reassignLabel = action === 'reassign_production' ? '生产操作员' : '质检员'
+      return NextResponse.json({
+        success: true,
+        message: `${reassignLabel}已重新指派`,
+        action,
+        dataBefore: reassignDataBefore,
+        dataAfter: reassignUpdateData,
+      })
     }
 
     // ============================================

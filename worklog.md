@@ -3210,3 +3210,64 @@ Stage Summary:
 - 修改文件：src/app/batches/[id]/page.tsx（KIT 条件渲染 KitProductionLog）
 - KIT 生产流程：新建→开始备料→物料准备(填表)→开始配制→组分记录(动态)→组装→附件→提交质检
 - 核心改进：轻量步骤日志（日期+状态+备注+附件）替代重型表单，支持多组分不同日期生产、多选批量填写、统一附件上传
+---
+Task ID: 7
+Agent: Main Agent
+Task: KIT生产流程重大改造 — 物料准备独立页面、组分预配置、配制及分装、复核人、中途重指派
+
+Work Log:
+- 读取 worklog.md 和项目结构，了解现有 KIT 生产实现
+- 分析 6 项用户需求，制定实现方案
+
+**1. Schema 扩展 — KitComponent 模型**
+- 在 prisma/schema.prisma 新增 KitComponent 模型（productId, productCode, name, description, sortOrder）
+- 运行 db:push 同步数据库结构
+
+**2. 种子数据 — 试剂盒组分预配置**
+- 神经分化试剂盒 (KIT-NDF-001): 4个组分（N2B27基础培养基、双SMAD抑制剂A/B、神经细胞培养基）
+- 心肌分化试剂盒 (KIT-CDM-001): 5个组分（RPMI/B27基础培养基、CHIR99021、IWP2、抗坏血酸Vc、心肌细胞维持培养基）
+- 运行 bun run seed 成功写入
+
+**3. 后端 API — 3个新接口**
+- GET /api/kit-components/[productCode] — 获取试剂盒组分配置
+- POST /api/batches/[id]/material-prep/notify — 物料准备完成通知主管
+- 修改 /api/batches/[id]/transition — KIT 批次支持 reassign_production/reassign_qc（MATERIAL_PREP/IN_PRODUCTION/QC_PENDING/QC_IN_PROGRESS 状态）
+
+**4. 前端 — KitMaterialPrep 独立组件**
+- 新建 src/components/kit/kit-material-prep.tsx
+- 物料准备作为独立标签页显示（与生产记录、质检平行）
+- 功能：领料日期、领料状态(正常/异常)、备注
+- "通知主管"按钮 → POST /api/batches/[id]/material-prep/notify
+- "完成备料"按钮 → 保存数据 + start_production 状态转换
+- 物料准备完成后变为只读
+
+**5. 前端 — KitProductionLog 重写**
+- 完全重写 src/components/kit/kit-production-log.tsx
+- 移除物料准备相关代码（已独立为新组件）
+- 组分从产品配置自动生成（不再手动添加）
+- 每个组分支持：配制日期 + 分装日期（替代原单一"配制日期"）
+- 操作员默认为批次指派生产员
+- 新增复核人字段（可选，手动填写）
+- 组装步骤也添加复核人字段
+- 保留多选批量填写、统一附件上传区域
+- 完成生产验证需填写所有组分的配制日期、分装日期和操作员
+
+**6. 批次详情页集成**
+- 修改 src/app/batches/[id]/page.tsx
+- KIT 批次新增"物料准备"标签页（仅 KIT 产品线显示）
+- "生产记录"标签页：MATERIAL_PREP/NEW 状态显示提示引导，IN_PRODUCTION 及之后显示 KitProductionLog
+- 概览页的"重新指派"按钮已支持 KIT 批次（SUPERVISOR/ADMIN 可在 MATERIAL_PREP~QC_IN_PROGRESS 状态重新指派）
+
+- Lint 检查通过（仅预存 generate-plan.js 2 个 error，零新增）
+- Dev server 编译通过
+
+Stage Summary:
+- 新增文件：prisma/schema.prisma（KitComponent模型）
+- 新增文件：src/app/api/kit-components/[productCode]/route.ts
+- 新增文件：src/app/api/batches/[id]/material-prep/notify/route.ts
+- 新增文件：src/components/kit/kit-material-prep.tsx
+- 修改文件：src/components/kit/kit-production-log.tsx（完全重写）
+- 修改文件：src/app/batches/[id]/page.tsx（新增物料准备tab + 生产tab逻辑调整）
+- 修改文件：prisma/seed.ts（试剂盒组分预配置数据）
+- 修改文件：src/app/api/batches/[id]/transition/route.ts（KIT reassign支持）
+- 6项用户需求全部实现
