@@ -19,7 +19,6 @@ import {
   Hourglass,
   ChevronDown,
   ChevronUp,
-  FileText,
   Link2,
   Package,
 } from 'lucide-react'
@@ -55,7 +54,7 @@ interface QcRecord {
   reviewComment?: string | null
   reviewedAt?: string | null
   taskId?: string | null
-  sampleInfo?: Record<string, unknown> | null
+  sampleTime?: string | null
   linkedBatchId?: string | null
   linkedBatchNo?: string | null
   linkedBatchType?: string | null
@@ -198,8 +197,7 @@ function InProcessRecordCard({ record }: { record: QcRecord }) {
     .filter((r) => r.itemName)
     .map((r) => r.itemName)
 
-  const sampleNumber = (record.sampleInfo as Record<string, string>)?.sampleNumber
-  const sampleTime = (record.sampleInfo as Record<string, string>)?.sampleTime
+  const sampleTimeStr = record.sampleTime ? formatDateShort(record.sampleTime) : null
 
   return (
     <div className="rounded-md border">
@@ -233,17 +231,13 @@ function InProcessRecordCard({ record }: { record: QcRecord }) {
               ) : (
                 <span className="text-sm font-medium">过程采样</span>
               )}
-              {sampleNumber && (
-                <span className="text-xs text-muted-foreground">
-                  样本号: {sampleNumber}
-                </span>
-              )}
+
             </div>
             <div className="flex items-center gap-3 mt-0.5">
-              {sampleTime && (
+              {sampleTimeStr && (
                 <span className="text-xs text-muted-foreground">
                   <Clock className="mr-1 h-3 w-3 inline" />
-                  {sampleTime}
+                  {sampleTimeStr}
                 </span>
               )}
               {record.operatorName && (
@@ -299,15 +293,10 @@ function InProcessRecordCard({ record }: { record: QcRecord }) {
                 <span>复苏支数: {record.sampleQuantity} 支</span>
               </div>
             )}
-            {sampleNumber && (
-              <div className="flex items-center gap-2 text-muted-foreground">
-                <span>样本号: {sampleNumber}</span>
-              </div>
-            )}
-            {sampleTime && (
+            {sampleTimeStr && (
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Clock className="h-3.5 w-3.5" />
-                <span>采样时间: {sampleTime}</span>
+                <span>采样时间: {sampleTimeStr}</span>
               </div>
             )}
           </div>

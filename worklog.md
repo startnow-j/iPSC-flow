@@ -3162,3 +3162,23 @@ Stage Summary:
 - 细胞产品质检：保持原有3项（复苏活率+细胞形态+支原体检测）
 - 功能性验证：可选功能，关联已完成的细胞产品或服务项目批次
 - 批次搜索API：支持按产品线+关键词搜索已放行批次
+---
+Task ID: Fix-1
+Agent: Main Agent
+Task: 修复开发服务器退出导致预览界面无法显示的问题 + 代码质量修复
+
+Work Log:
+- 检查开发服务器状态，发现 dev server 进程已退出
+- 重新启动 dev server (`bun run dev`)，确认编译成功，页面 HTTP 200
+- 代码质量检查（Explore agent），发现 3 个问题：
+  1. `src/app/api/batches/search/route.ts`: `as any` 类型安全问题
+  2. `src/components/qc/qc-results-summary.tsx`: 未使用的 FileText 导入
+  3. `src/components/qc/qc-results-summary.tsx`: `sampleInfo` 字段不存在于 Prisma schema（QcRecord 无此字段）
+- 修复 `route.ts`: `as any` → `as Prisma.ProductLine`，状态数组添加 `as Prisma.BatchStatus[]`
+- 修复 `qc-results-summary.tsx`: 移除未使用的 FileText 导入，将 sampleInfo 引用改为使用 QcRecord 实际的 sampleTime 字段
+- 验证：服务器正常运行，页面和 API 均返回 200
+
+Stage Summary:
+- 根因：dev server 进程意外退出导致页面无法加载
+- 修复文件：`src/app/api/batches/search/route.ts`（类型安全）、`src/components/qc/qc-results-summary.tsx`（移除死代码 + 修复不存在的字段引用）
+- 服务器已恢复运行，编译无错误

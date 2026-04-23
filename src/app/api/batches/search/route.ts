@@ -35,14 +35,14 @@ export async function GET(request: NextRequest) {
       // 排除自身批次
       ...(excludeBatchId ? { id: { not: excludeBatchId } } : {}),
       // 按产品线过滤
-      ...(productLine ? { productLine: productLine as any } : {}),
+      ...(productLine ? { productLine: productLine as Prisma.ProductLine } : {}),
       // 搜索条件：批次号或产品编码
       OR: [
         { batchNo: { contains: search } },
         { productCode: { contains: search } },
       ],
       // 只返回已完成QC或已放行的批次
-      status: { in: ['QC_PASS', 'COA_SUBMITTED', 'RELEASED'] },
+      status: { in: ['QC_PASS', 'COA_SUBMITTED', 'RELEASED'] as Prisma.BatchStatus[] },
     }
 
     const batches = await db.batch.findMany({
