@@ -1082,16 +1082,16 @@ export default function BatchDetailPage({
       <Tabs defaultValue={defaultTab} onValueChange={handleTabChange}>
         <TabsList>
           <TabsTrigger value="overview">概览</TabsTrigger>
-          <TabsTrigger value="production">
-            <Activity className="mr-1.5 h-3.5 w-3.5" />
-            生产记录
-          </TabsTrigger>
           {batch.productLine === 'KIT' && (
           <TabsTrigger value="material-prep">
             <Package className="mr-1.5 h-3.5 w-3.5" />
             物料准备
           </TabsTrigger>
           )}
+          <TabsTrigger value="production">
+            <Activity className="mr-1.5 h-3.5 w-3.5" />
+            生产记录
+          </TabsTrigger>
           <TabsTrigger value="qc">
             <ClipboardCheck className="mr-1.5 h-3.5 w-3.5" />
             质检

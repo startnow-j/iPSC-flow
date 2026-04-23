@@ -13,7 +13,6 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Label } from '@/components/ui/label'
 import {
-  PackageOpen,
   TestTubes,
   Package,
   Paperclip,
@@ -581,61 +580,6 @@ export function KitProductionLog({
   // ============================================
   return (
     <div className="space-y-5">
-      {/* ============================================ */}
-      {/* Production Order Header */}
-      {/* ============================================ */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm font-semibold flex items-center gap-2">
-            <PackageOpen className="h-4 w-4 text-primary" />
-            生产指令单
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
-            <div>
-              <p className="text-xs text-muted-foreground mb-0.5">批次号</p>
-              <p className="font-mono font-medium">{batch.batchNo}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-0.5">产品名称</p>
-              <p className="font-medium">{batch.productName}</p>
-            </div>
-            {batch.specification && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">规格</p>
-                <p className="font-medium">{batch.specification}</p>
-              </div>
-            )}
-            {batch.plannedQuantity != null && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">计划数量</p>
-                <p className="font-medium">
-                  {batch.plannedQuantity} {batch.unit || '盒'}
-                </p>
-              </div>
-            )}
-            {batch.productionOperatorName && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">操作员</p>
-                <p className="font-medium">{batch.productionOperatorName}</p>
-              </div>
-            )}
-            {batch.qcOperatorName && (
-              <div>
-                <p className="text-xs text-muted-foreground mb-0.5">质检员</p>
-                <p className="font-medium">{batch.qcOperatorName}</p>
-              </div>
-            )}
-          </div>
-          {batch.notes && (
-            <p className="mt-3 text-xs text-muted-foreground bg-muted/50 rounded px-3 py-2">
-              备注: {batch.notes}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
       {/* ============================================ */}
       {/* Production Steps Section */}
       {/* ============================================ */}

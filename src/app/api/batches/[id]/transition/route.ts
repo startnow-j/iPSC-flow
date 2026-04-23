@@ -480,6 +480,7 @@ export async function POST(
     // ============================================
     // v3.0: 完成生产前校验所有生产任务已完成
     // 仅对 complete_production 操作生效
+    // KIT: 忽略旧版任务代码（PREPARATION/DISPENSING），仅检查新流程任务
     // ============================================
     if (action === 'complete_production') {
       const batchForTaskCheck = await db.batch.findUnique({
@@ -488,18 +489,49 @@ export async function POST(
       })
 
       if (batchForTaskCheck) {
-        const pendingTasks = await db.productionTask.count({
-          where: {
-            batchId: id,
-            status: { in: ['PENDING', 'IN_PROGRESS'] },
-          },
-        })
+        const productLine = batchForTaskCheck.productLine as string
 
-        if (pendingTasks > 0) {
-          return NextResponse.json(
-            { error: `尚有 ${pendingTasks} 个生产任务未完成，请先完成所有生产任务后再提交` },
-            { status: 400 }
-          )
+        if (productLine === 'KIT') {
+          // KIT: 自动完成 MATERIAL_PREP 任务（防止漏标记）
+          // 同时将旧版 PREPARATION/DISPENSING 任务标记为 COMPLETED
+          await db.productionTask.updateMany({
+            where: {
+              batchId: id,
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+              taskCode: { in: ['MATERIAL_PREP', 'PREPARATION', 'DISPENSING'] },
+            },
+            data: { status: 'COMPLETED' },
+          })
+
+          // 仅检查 KIT_PRODUCTION 任务状态
+          const pendingKitTasks = await db.productionTask.count({
+            where: {
+              batchId: id,
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+            },
+          })
+
+          if (pendingKitTasks > 0) {
+            return NextResponse.json(
+              { error: `尚有 ${pendingKitTasks} 个生产任务未完成，请先完成所有生产任务后再提交` },
+              { status: 400 }
+            )
+          }
+        } else {
+          // CELL_PRODUCT / SERVICE: 检查所有未完成任务
+          const pendingTasks = await db.productionTask.count({
+            where: {
+              batchId: id,
+              status: { in: ['PENDING', 'IN_PROGRESS'] },
+            },
+          })
+
+          if (pendingTasks > 0) {
+            return NextResponse.json(
+              { error: `尚有 ${pendingTasks} 个生产任务未完成，请先完成所有生产任务后再提交` },
+              { status: 400 }
+            )
+          }
         }
       }
     }

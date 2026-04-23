@@ -3290,3 +3290,21 @@ Stage Summary:
 - 批量填写工具栏日期字段合并
 - 所有校验逻辑已更新（allStepsComplete, handleCompleteProduction 验证等）
 - lint 通过（无新增错误）
+---
+Task ID: 1-3
+Agent: Main
+Task: 3项UI和逻辑修正
+
+Work Log:
+- 修改 page.tsx tab顺序：概览 → 物料准备 → 生产记录 → 质检 → CoA → 时间线
+- 移除 kit-material-prep.tsx 中的生产指令单卡片（两处：NEW批次状态 + 正常渲染）
+- 移除 kit-production-log.tsx 中的生产指令单卡片
+- 清理未使用的 PackageOpen 图标导入
+- 排查 KIT-260423-001 完成3个未完成任务问题：发现4个任务（MATERIAL_PREP PENDING, PREPARATION PENDING, DISPENSING PENDING, KIT_PRODUCTION COMPLETED）
+- 修复 transition route：complete_production 对 KIT 批次自动完成 MATERIAL_PREP/PREPARATION/DISPENSING 旧版任务，仅检查新流程任务
+
+Stage Summary:
+- Tab 顺序已调整为：概览 → 物料准备 → 生产记录
+- 物料准备和生产记录页面不再显示生产指令单
+- KIT complete_production 转换逻辑已修复，兼容旧版遗留任务
+- 修改文件：page.tsx, kit-material-prep.tsx, kit-production-log.tsx, transition/route.ts
