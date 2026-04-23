@@ -54,8 +54,7 @@ export const TASK_TEMPLATES: Record<string, Record<string, TaskTemplate[]>> = {
       { taskCode: 'MATERIAL_PREP', taskName: '物料准备', sequenceNo: 1, taskType: 'single' },
     ],
     start_production: [
-      { taskCode: 'PREPARATION', taskName: '配制生产', sequenceNo: 2, taskType: 'single' },
-      { taskCode: 'DISPENSING', taskName: '分装贴标', sequenceNo: 3, taskType: 'single' },
+      { taskCode: 'KIT_PRODUCTION', taskName: '生产记录', sequenceNo: 2, taskType: 'single' },
     ],
   },
 }

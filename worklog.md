@@ -3182,3 +3182,31 @@ Stage Summary:
 - 根因：dev server 进程意外退出导致页面无法加载
 - 修复文件：`src/app/api/batches/search/route.ts`（类型安全）、`src/components/qc/qc-results-summary.tsx`（移除死代码 + 修复不存在的字段引用）
 - 服务器已恢复运行，编译无错误
+
+---
+Task ID: Kit-Production-Redesign
+Agent: Main Agent
+Task: KIT 生产记录重新设计 — 轻量步骤日志模式（组分+组装+附件）
+
+Work Log:
+- 分析当前 KIT 生产记录实现（3个重型任务卡片：物料准备、配制生产、分装贴标）
+- 与用户讨论实际业务流程，确认轻量化方案
+- 修改任务模板 `task-templates.ts`：KIT start_production 从 2 个任务（PREPARATION+DISPENSING）改为 1 个任务（KIT_PRODUCTION）
+- 创建 `src/components/kit/kit-production-log.tsx`（约 600 行），包含：
+  - 生产指令单头部（批次号、产品名、规格、数量、操作员、质检员）
+  - 物料准备区段：日期 + 状态（正常/有异常）+ 备注，完成后标记 COMPLETED
+  - 组分生产记录区段：动态添加组分（名称可编辑）、多选 checkbox + 批量填写工具栏（日期、操作员、状态）、每个组分独立编辑（日期、操作员、状态、备注）、支持删除
+  - 组装区段：日期、操作员、状态、备注
+  - 附件统一上传区段：支持多文件选择、显示文件列表（名称、大小、类型图标）、支持删除
+  - 完成生产按钮：校验所有步骤 → 保存数据（标记 COMPLETED）→ 调用 complete_production 转换
+  - 只读模式：QC_PENDING 及之后的状态显示只读摘要
+  - 旧版任务兼容：检测 PREPARATION/DISPENSING 旧任务时显示提示
+- 修改 `src/app/batches/[id]/page.tsx`：KIT 产品线使用 KitProductionLog 替代 GenericTaskList
+- Lint 检查通过（仅预存 generate-plan.js 错误，新代码零新增）
+
+Stage Summary:
+- 新建文件：src/components/kit/kit-production-log.tsx
+- 修改文件：src/lib/services/task-templates.ts（KIT 任务模板简化）
+- 修改文件：src/app/batches/[id]/page.tsx（KIT 条件渲染 KitProductionLog）
+- KIT 生产流程：新建→开始备料→物料准备(填表)→开始配制→组分记录(动态)→组装→附件→提交质检
+- 核心改进：轻量步骤日志（日期+状态+备注+附件）替代重型表单，支持多组分不同日期生产、多选批量填写、统一附件上传

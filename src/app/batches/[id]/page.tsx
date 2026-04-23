@@ -63,6 +63,7 @@ import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
 import { EbprStepGuide } from '@/components/ebpr/ebpr-step-guide'
 import { GenericTaskList } from '@/components/ebpr/generic-task-list'
+import { KitProductionLog } from '@/components/kit/kit-production-log'
 import { QcForm } from '@/components/qc/qc-form'
 import { QcResultsSummary } from '@/components/qc/qc-results-summary'
 import { CoaDetail } from '@/components/coa/coa-detail'
@@ -1313,6 +1314,14 @@ export default function BatchDetailPage({
         <TabsContent value="production" className="mt-4">
           {batch.status === 'TERMINATED' ? (
             <PlaceholderCard icon={Lock} title="生产记录已锁定" description="该批次已终止，生产记录不可查看。" />
+          ) : batch.productLine === 'KIT' ? (
+            <KitProductionLog
+              key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
+              batchId={id}
+              batch={batch}
+              onBatchUpdated={handleProductionUpdate}
+              readOnly={['SCRAPPED', 'RELEASED'].includes(batch.status)}
+            />
           ) : batch.productLine === 'CELL_PRODUCT' ? (
             <EbprStepGuide
               key={`prod-${batch.productionOperatorId}-${batch.qcOperatorId}-${batch.updatedAt}`}
