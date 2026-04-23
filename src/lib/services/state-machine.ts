@@ -177,11 +177,11 @@ const TRANSITION_TEMPLATES: Record<ProductLine, Record<string, TransitionRule[]>
   // ------------------------------------------------
   KIT: {
     NEW: [
-      { to: 'MATERIAL_PREP', action: 'start_material_prep', roles: ['OPERATOR'], label: '开始备料' },
+      { to: 'MATERIAL_PREP', action: 'start_material_prep', roles: ['OPERATOR', 'SUPERVISOR'], label: '开始备料' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     MATERIAL_PREP: [
-      { to: 'IN_PRODUCTION', action: 'start_production', roles: ['OPERATOR'], label: '开始配制' },
+      { to: 'IN_PRODUCTION', action: 'start_production', roles: ['OPERATOR', 'SUPERVISOR'], label: '开始配制' },
       { to: 'SCRAPPED', action: 'scrap', roles: ['ADMIN', 'SUPERVISOR'], label: '报废', requiresReason: true },
     ],
     IN_PRODUCTION: [

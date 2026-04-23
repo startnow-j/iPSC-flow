@@ -149,6 +149,8 @@ const USER_PRODUCT_ROLES: { email: string; productCode: string; roles: string[] 
   { email: 'operator@ipsc.com', productCode: 'SRV-REPG-001', roles: ['OPERATOR'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-EDIT-001', roles: ['OPERATOR'] },
   { email: 'operator@ipsc.com', productCode: 'SRV-DIFF-001', roles: ['OPERATOR'] },
+  { email: 'operator@ipsc.com', productCode: 'KIT-NDF-001', roles: ['OPERATOR'] },
+  { email: 'operator@ipsc.com', productCode: 'KIT-CDM-001', roles: ['OPERATOR'] },
 
   // 李质检(QC): 细胞产品和服务项目的质检员
   { email: 'qc@ipsc.com', productCode: 'IPSC-WT-001', roles: ['QC'] },
@@ -168,9 +170,10 @@ const USER_PRODUCT_LINES: { email: string; productLine: string }[] = [
   { email: 'supervisor@ipsc.com', productLine: 'KIT' },
   // 王QA: 质量保证，归属细胞产品线
   { email: 'qa@ipsc.com', productLine: 'CELL_PRODUCT' },
-  // 张三: 归属细胞产品和服务项目线
+  // 张三: 归属细胞产品、服务项目和试剂盒线
   { email: 'operator@ipsc.com', productLine: 'CELL_PRODUCT' },
   { email: 'operator@ipsc.com', productLine: 'SERVICE' },
+  { email: 'operator@ipsc.com', productLine: 'KIT' },
   // 李质检: 归属所有三条线
   { email: 'qc@ipsc.com', productLine: 'CELL_PRODUCT' },
   { email: 'qc@ipsc.com', productLine: 'SERVICE' },
